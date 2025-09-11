@@ -29,39 +29,39 @@ export default function AnalyticsPage() {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Page Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-tile-900">Analytics</h1>
-            <p className="text-tile-600">Monitor system performance and user activity</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">Monitor system performance and user activity</p>
           </div>
-          <div className="flex space-x-3">
-            <button className="flex items-center px-4 py-2 border border-tile-300 rounded-lg hover:bg-tile-50 transition-colors duration-200">
-              <Calendar className="h-4 w-4 mr-2 text-tile-400" />
-              Last 30 days
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
+            <button className="flex items-center justify-center px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 text-gray-700 dark:text-gray-300">
+              <Calendar className="h-4 w-4 mr-2 text-gray-400 dark:text-gray-500" />
+              <span className="text-sm">Last 30 days</span>
             </button>
-            <button className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors duration-200">
+            <button className="flex items-center justify-center px-3 sm:px-4 py-2 bg-yellow-500 text-gray-900 rounded-lg hover:bg-yellow-600 transition-colors duration-200">
               <Download className="h-4 w-4 mr-2" />
-              Export Data
+              <span className="text-sm">Export Data</span>
             </button>
           </div>
         </div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {metrics.map((metric) => {
             const Icon = metric.icon
             return (
-              <div key={metric.name} className="bg-white p-6 rounded-lg shadow border border-tile-200">
+              <div key={metric.name} className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow duration-200">
                 <div className="flex items-center">
-                  <div className="p-2 bg-primary-100 rounded-lg">
-                    <Icon className="h-6 w-6 text-primary-600" />
+                  <div className="p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg">
+                    <Icon className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600 dark:text-yellow-400" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-tile-500">{metric.name}</p>
-                    <p className="text-2xl font-semibold text-tile-900">{metric.value}</p>
-                    <p className="text-sm text-green-600">{metric.change}</p>
+                  <div className="ml-3 sm:ml-4">
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">{metric.name}</p>
+                    <p className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-900 dark:text-white">{metric.value}</p>
+                    <p className="text-xs sm:text-sm text-green-600 dark:text-green-400">{metric.change}</p>
                   </div>
                 </div>
               </div>
@@ -70,21 +70,21 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Charts Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* User Activity Chart */}
-          <div className="bg-white shadow rounded-lg border border-tile-200">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-tile-900 mb-4">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+              <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white mb-3 sm:mb-4">
                 User Activity (24h)
               </h3>
-              <div className="h-64 flex items-end justify-between space-x-2">
+              <div className="h-48 sm:h-64 flex items-end justify-between space-x-1 sm:space-x-2">
                 {userActivity.map((data, index) => (
                   <div key={index} className="flex flex-col items-center flex-1">
                     <div 
-                      className="w-full bg-primary-500 rounded-t"
-                      style={{ height: `${(data.users / 156) * 200}px` }}
+                      className="w-full bg-yellow-500 rounded-t"
+                      style={{ height: `${(data.users / 156) * 150}px` }}
                     ></div>
-                    <span className="text-xs text-tile-500 mt-2">{data.time}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 mt-2">{data.time}</span>
                   </div>
                 ))}
               </div>
@@ -92,23 +92,23 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Top Pages */}
-          <div className="bg-white shadow rounded-lg border border-tile-200">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-tile-900 mb-4">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+              <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white mb-3 sm:mb-4">
                 Top Pages
               </h3>
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {topPages.map((page, index) => (
                   <div key={index} className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <span className="text-sm font-medium text-tile-900 bg-tile-100 rounded-full w-6 h-6 flex items-center justify-center mr-3">
+                      <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-700 rounded-full w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center mr-2 sm:mr-3">
                         {index + 1}
                       </span>
-                      <span className="text-sm text-tile-700">{page.name}</span>
+                      <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">{page.name}</span>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-medium text-tile-900">{page.views}</p>
-                      <p className="text-xs text-green-600">{page.change}</p>
+                      <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">{page.views}</p>
+                      <p className="text-xs text-green-600 dark:text-green-400">{page.change}</p>
                     </div>
                   </div>
                 ))}
@@ -118,77 +118,77 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Detailed Analytics */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Traffic Sources */}
-          <div className="bg-white shadow rounded-lg border border-tile-200">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-tile-900 mb-4">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+              <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white mb-3 sm:mb-4">
                 Traffic Sources
               </h3>
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Direct</span>
-                  <span className="text-sm font-medium text-tile-900">45%</span>
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Direct</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">45%</span>
                 </div>
-                <div className="w-full bg-tile-200 rounded-full h-2">
-                  <div className="bg-primary-500 h-2 rounded-full" style={{ width: '45%' }}></div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '45%' }}></div>
                 </div>
                 
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Organic Search</span>
-                  <span className="text-sm font-medium text-tile-900">32%</span>
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Organic Search</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">32%</span>
                 </div>
-                <div className="w-full bg-tile-200 rounded-full h-2">
-                  <div className="bg-primary-500 h-2 rounded-full" style={{ width: '32%' }}></div>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Referral</span>
-                  <span className="text-sm font-medium text-tile-900">18%</span>
-                </div>
-                <div className="w-full bg-tile-200 rounded-full h-2">
-                  <div className="bg-primary-500 h-2 rounded-full" style={{ width: '18%' }}></div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '32%' }}></div>
                 </div>
                 
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Social</span>
-                  <span className="text-sm font-medium text-tile-900">5%</span>
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Referral</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">18%</span>
                 </div>
-                <div className="w-full bg-tile-200 rounded-full h-2">
-                  <div className="bg-primary-500 h-2 rounded-full" style={{ width: '5%' }}></div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '18%' }}></div>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Social</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">5%</span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '5%' }}></div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Device Types */}
-          <div className="bg-white shadow rounded-lg border border-tile-200">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-tile-900 mb-4">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+              <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white mb-3 sm:mb-4">
                 Device Types
               </h3>
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Desktop</span>
-                  <span className="text-sm font-medium text-tile-900">58%</span>
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Desktop</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">58%</span>
                 </div>
-                <div className="w-full bg-tile-200 rounded-full h-2">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div className="bg-green-500 h-2 rounded-full" style={{ width: '58%' }}></div>
                 </div>
                 
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Mobile</span>
-                  <span className="text-sm font-medium text-tile-900">35%</span>
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Mobile</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">35%</span>
                 </div>
-                <div className="w-full bg-tile-200 rounded-full h-2">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div className="bg-blue-500 h-2 rounded-full" style={{ width: '35%' }}></div>
                 </div>
                 
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Tablet</span>
-                  <span className="text-sm font-medium text-tile-900">7%</span>
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Tablet</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">7%</span>
                 </div>
-                <div className="w-full bg-tile-200 rounded-full h-2">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '7%' }}></div>
                 </div>
               </div>
@@ -196,27 +196,27 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Real-time Stats */}
-          <div className="bg-white shadow rounded-lg border border-tile-200">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-tile-900 mb-4">
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+              <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white mb-3 sm:mb-4">
                 Real-time Stats
               </h3>
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Current Users</span>
-                  <span className="text-sm font-medium text-green-600">156</span>
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Current Users</span>
+                  <span className="text-xs sm:text-sm font-medium text-green-600 dark:text-green-400">156</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Active Sessions</span>
-                  <span className="text-sm font-medium text-tile-900">89</span>
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Active Sessions</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">89</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Page Views/min</span>
-                  <span className="text-sm font-medium text-tile-900">234</span>
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Page Views/min</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">234</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-tile-700">Bounce Rate</span>
-                  <span className="text-sm font-medium text-red-600">23%</span>
+                  <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Bounce Rate</span>
+                  <span className="text-xs sm:text-sm font-medium text-red-600 dark:text-red-400">23%</span>
                 </div>
               </div>
             </div>

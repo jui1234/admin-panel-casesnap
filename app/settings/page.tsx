@@ -6,53 +6,53 @@ import Layout from '@/components/Layout'
 export default function SettingsPage() {
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Page Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-tile-900">Settings</h1>
-            <p className="text-tile-600">Manage your account and system preferences</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">Manage your account and system preferences</p>
           </div>
-          <button className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors duration-200">
+          <button className="flex items-center px-3 sm:px-4 py-2 bg-yellow-500 text-gray-900 rounded-lg hover:bg-yellow-600 transition-colors duration-200 w-full sm:w-auto justify-center">
             <Save className="h-4 w-4 mr-2" />
-            Save Changes
+            <span className="text-sm">Save Changes</span>
           </button>
         </div>
 
         {/* Settings Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Profile Settings */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             {/* Account Settings */}
-            <div className="bg-white shadow rounded-lg border border-tile-200">
-              <div className="px-4 py-5 sm:p-6">
-                <div className="flex items-center mb-4">
-                  <User className="h-5 w-5 text-primary-500 mr-2" />
-                  <h3 className="text-lg leading-6 font-medium text-tile-900">Account Settings</h3>
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+                <div className="flex items-center mb-3 sm:mb-4">
+                  <User className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500 mr-2" />
+                  <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white">Account Settings</h3>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-tile-700 mb-1">Full Name</label>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
                     <input
                       type="text"
                       defaultValue="Admin User"
-                      className="w-full px-3 py-2 border border-tile-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-tile-700 mb-1">Email Address</label>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
                     <input
                       type="email"
                       defaultValue="admin@example.com"
-                      className="w-full px-3 py-2 border border-tile-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-tile-700 mb-1">Job Title</label>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Job Title</label>
                     <input
                       type="text"
                       defaultValue="System Administrator"
-                      className="w-full px-3 py-2 border border-tile-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
                   </div>
                 </div>
@@ -60,44 +60,44 @@ export default function SettingsPage() {
             </div>
 
             {/* Security Settings */}
-            <div className="bg-white shadow rounded-lg border border-tile-200">
-              <div className="px-4 py-5 sm:p-6">
-                <div className="flex items-center mb-4">
-                  <Shield className="h-5 w-5 text-primary-500 mr-2" />
-                  <h3 className="text-lg leading-6 font-medium text-tile-900">Security Settings</h3>
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+                <div className="flex items-center mb-3 sm:mb-4">
+                  <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500 mr-2" />
+                  <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white">Security Settings</h3>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-tile-700 mb-1">Current Password</label>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Password</label>
                     <input
                       type="password"
                       placeholder="Enter current password"
-                      className="w-full px-3 py-2 border border-tile-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-tile-700 mb-1">New Password</label>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New Password</label>
                     <input
                       type="password"
                       placeholder="Enter new password"
-                      className="w-full px-3 py-2 border border-tile-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-tile-700 mb-1">Confirm New Password</label>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm New Password</label>
                     <input
                       type="password"
                       placeholder="Confirm new password"
-                      className="w-full px-3 py-2 border border-tile-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
                   </div>
                   <div className="flex items-center">
                     <input
                       id="two-factor"
                       type="checkbox"
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-tile-300 rounded"
+                      className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
                     />
-                    <label htmlFor="two-factor" className="ml-2 block text-sm text-tile-700">
+                    <label htmlFor="two-factor" className="ml-2 block text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                       Enable two-factor authentication
                     </label>
                   </div>
@@ -106,16 +106,16 @@ export default function SettingsPage() {
             </div>
 
             {/* System Settings */}
-            <div className="bg-white shadow rounded-lg border border-tile-200">
-              <div className="px-4 py-5 sm:p-6">
-                <div className="flex items-center mb-4">
-                  <Settings className="h-5 w-5 text-primary-500 mr-2" />
-                  <h3 className="text-lg leading-6 font-medium text-tile-900">System Settings</h3>
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+                <div className="flex items-center mb-3 sm:mb-4">
+                  <Settings className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500 mr-2" />
+                  <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white">System Settings</h3>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-tile-700 mb-1">Language</label>
-                    <select className="w-full px-3 py-2 border border-tile-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Language</label>
+                    <select className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200">
                       <option>English</option>
                       <option>Spanish</option>
                       <option>French</option>
@@ -123,8 +123,8 @@ export default function SettingsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-tile-700 mb-1">Time Zone</label>
-                    <select className="w-full px-3 py-2 border border-tile-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time Zone</label>
+                    <select className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200">
                       <option>UTC (Coordinated Universal Time)</option>
                       <option>EST (Eastern Standard Time)</option>
                       <option>PST (Pacific Standard Time)</option>
@@ -136,9 +136,9 @@ export default function SettingsPage() {
                       id="auto-save"
                       type="checkbox"
                       defaultChecked
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-tile-300 rounded"
+                      className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
                     />
-                    <label htmlFor="auto-save" className="ml-2 block text-sm text-tile-700">
+                    <label htmlFor="auto-save" className="ml-2 block text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                       Auto-save changes
                     </label>
                   </div>
@@ -148,44 +148,44 @@ export default function SettingsPage() {
           </div>
 
           {/* Sidebar Settings */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Notification Settings */}
-            <div className="bg-white shadow rounded-lg border border-tile-200">
-              <div className="px-4 py-5 sm:p-6">
-                <div className="flex items-center mb-4">
-                  <Bell className="h-5 w-5 text-primary-500 mr-2" />
-                  <h3 className="text-lg leading-6 font-medium text-tile-900">Notifications</h3>
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+                <div className="flex items-center mb-3 sm:mb-4">
+                  <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500 mr-2" />
+                  <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white">Notifications</h3>
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-tile-700">Email Notifications</span>
+                    <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Email Notifications</span>
                     <input
                       type="checkbox"
                       defaultChecked
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-tile-300 rounded"
+                      className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-tile-700">Push Notifications</span>
+                    <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Push Notifications</span>
                     <input
                       type="checkbox"
                       defaultChecked
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-tile-300 rounded"
+                      className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-tile-700">Security Alerts</span>
+                    <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Security Alerts</span>
                     <input
                       type="checkbox"
                       defaultChecked
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-tile-300 rounded"
+                      className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-tile-700">System Updates</span>
+                    <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">System Updates</span>
                     <input
                       type="checkbox"
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-tile-300 rounded"
+                      className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
                     />
                   </div>
                 </div>
@@ -193,56 +193,56 @@ export default function SettingsPage() {
             </div>
 
             {/* API Settings */}
-            <div className="bg-white shadow rounded-lg border border-tile-200">
-              <div className="px-4 py-5 sm:p-6">
-                <div className="flex items-center mb-4">
-                  <Key className="h-5 w-5 text-primary-500 mr-2" />
-                  <h3 className="text-lg leading-6 font-medium text-tile-900">API Settings</h3>
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+                <div className="flex items-center mb-3 sm:mb-4">
+                  <Key className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500 mr-2" />
+                  <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white">API Settings</h3>
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-tile-700 mb-1">API Key</label>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">API Key</label>
                     <input
                       type="text"
                       defaultValue="sk-1234567890abcdef"
-                      className="w-full px-3 py-2 border border-tile-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
                   </div>
-                  <button className="w-full flex items-center justify-center px-4 py-2 border border-tile-300 rounded-lg hover:bg-tile-50 transition-colors duration-200">
-                    <Key className="h-4 w-4 mr-2 text-tile-400" />
-                    Regenerate API Key
+                  <button className="w-full flex items-center justify-center px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 text-gray-700 dark:text-gray-300">
+                    <Key className="h-4 w-4 mr-2 text-gray-400 dark:text-gray-500" />
+                    <span className="text-sm">Regenerate API Key</span>
                   </button>
                 </div>
               </div>
             </div>
 
             {/* Database Settings */}
-            <div className="bg-white shadow rounded-lg border border-tile-200">
-              <div className="px-4 py-5 sm:p-6">
-                <div className="flex items-center mb-4">
-                  <Database className="h-5 w-5 text-primary-500 mr-2" />
-                  <h3 className="text-lg leading-6 font-medium text-tile-900">Database</h3>
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+                <div className="flex items-center mb-3 sm:mb-4">
+                  <Database className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500 mr-2" />
+                  <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white">Database</h3>
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-tile-700">Auto Backup</span>
+                    <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Auto Backup</span>
                     <input
                       type="checkbox"
                       defaultChecked
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-tile-300 rounded"
+                      className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-tile-700">Daily Backup</span>
+                    <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Daily Backup</span>
                     <input
                       type="checkbox"
                       defaultChecked
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-tile-300 rounded"
+                      className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
                     />
                   </div>
-                  <button className="w-full flex items-center justify-center px-4 py-2 border border-tile-300 rounded-lg hover:bg-tile-50 transition-colors duration-200">
-                    <Database className="h-4 w-4 mr-2 text-tile-400" />
-                    Create Backup Now
+                  <button className="w-full flex items-center justify-center px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 text-gray-700 dark:text-gray-300">
+                    <Database className="h-4 w-4 mr-2 text-gray-400 dark:text-gray-500" />
+                    <span className="text-sm">Create Backup Now</span>
                   </button>
                 </div>
               </div>
