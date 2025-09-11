@@ -13,6 +13,14 @@ This guide covers the deployment process for the CaseSnap admin panel and common
 - Importing required Next.js types (`NextRequest`, `NextResponse`)
 - Creating a complete module with proper exports
 
+### Material-UI DataGrid Theme Error
+**Problem**: `Type error: Object literal may only specify known properties, and 'MuiDataGrid' does not exist in type 'Components<Omit<Theme, "components">>'.`
+
+**Solution**: Removed `MuiDataGrid` component styling from theme files because:
+- `MuiDataGrid` is from `@mui/x-data-grid` package, not core Material-UI
+- It cannot be styled through the main theme's components object
+- Created separate `dataGridTheme.ts` file for DataGrid-specific styling
+
 ## 🚀 Deployment Checklist
 
 ### Pre-Deployment
@@ -40,6 +48,10 @@ npm run build
 #### 3. Environment Variables
 **Symptoms**: Runtime errors in production
 **Solution**: Configure environment variables in deployment platform
+
+#### 4. Material-UI Component Styling
+**Symptoms**: TypeScript errors with component styling
+**Solution**: Only style core Material-UI components in theme files. For extended components like DataGrid, use separate styling files
 
 ## 📁 Project Structure
 

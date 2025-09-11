@@ -98,23 +98,6 @@ export const lightTheme = createTheme({
         },
       },
     },
-    MuiDataGrid: {
-      styleOverrides: {
-        root: {
-          border: 'none',
-          '& .MuiDataGrid-cell': {
-            borderBottom: '1px solid #e2e8f0',
-          },
-          '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: '#f8fafc',
-            borderBottom: '2px solid #e2e8f0',
-          },
-          '& .MuiDataGrid-row:hover': {
-            backgroundColor: '#f8fafc',
-          },
-        },
-      },
-    },
   },
 })
 
@@ -213,23 +196,6 @@ export const darkTheme = createTheme({
           borderRadius: 12,
           boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px 0 rgba(0, 0, 0, 0.2)',
           border: '1px solid #334155',
-        },
-      },
-    },
-    MuiDataGrid: {
-      styleOverrides: {
-        root: {
-          border: 'none',
-          '& .MuiDataGrid-cell': {
-            borderBottom: '1px solid #334155',
-          },
-          '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: '#1e293b',
-            borderBottom: '2px solid #334155',
-          },
-          '& .MuiDataGrid-row:hover': {
-            backgroundColor: '#1e293b',
-          },
         },
       },
     },
