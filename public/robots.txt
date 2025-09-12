@@ -1,0 +1,42 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://casesnap.com/sitemap.xml
+
+# Crawl-delay for better server performance
+Crawl-delay: 1
+
+# Allow all search engines to crawl
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+# Block access to admin areas
+Disallow: /admin/
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth/
+
+# Allow important pages for SEO
+Allow: /
+Allow: /features
+Allow: /pricing
+Allow: /about
+Allow: /contact
+Allow: /blog/
+Allow: /legal-case-management-software
+Allow: /law-firm-management-software
+Allow: /legal-practice-management-system
+Allow: /advocate-admin-panel-software
+Allow: /case-tracking-software-for-lawyers
+Allow: /best-software-for-law-firms
+Allow: /cloud-based-legal-management-system
+Allow: /court-case-management-software-india
+Allow: /legal-billing-and-invoicing-software
+Allow: /document-management-system-for-lawyers

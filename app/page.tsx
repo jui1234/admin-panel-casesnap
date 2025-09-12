@@ -22,41 +22,41 @@ export default function DemoPage() {
   const features = [
     {
       icon: <Shield className="w-8 h-8" />,
-      title: "Role-Based Access Control",
-      description: "Granular permissions and role management for secure access control"
+      title: "Secure Legal Case Management",
+      description: "Advanced case tracking software for lawyers with role-based access control and secure document management for advocates"
     },
     {
       icon: <Users className="w-8 h-8" />,
-      title: "User Management",
-      description: "Comprehensive user administration with detailed profiles and settings"
+      title: "Client Management System",
+      description: "Comprehensive client administration with detailed case profiles and legal practice management for law firms"
     },
     {
       icon: <BarChart3 className="w-8 h-8" />,
-      title: "Analytics Dashboard",
-      description: "Real-time insights and performance metrics for informed decisions"
+      title: "Legal Analytics Dashboard",
+      description: "Real-time insights and performance metrics for law firm management software with case progress tracking"
     },
     {
       icon: <FileText className="w-8 h-8" />,
-      title: "Case Management",
-      description: "Streamlined case tracking and documentation system"
+      title: "Court Case Management",
+      description: "Professional case tracking software for lawyers with court calendar integration and daily case reminder system"
     },
     {
       icon: <UserCheck className="w-8 h-8" />,
-      title: "Employee Portal",
-      description: "Dedicated employee management with attendance and performance tracking"
+      title: "Legal Team Portal",
+      description: "Dedicated advocate admin panel with employee management and legal calendar for task management"
     },
     {
       icon: <Settings className="w-8 h-8" />,
-      title: "System Configuration",
-      description: "Flexible settings and customization options for your organization"
+      title: "Legal Billing Software",
+      description: "Cloud-based legal management system with billing, invoicing, and document management for lawyers"
     }
   ]
 
   const stats = [
-    { label: "Active Users", value: "2,500+" },
-    { label: "Cases Managed", value: "15,000+" },
-    { label: "Organizations", value: "500+" },
-    { label: "Uptime", value: "99.9%" }
+    { label: "Lawyers Using CaseSnap", value: "2,500+" },
+    { label: "Legal Cases Managed", value: "15,000+" },
+    { label: "Law Firms in India", value: "500+" },
+    { label: "System Uptime", value: "99.9%" }
   ]
 
   const pricingPlans = [
@@ -142,11 +142,11 @@ export default function DemoPage() {
       <section className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 md:py-20">
         <div className="text-center max-w-4xl mx-auto">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-6 leading-tight animate-fade-in-up">
-            Streamline Your
-            <span className="text-yellow-500 block animate-pulse">Case Management</span>
+            Best Lawyer Case Management Software
+            <span className="text-yellow-500 block animate-pulse">for Law Firms in India</span>
           </h1>
           <p className="text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-6 sm:mb-8 max-w-2xl mx-auto px-4 sm:px-0 animate-fade-in-up animation-delay-200">
-            Powerful admin panel with role-based access control, user management, and comprehensive analytics for modern organizations.
+            Professional legal practice management system with cloud-based case tracking, document management, and billing software. Trusted by 500+ law firms across India for secure advocate admin panel operations.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4 sm:px-0 animate-fade-in-up animation-delay-400">
             <button
@@ -182,10 +182,10 @@ export default function DemoPage() {
         <div className="container mx-auto px-4 sm:px-6">
           <div className="text-center mb-12 sm:mb-16 animate-fade-in-up">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-3 sm:mb-4 px-4 sm:px-0">
-              Everything You Need to Manage Your Organization
+              Complete Legal Practice Management System for Law Firms
             </h2>
             <p className="text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto px-4 sm:px-0">
-              Comprehensive tools and features designed to streamline your workflow and boost productivity.
+              Affordable lawyer management software India with cloud-based legal management system designed to streamline law firm operations and boost lawyer productivity.
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
@@ -205,10 +205,10 @@ export default function DemoPage() {
         <div className="container mx-auto px-4 sm:px-6">
           <div className="text-center mb-12 sm:mb-16 animate-fade-in-up">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-3 sm:mb-4 px-4 sm:px-0">
-              Choose Your Perfect Plan
+              Affordable Lawyer Management Software Plans
             </h2>
             <p className="text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto px-4 sm:px-0">
-              Start with a free trial, then choose the plan that fits your organization's needs.
+              Start with a free trial of our legal case tracking software, then choose the plan that fits your law firm's needs.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto">
@@ -262,30 +262,30 @@ export default function DemoPage() {
         <div className="container mx-auto px-4 sm:px-6">
           <div className="text-center mb-12 sm:mb-16 animate-fade-in-up">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4 px-4 sm:px-0">
-              Trusted by Organizations Worldwide
+              Trusted by Law Firms and Lawyers Across India
             </h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {[
               {
-                name: "Sarah Johnson",
-                role: "IT Director",
-                company: "TechCorp",
-                content: "CaseSnap has revolutionized our case management process. The role-based access control gives us complete peace of mind.",
+                name: "Advocate Rajesh Kumar",
+                role: "Senior Partner",
+                company: "Kumar & Associates Law Firm",
+                content: "CaseSnap has revolutionized our legal case management process. The secure document management for advocates gives us complete peace of mind.",
                 rating: 5
               },
               {
-                name: "Michael Chen",
-                role: "Operations Manager",
-                company: "Global Solutions",
-                content: "The analytics dashboard provides insights we never had before. Our team productivity has increased by 40%.",
+                name: "Dr. Priya Sharma",
+                role: "Managing Partner",
+                company: "Sharma Legal Services",
+                content: "The legal analytics dashboard provides insights we never had before. Our law firm productivity has increased by 40% with this case tracking software for lawyers.",
                 rating: 5
               },
               {
-                name: "Emily Rodriguez",
-                role: "HR Director",
-                company: "Innovate Inc",
-                content: "User management has never been easier. The interface is intuitive and the features are exactly what we needed.",
+                name: "Advocate Amit Patel",
+                role: "Founder",
+                company: "Patel & Co. Advocates",
+                content: "This affordable lawyer management software India has made client management effortless. The advocate admin panel interface is intuitive and perfect for our legal practice management needs.",
                 rating: 5
               }
             ].map((testimonial, index) => (
@@ -311,10 +311,10 @@ export default function DemoPage() {
         <div className="container mx-auto px-4 sm:px-6 text-center">
           <div className="max-w-3xl mx-auto animate-fade-in-up">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-6 px-4 sm:px-0">
-              Ready to Transform Your Organization?
+              Ready to Transform Your Law Firm with Best Legal Practice Management System?
             </h2>
             <p className="text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-6 sm:mb-8 px-4 sm:px-0">
-              Join thousands of organizations already using CaseSnap to streamline their operations.
+              Join 500+ law firms already using CaseSnap's cloud-based legal management system to streamline their legal operations and case management.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4 sm:px-0">
               <button
@@ -342,7 +342,7 @@ export default function DemoPage() {
                 <span className="text-lg sm:text-xl font-bold">CaseSnap</span>
               </div>
               <p className="text-sm sm:text-base text-gray-400">
-                Streamlining case management for modern organizations with powerful admin tools and role-based access control.
+                Best lawyer case management software for law firms in India. Cloud-based legal practice management system with case tracking, document management, and billing software for advocates.
               </p>
             </div>
             <div className="animate-fade-in-up" style={{ animationDelay: '100ms' }}>
