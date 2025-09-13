@@ -5,9 +5,13 @@ import {
   Shield, 
   Users, 
   BarChart3, 
-  Settings, 
   FileText, 
   UserCheck, 
+  Settings, 
+  User, 
+  Bell, 
+  Receipt, 
+  CalendarCheck, 
   ArrowRight,
   Star
 } from 'lucide-react'
@@ -21,36 +25,60 @@ export default function DemoPage() {
 
   const features = [
     {
+      icon: <User className="w-8 h-8" />,
+      title: "Client Detail",
+      description:
+        "Centralized client profiles with personal details, case history, and secure document storage for efficient legal case management."
+    },
+    {
       icon: <Shield className="w-8 h-8" />,
       title: "Secure Legal Case Management",
-      description: "Advanced case tracking software for lawyers with role-based access control and secure document management for advocates"
+      description:
+        "Advanced case tracking software for lawyers with role-based access control and secure document management for advocates"
     },
     {
       icon: <Users className="w-8 h-8" />,
       title: "Client Management System",
-      description: "Comprehensive client administration with detailed case profiles and legal practice management for law firms"
+      description:
+        "Comprehensive client administration with detailed case profiles and legal practice management for law firms"
     },
     {
       icon: <BarChart3 className="w-8 h-8" />,
       title: "Legal Analytics Dashboard",
-      description: "Real-time insights and performance metrics for law firm management software with case progress tracking"
+      description:
+        "Real-time insights and performance metrics for law firm management software with case progress tracking"
     },
     {
       icon: <FileText className="w-8 h-8" />,
       title: "Court Case Management",
-      description: "Professional case tracking software for lawyers with court calendar integration and daily case reminder system"
+      description:
+        "Professional case tracking software for lawyers with court calendar integration, daily case reminders, and smart notifications via Google Calendar or our in-app calendar."
+    },
+    {
+      icon: <Receipt className="w-8 h-8" />,
+      title: "Fees Related Details",
+      description:
+        "Track client payments, outstanding balances, and fee history with automated billing records for transparent financial management."
+    },
+    {
+      icon: <CalendarCheck className="w-8 h-8" />,
+      title: "Next Date Reminder",
+      description:
+        "Automated reminders sent one day prior to hearings or tasks, with the option to download schedules in PDF or Excel format."
     },
     {
       icon: <UserCheck className="w-8 h-8" />,
       title: "Legal Team Portal",
-      description: "Dedicated advocate admin panel with employee management and legal calendar for task management"
+      description:
+        "Dedicated advocate admin panel with employee management and legal calendar for task management"
     },
     {
       icon: <Settings className="w-8 h-8" />,
       title: "Legal Billing Software",
-      description: "Cloud-based legal management system with billing, invoicing, and document management for lawyers"
+      description:
+        "Cloud-based legal management system with billing, invoicing, and document management for lawyers"
     }
-  ]
+  ];
 
   const stats = [
     { label: "Lawyers Using CaseSnap", value: "2,500+" },
@@ -126,8 +154,8 @@ export default function DemoPage() {
               <ThemeToggle size="sm" className="sm:hidden" />
               <ThemeToggle className="hidden sm:block" />
               <button
-                onClick={() => router.push('/auth/login')}
-                className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-3 py-2 sm:px-6 sm:py-2 rounded-lg font-medium transition-all duration-300 flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base hover:scale-105 hover:shadow-lg"
+                onClick={() => router.push('/get-started')}
+                className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-3 py-2 sm:px-6 sm:py-2 rounded-lg font-medium transition-all duration-300 flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base hover:scale-105 hover:shadow-lg cursor-pointer"
               >
                 <span className="hidden sm:inline">Get Started</span>
                 <span className="sm:hidden">Start</span>
@@ -150,13 +178,13 @@ export default function DemoPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4 sm:px-0 animate-fade-in-up animation-delay-400">
             <button
-              onClick={() => router.push('/auth/login')}
-              className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 flex items-center justify-center space-x-2 w-full sm:w-auto hover:scale-105 hover:shadow-xl group"
+              onClick={() => router.push('/get-started')}
+              className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 flex items-center justify-center space-x-2 w-full sm:w-auto hover:scale-105 hover:shadow-xl group cursor-pointer"
             >
               <span>Start Free Trial</span>
               <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover:translate-x-1" />
             </button>
-            <button className="border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 w-full sm:w-auto hover:scale-105 hover:shadow-lg">
+            <button className="border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 w-full sm:w-auto hover:scale-105 hover:shadow-lg cursor-pointer">
               Watch Demo
             </button>
           </div>
@@ -242,8 +270,8 @@ export default function DemoPage() {
                   ))}
                 </ul>
                 <button
-                  onClick={() => router.push('/auth/login')}
-                  className={`w-full py-3 px-6 rounded-lg font-semibold transition-all duration-300 ${
+                  onClick={() => router.push('/get-started')}
+                  className={`w-full py-3 px-6 rounded-lg font-semibold transition-all duration-300 cursor-pointer ${
                     plan.popular
                       ? 'bg-yellow-500 hover:bg-yellow-600 text-gray-900 hover:scale-105 hover:shadow-lg'
                       : 'bg-gray-900 dark:bg-gray-700 hover:bg-gray-800 dark:hover:bg-gray-600 text-white hover:scale-105 hover:shadow-lg'
@@ -276,7 +304,7 @@ export default function DemoPage() {
               },
               {
                 name: "Dr. Priya Sharma",
-                role: "Managing Partner",
+                role: "Managing Partner", 
                 company: "Sharma Legal Services",
                 content: "The legal analytics dashboard provides insights we never had before. Our law firm productivity has increased by 40% with this case tracking software for lawyers.",
                 rating: 5
@@ -318,19 +346,20 @@ export default function DemoPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4 sm:px-0">
               <button
-                onClick={() => router.push('/auth/login')}
-                className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 flex items-center justify-center space-x-2 w-full sm:w-auto hover:scale-105 hover:shadow-xl group"
+                onClick={() => router.push('/get-started')}
+                className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 flex items-center justify-center space-x-2 w-full sm:w-auto hover:scale-105 hover:shadow-xl group cursor-pointer"
               >
                 <span>Get Started Now</span>
                 <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover:translate-x-1" />
               </button>
-              <button className="border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 w-full sm:w-auto hover:scale-105 hover:shadow-lg">
+              <button className="border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 w-full sm:w-auto hover:scale-105 hover:shadow-lg cursor-pointer">
                 Contact Sales
               </button>
             </div>
           </div>
         </div>
       </section>
+      
 
       {/* Footer */}
       <footer className="bg-gray-900 dark:bg-black text-white py-8 sm:py-12">
@@ -348,28 +377,28 @@ export default function DemoPage() {
             <div className="animate-fade-in-up" style={{ animationDelay: '100ms' }}>
               <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Product</h3>
               <ul className="space-y-2 text-sm sm:text-base text-gray-400">
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">Features</a></li>
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">Pricing</a></li>
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">Security</a></li>
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">Integrations</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">Features</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">Pricing</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">Security</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">Integrations</a></li>
               </ul>
             </div>
             <div className="animate-fade-in-up" style={{ animationDelay: '200ms' }}>
               <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Company</h3>
               <ul className="space-y-2 text-sm sm:text-base text-gray-400">
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">About</a></li>
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">Blog</a></li>
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">Careers</a></li>
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">Contact</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">About</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">Blog</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">Careers</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">Contact</a></li>
               </ul>
             </div>
             <div className="animate-fade-in-up" style={{ animationDelay: '300ms' }}>
               <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Support</h3>
               <ul className="space-y-2 text-sm sm:text-base text-gray-400">
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">Help Center</a></li>
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">Documentation</a></li>
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">API Reference</a></li>
-                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block">Status</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">Help Center</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">Documentation</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">API Reference</a></li>
+                <li><a href="#" className="hover:text-white transition-colors duration-300 hover:translate-x-1 inline-block cursor-pointer">Status</a></li>
               </ul>
             </div>
           </div>

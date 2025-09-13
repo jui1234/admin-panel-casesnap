@@ -14,6 +14,7 @@ import {
   Globe
 } from 'lucide-react'
 import Layout from '@/components/Layout'
+import ProtectedRoute from '@/components/ProtectedRoute'
 import { 
   DataGrid, 
   GridColDef, 
@@ -206,7 +207,8 @@ export default function ClientsPage() {
   ]
 
   return (
-    <Layout>
+    <ProtectedRoute>
+      <Layout>
       <Box sx={{ p: 3 }}>
         {/* Page Header */}
         <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: 2 }}>
@@ -356,6 +358,7 @@ export default function ClientsPage() {
           </Box>
         </Card>
       </Box>
-    </Layout>
+      </Layout>
+    </ProtectedRoute>
   )
 } 

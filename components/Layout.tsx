@@ -19,7 +19,9 @@ import {
   Building
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
+import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from './ThemeToggle'
+import LogoutModal from './LogoutModal'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -38,14 +40,24 @@ const navigation = [
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showLogoutModal, setShowLogoutModal] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const { theme } = useTheme()
+  const { logout, user } = useAuth()
   const isDark = theme === 'dark'
 
   const handleLogout = () => {
-    // Here you would typically clear auth state
-    router.push('/auth/login')
+    setShowLogoutModal(true)
+  }
+
+  const confirmLogout = () => {
+    logout()
+    setShowLogoutModal(false)
+  }
+
+  const cancelLogout = () => {
+    setShowLogoutModal(false)
   }
 
   const isActive = (href: string) => {
@@ -181,6 +193,13 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </main>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={cancelLogout}
+        onConfirm={confirmLogout}
+      />
     </div>
   )
 } 
