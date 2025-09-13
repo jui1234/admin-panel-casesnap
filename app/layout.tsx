@@ -1,6 +1,8 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import { ThemeProvider } from '@/contexts/ThemeContext'
+import { AuthProvider } from '@/contexts/AuthContext'
+import SetupGuard from '@/components/SetupGuard'
 import MuiThemeProviderWrapper from '@/components/ThemeProvider'
 
 export const metadata: Metadata = {
@@ -129,9 +131,13 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <ThemeProvider>
-          <MuiThemeProviderWrapper>
-            {children}
-          </MuiThemeProviderWrapper>
+          <AuthProvider>
+            <SetupGuard>
+              <MuiThemeProviderWrapper>
+                {children}
+              </MuiThemeProviderWrapper>
+            </SetupGuard>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

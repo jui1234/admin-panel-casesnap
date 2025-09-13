@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Eye, EyeOff, Lock, Mail, Shield, ArrowRight } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
+import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
 
 export default function LoginPage() {
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const router = useRouter()
   const { theme } = useTheme()
+  const { login } = useAuth()
   const isDark = theme === 'dark'
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,25 +24,13 @@ export default function LoginPage() {
     setError('')
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const success = await login(email, password)
       
-      // Basic validation
-      if (!email || !password) {
-        setError('Please fill in all fields')
-        return
+      if (success) {
+        router.push('/dashboard')
+      } else {
+        setError('Invalid email or password. Please try again.')
       }
-
-      if (!email.includes('@')) {
-        setError('Please enter a valid email address')
-        return
-      }
-
-      // Here you would typically make an API call to authenticate
-      console.log('Login attempt:', { email, password })
-      
-      // For demo purposes, redirect to dashboard
-      router.push('/dashboard')
     } catch (err) {
       setError('Login failed. Please try again.')
     } finally {

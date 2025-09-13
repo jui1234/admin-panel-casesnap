@@ -15,6 +15,7 @@ import {
   Delete as DeleteIcon
 } from 'lucide-react'
 import Layout from '@/components/Layout'
+import ProtectedRoute from '@/components/ProtectedRoute'
 import { ROLES, getRoleById } from '@/utils/roles'
 import { 
   DataGrid, 
@@ -200,7 +201,8 @@ export default function UsersPage() {
   ]
 
   return (
-    <Layout>
+    <ProtectedRoute>
+      <Layout>
       <Box sx={{ p: 3 }}>
         {/* Page Header */}
         <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: 2 }}>
@@ -396,6 +398,7 @@ export default function UsersPage() {
           </Box>
         </Card>
       </Box>
-    </Layout>
+      </Layout>
+    </ProtectedRoute>
   )
 } 

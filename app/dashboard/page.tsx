@@ -2,6 +2,7 @@
 
 import { Shield, Users, Settings, TrendingUp, Activity, Clock, UserCheck, BarChart3 } from 'lucide-react'
 import Layout from '@/components/Layout'
+import ProtectedRoute from '@/components/ProtectedRoute'
 import { ROLES } from '@/utils/roles'
 
 export default function DashboardPage() {
@@ -50,7 +51,8 @@ export default function DashboardPage() {
   ]
 
   return (
-    <Layout>
+    <ProtectedRoute>
+      <Layout>
       <div className="space-y-4 sm:space-y-6">
         {/* Page Header */}
         <div>
@@ -273,6 +275,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-    </Layout>
+      </Layout>
+    </ProtectedRoute>
   )
 }
