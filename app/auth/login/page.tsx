@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Eye, EyeOff, Lock, Mail, Shield, ArrowRight } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Eye, EyeOff, Lock, Mail, Shield, ArrowRight, Building2, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -13,10 +13,28 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [organizationData, setOrganizationData] = useState<any>(null)
   const router = useRouter()
   const { theme } = useTheme()
   const { login } = useAuth()
   const isDark = theme === 'dark'
+
+  useEffect(() => {
+    // Check if organization data exists
+    try {
+      const orgData = localStorage.getItem('organizationData')
+      if (orgData) {
+        try {
+          setOrganizationData(JSON.parse(orgData))
+        } catch (error) {
+          console.error('Error parsing organization data:', error)
+        }
+      }
+    } catch (error) {
+      // localStorage not available
+      console.log('localStorage not available')
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,6 +63,17 @@ export default function LoginPage() {
         <ThemeToggle />
       </div>
 
+      {/* Back Button */}
+      <div className="fixed top-4 left-4 z-10">
+        <button
+          onClick={() => router.push('/get-started')}
+          className="flex items-center space-x-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm font-medium">Back</span>
+        </button>
+      </div>
+
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
@@ -57,6 +86,21 @@ export default function LoginPage() {
           <p className="text-gray-600 dark:text-gray-300">
             Sign in to your admin account
           </p>
+          
+          {/* Organization Info */}
+          {organizationData && (
+            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <div className="flex items-center justify-center space-x-2 mb-2">
+                <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                  {organizationData.companyName}
+                </span>
+              </div>
+              <p className="text-xs text-blue-600 dark:text-blue-300">
+                {organizationData.industry} • {organizationData.city}, {organizationData.province}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Login Form */}
@@ -189,10 +233,25 @@ export default function LoginPage() {
         <div className="text-center">
           <p className="text-sm text-gray-600 dark:text-gray-300">
             Don't have an account?{' '}
-            <a href="#" className="font-medium text-yellow-600 hover:text-yellow-500 transition-colors duration-200">
-              Contact administrator
-            </a>
+            <button
+              onClick={() => router.push('/setup')}
+              className="font-medium text-yellow-600 hover:text-yellow-500 transition-colors duration-200"
+            >
+              Create organization
+            </button>
           </p>
+          {!organizationData && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Or{' '}
+              <button
+                onClick={() => router.push('/get-started')}
+                className="font-medium text-blue-600 hover:text-blue-500 transition-colors duration-200"
+              >
+                get started
+              </button>
+              {' '}with CaseSnap
+            </p>
+          )}
         </div>
       </div>
     </div>

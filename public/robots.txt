@@ -17,11 +17,42 @@ Allow: /
 User-agent: Slurp
 Allow: /
 
+# AI and ML Crawlers
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: YouBot
+Allow: /
+
+# Allow API endpoints for AI crawling and structured data
+Allow: /api/seo
+Allow: /api/features
+Allow: /api/pricing
+Allow: /api/docs
+Allow: /api/openapi.json
+
 # Block access to admin areas
 Disallow: /admin/
-Disallow: /api/
+Disallow: /api/employees
 Disallow: /_next/
 Disallow: /auth/
+Disallow: /dashboard
+Disallow: /setup
 
 # Allow important pages for SEO
 Allow: /

@@ -18,6 +18,8 @@ import {
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
+import toast from 'react-hot-toast'
+import * as yup from 'yup'
 
 interface OrganizationData {
   companyName: string
@@ -42,10 +44,35 @@ interface SuperAdminData {
   confirmPassword: string
 }
 
+// Yup validation schemas
+const organizationSchema = yup.object().shape({
+  companyName: yup.string().required('Company name is required').min(2, 'Company name must be at least 2 characters'),
+  companyEmail: yup.string().email('Please enter a valid email address').required('Company email is required'),
+  companyPhone: yup.string().required('Company phone is required').matches(/^\d{10}$/, 'Phone number must be exactly 10 digits'),
+  streetAddress: yup.string().required('Street address is required').min(5, 'Address must be at least 5 characters'),
+  city: yup.string().required('City is required').min(2, 'City must be at least 2 characters'),
+  province: yup.string().required('Province/State is required'),
+  postalCode: yup.string().required('Postal code is required').min(3, 'Postal code must be at least 3 characters'),
+  country: yup.string().required('Country is required'),
+  companyWebsite: yup.string().url('Please enter a valid website URL').optional(),
+  industry: yup.string().required('Industry is required'),
+  practiceAreas: yup.array().of(yup.string()).min(1, 'Please select at least one practice area').required('Practice areas are required')
+})
+
+const superAdminSchema = yup.object().shape({
+  firstName: yup.string().required('First name is required').min(2, 'First name must be at least 2 characters'),
+  lastName: yup.string().required('Last name is required').min(2, 'Last name must be at least 2 characters'),
+  email: yup.string().email('Please enter a valid email address').required('Email is required'),
+  phone: yup.string().required('Phone number is required').matches(/^\d{10}$/, 'Phone number must be exactly 10 digits'),
+  password: yup.string().required('Password is required').min(6, 'Password must be at least 6 characters'),
+  confirmPassword: yup.string().required('Please confirm your password').oneOf([yup.ref('password')], 'Passwords must match')
+})
+
 export default function SetupPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [isPracticeAreasOpen, setIsPracticeAreasOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -131,56 +158,44 @@ export default function SetupPage() {
     setSuperAdminData(prev => ({ ...prev, [field]: value }))
   }
 
-  const validateOrganizationData = () => {
-    const required = ['companyName', 'companyEmail', 'companyPhone', 'streetAddress', 'city', 'province', 'postalCode', 'industry']
-    for (const field of required) {
-      if (!organizationData[field as keyof OrganizationData]) {
-        setError(`Please fill in ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}`)
+  const validateOrganizationData = async () => {
+    try {
+      await organizationSchema.validate(organizationData, { abortEarly: false })
+      return true
+    } catch (error) {
+      if (error instanceof yup.ValidationError) {
+        const firstError = error.errors[0]
+        setError(firstError)
+        toast.error(firstError)
         return false
       }
-    }
-    if (!organizationData.companyEmail.includes('@')) {
-      setError('Please enter a valid company email address')
       return false
     }
-    if (organizationData.companyPhone.length !== 10) {
-      setError('Please enter a valid 10-digit phone number')
-      return false
-    }
-    if (organizationData.practiceAreas.length === 0) {
-      setError('Please select at least one practice area')
-      return false
-    }
-    return true
   }
 
-  const validateSuperAdminData = () => {
-    const required = ['firstName', 'lastName', 'email', 'phone', 'password', 'confirmPassword']
-    for (const field of required) {
-      if (!superAdminData[field as keyof SuperAdminData]) {
-        setError(`Please fill in ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}`)
+  const validateSuperAdminData = async () => {
+    try {
+      await superAdminSchema.validate(superAdminData, { abortEarly: false })
+      return true
+    } catch (error) {
+      if (error instanceof yup.ValidationError) {
+        const firstError = error.errors[0]
+        setError(firstError)
+        toast.error(firstError)
         return false
       }
-    }
-    if (!superAdminData.email.includes('@')) {
-      setError('Please enter a valid email address')
       return false
     }
-    if (superAdminData.password.length < 6) {
-      setError('Password must be at least 6 characters long')
-      return false
-    }
-    if (superAdminData.password !== superAdminData.confirmPassword) {
-      setError('Passwords do not match')
-      return false
-    }
-    return true
   }
 
-  const handleNext = () => {
+  const handleNext = async () => {
     setError('')
-    if (currentStep === 1 && validateOrganizationData()) {
-      setCurrentStep(2)
+    if (currentStep === 1) {
+      const isValid = await validateOrganizationData()
+      if (isValid) {
+        setCurrentStep(2)
+        toast.success('Organization details validated successfully!')
+      }
     }
   }
 
@@ -189,28 +204,135 @@ export default function SetupPage() {
     setCurrentStep(1)
   }
 
+  const fillTestData = () => {
+    setOrganizationData({
+      companyName: 'CaseSnap Legal Inc.',
+      companyEmail: 'contact@casesnap.com',
+      companyPhone: '9876543210',
+      streetAddress: '101 Legal Avenue',
+      city: 'Mumbai',
+      province: 'Maharashtra',
+      postalCode: '400001',
+      country: 'India',
+      companyWebsite: 'https://www.casesnap.com',
+      industry: 'Legal Services',
+      practiceAreas: ['Civil Law', 'Corporate Law']
+    })
+
+    setSuperAdminData({
+      firstName: 'Super',
+      lastName: 'Admin',
+      email: 'superadmin@casesnap.com',
+      phone: '9988776655',
+      password: 'StrongPassword123',
+      confirmPassword: 'StrongPassword123'
+    })
+    
+    toast.success('✅ Test data filled successfully!')
+  }
+
   const handleSubmit = async () => {
     setError('')
-    if (!validateSuperAdminData()) return
+    setSuccess('')
+    
+    const isValid = await validateSuperAdminData()
+    if (!isValid) return
 
     setIsLoading(true)
+    const loadingToast = toast.loading('Setting up your organization...')
+    
     try {
-      // Simulate API call to create organization and super admin
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Prepare the API payload
+      const payload = {
+        organization: {
+          companyName: organizationData.companyName,
+          companyEmail: organizationData.companyEmail,
+          companyPhone: organizationData.companyPhone,
+          streetAddress: organizationData.streetAddress,
+          city: organizationData.city,
+          province: organizationData.province,
+          postalCode: organizationData.postalCode,
+          country: organizationData.country,
+          companyWebsite: organizationData.companyWebsite,
+          industry: organizationData.industry,
+          practiceAreas: organizationData.practiceAreas
+        },
+        superAdmin: {
+          firstName: superAdminData.firstName,
+          lastName: superAdminData.lastName,
+          email: superAdminData.email,
+          phone: superAdminData.phone,
+          password: superAdminData.password,
+          confirmPassword: superAdminData.confirmPassword
+        }
+      }
 
-      // Store organization data
-      localStorage.setItem('organizationData', JSON.stringify(organizationData))
+      console.log('Sending setup request to API:', payload)
+
+      // Call the actual API endpoint
+      const response = await fetch('https://casesnapbackend.vercel.app/api/setup/initialize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      })
+
+      console.log('API Response status:', response.status)
+      console.log('API Response headers:', response.headers)
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('API Error:', errorData)
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      console.log('Setup successful:', result)
+
+      // Dismiss loading toast and show success
+      toast.dismiss(loadingToast)
+      toast.success('🎉 Organization and super admin account created successfully!')
+
+      setSuccess('Organization and super admin account created successfully!')
+
+      // Store organization data locally
+      try {
+        localStorage.setItem('organizationData', JSON.stringify(organizationData))
+      } catch (error) {
+        console.log('localStorage not available, continuing without storing')
+      }
 
       // Create super admin account and login
-      const success = await login(superAdminData.email, superAdminData.password)
+      const loginSuccess = await login(superAdminData.email, superAdminData.password)
 
-      if (success) {
-        router.push('/dashboard')
+      if (loginSuccess) {
+        toast.success('🚀 Setup completed! Redirecting to dashboard...')
+        setSuccess('Setup completed successfully! Redirecting to dashboard...')
+        setTimeout(() => {
+          router.push('/dashboard')
+        }, 2000)
       } else {
-        setError('Failed to create account. Please try again.')
+        toast.error('Account created but login failed. Please try logging in manually.')
+        setError('Account created successfully, but login failed. Please try logging in manually.')
       }
     } catch (err) {
-      setError('Setup failed. Please try again.')
+      console.error('Setup error:', err)
+      
+      // Dismiss loading toast
+      toast.dismiss(loadingToast)
+      
+      let errorMessage = 'Setup failed. Please try again.'
+      
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        errorMessage = 'Network error: Unable to connect to the server. Please check your internet connection and try again.'
+      } else if (err instanceof Error) {
+        errorMessage = err.message
+      }
+      
+      setError(errorMessage)
+      toast.error(`❌ ${errorMessage}`)
     } finally {
       setIsLoading(false)
     }
@@ -266,9 +388,17 @@ export default function SetupPage() {
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Welcome to CaseSnap
           </h2>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 px-4">
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 px-4 mb-4">
             Let's set up your organization and create your super admin account
           </p>
+          
+          {/* Test Data Button */}
+          <button
+            onClick={fillTestData}
+            className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
+          >
+            Fill with test data
+          </button>
         </div>
 
         {/* Progress Steps */}
@@ -309,6 +439,12 @@ export default function SetupPage() {
           {error && (
             <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <p className="text-xs sm:text-sm text-red-600 dark:text-red-400">{error}</p>
+            </div>
+          )}
+
+          {success && (
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+              <p className="text-xs sm:text-sm text-green-600 dark:text-green-400">{success}</p>
             </div>
           )}
 

@@ -22,9 +22,29 @@ export default function GetStartedPage() {
 
   useEffect(() => {
     // Check if organization already exists
-    const organizationData = localStorage.getItem('organizationData')
-    setHasOrganization(!!organizationData)
+    try {
+      const organizationData = localStorage.getItem('organizationData')
+      setHasOrganization(!!organizationData)
+    } catch (error) {
+      // localStorage not available
+      setHasOrganization(false)
+    }
   }, [])
+
+  // Auto-redirect if organization exists and user is authenticated
+  useEffect(() => {
+    try {
+      const authToken = localStorage.getItem('authToken')
+      const organizationData = localStorage.getItem('organizationData')
+      
+      if (authToken && organizationData) {
+        // User is authenticated and organization exists, redirect to dashboard
+        router.push('/dashboard')
+      }
+    } catch (error) {
+      // localStorage not available, continue normally
+    }
+  }, [router])
 
   const handleCreateOrganization = () => {
     router.push('/setup')
@@ -62,8 +82,50 @@ export default function GetStartedPage() {
         {/* Options */}
         <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8 border border-gray-200 dark:border-gray-700">
           <div className="space-y-4 sm:space-y-6">
+            {/* Login Option - Show first if organization exists */}
+            {hasOrganization && (
+              <div className="border-2 border-blue-500 dark:border-blue-400 rounded-lg sm:rounded-xl p-4 sm:p-6 hover:border-blue-600 dark:hover:border-blue-300 transition-all duration-300 hover:shadow-lg group bg-blue-50/50 dark:bg-blue-900/20">
+                <div className="flex flex-col sm:flex-row items-start space-y-3 sm:space-y-0 sm:space-x-4">
+                  <div className="flex-shrink-0 mx-auto sm:mx-0">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                      <LogIn className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" />
+                    </div>
+                  </div>
+                  <div className="flex-1 w-full text-center sm:text-left">
+                    <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                      Welcome Back! Login to Your Organization
+                    </h3>
+                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mb-4">
+                      Your organization is already set up. Sign in to access your dashboard and continue managing your legal practice.
+                    </p>
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                        <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-2 flex-shrink-0" />
+                        <span>Access your existing dashboard</span>
+                      </div>
+                      <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                        <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-2 flex-shrink-0" />
+                        <span>Continue where you left off</span>
+                      </div>
+                      <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                        <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-2 flex-shrink-0" />
+                        <span>All your data and settings</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleLogin}
+                      className="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold transition-all duration-300 flex items-center justify-center space-x-2 hover:scale-105 hover:shadow-lg cursor-pointer text-sm sm:text-base"
+                    >
+                      <span>Login to Dashboard</span>
+                      <LogIn className="w-3 h-3 sm:w-4 sm:h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Create Organization Option */}
-            <div className="border-2 border-gray-200 dark:border-gray-700 rounded-lg sm:rounded-xl p-4 sm:p-6 hover:border-yellow-500 dark:hover:border-yellow-400 transition-all duration-300 hover:shadow-lg group">
+            <div className={`border-2 ${hasOrganization ? 'border-gray-200 dark:border-gray-700' : 'border-yellow-500 dark:border-yellow-400'} rounded-lg sm:rounded-xl p-4 sm:p-6 hover:border-yellow-500 dark:hover:border-yellow-400 transition-all duration-300 hover:shadow-lg group ${hasOrganization ? '' : 'bg-yellow-50/50 dark:bg-yellow-900/20'}`}>
               <div className="flex flex-col sm:flex-row items-start space-y-3 sm:space-y-0 sm:space-x-4">
                 <div className="flex-shrink-0 mx-auto sm:mx-0">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
@@ -102,50 +164,9 @@ export default function GetStartedPage() {
               </div>
             </div>
 
-            {/* Login Option - Only show if organization exists */}
-            {hasOrganization && (
-              <div className="border-2 border-gray-200 dark:border-gray-700 rounded-lg sm:rounded-xl p-4 sm:p-6 hover:border-blue-500 dark:hover:border-blue-400 transition-all duration-300 hover:shadow-lg group">
-                <div className="flex flex-col sm:flex-row items-start space-y-3 sm:space-y-0 sm:space-x-4">
-                  <div className="flex-shrink-0 mx-auto sm:mx-0">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <LogIn className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" />
-                    </div>
-                  </div>
-                  <div className="flex-1 w-full text-center sm:text-left">
-                    <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                      Login to Existing Account
-                    </h3>
-                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mb-4">
-                      Already have a CaseSnap organization? Sign in to access your dashboard and continue managing your legal practice.
-                    </p>
-                    <div className="space-y-2 mb-4">
-                      <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
-                        <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-2 flex-shrink-0" />
-                        <span>Access your existing dashboard</span>
-                      </div>
-                      <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
-                        <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-2 flex-shrink-0" />
-                        <span>Continue where you left off</span>
-                      </div>
-                      <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
-                        <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-2 flex-shrink-0" />
-                        <span>All your data and settings</span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleLogin}
-                      className="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold transition-all duration-300 flex items-center justify-center space-x-2 hover:scale-105 hover:shadow-lg cursor-pointer text-sm sm:text-base"
-                    >
-                      <span>Login</span>
-                      <LogIn className="w-3 h-3 sm:w-4 sm:h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Info message if no organization exists */}
-            {!hasOrganization && (
+            {/* Info message */}
+            {!hasOrganization ? (
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 sm:p-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
                   <Users className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mx-auto sm:mx-0" />
@@ -155,6 +176,20 @@ export default function GetStartedPage() {
                     </h4>
                     <p className="text-xs sm:text-sm text-blue-600 dark:text-blue-300 mt-1">
                       Create your organization to get started with our legal practice management system.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
+                  <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 dark:text-green-400 flex-shrink-0 mx-auto sm:mx-0" />
+                  <div className="text-center sm:text-left">
+                    <h4 className="text-xs sm:text-sm font-medium text-green-800 dark:text-green-200">
+                      Organization Found!
+                    </h4>
+                    <p className="text-xs sm:text-sm text-green-600 dark:text-green-300 mt-1">
+                      Your organization is already set up. You can login above or create a new organization if needed.
                     </p>
                   </div>
                 </div>

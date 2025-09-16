@@ -4,8 +4,11 @@ import { ThemeProvider } from '@/contexts/ThemeContext'
 import { AuthProvider } from '@/contexts/AuthContext'
 import SetupGuard from '@/components/SetupGuard'
 import MuiThemeProviderWrapper from '@/components/ThemeProvider'
+import { env } from '@/config/env'
+import { Toaster } from 'react-hot-toast'
 
 export const metadata: Metadata = {
+  metadataBase: new URL(env.APP_URL),
   title: 'CaseSnap - Best Lawyer Case Management Software | Legal Practice Management System',
   description: 'Professional lawyer case management software for law firms. Cloud-based legal practice management system with case tracking, document management, and billing. Trusted by 500+ law firms in India.',
   keywords: [
@@ -130,6 +133,88 @@ export default function RootLayout({
         <meta name="ICBM" content="20.5937, 78.9629" />
       </head>
       <body className="antialiased">
+        {/* NoScript Fallback */}
+        <noscript>
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: '#f3f4f6',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            zIndex: 9999
+          }}>
+            <div style={{
+              maxWidth: '600px',
+              textAlign: 'center',
+              backgroundColor: 'white',
+              padding: '40px',
+              borderRadius: '12px',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+            }}>
+              <h1 style={{
+                fontSize: '2rem',
+                fontWeight: 'bold',
+                color: '#1f2937',
+                marginBottom: '1rem'
+              }}>
+                CaseSnap - Legal Case Management Software
+              </h1>
+              <p style={{
+                fontSize: '1.1rem',
+                color: '#6b7280',
+                marginBottom: '2rem',
+                lineHeight: '1.6'
+              }}>
+                Best lawyer case management software for law firms in India. Professional legal practice management system with cloud-based case tracking, document management, and billing.
+              </p>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1rem',
+                alignItems: 'center'
+              }}>
+                <a href="/get-started" style={{
+                  backgroundColor: '#f59e0b',
+                  color: '#1f2937',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  textDecoration: 'none',
+                  fontWeight: '600',
+                  fontSize: '1rem'
+                }}>
+                  Get Started
+                </a>
+                <a href="/auth/login" style={{
+                  backgroundColor: 'transparent',
+                  color: '#374151',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  textDecoration: 'none',
+                  fontWeight: '600',
+                  fontSize: '1rem',
+                  border: '2px solid #d1d5db'
+                }}>
+                  Login
+                </a>
+              </div>
+              <p style={{
+                fontSize: '0.9rem',
+                color: '#9ca3af',
+                marginTop: '2rem'
+              }}>
+                JavaScript is required for the full experience. Please enable JavaScript to access all features.
+              </p>
+            </div>
+          </div>
+        </noscript>
+
         <ThemeProvider>
           <AuthProvider>
             <SetupGuard>
@@ -139,6 +224,32 @@ export default function RootLayout({
             </SetupGuard>
           </AuthProvider>
         </ThemeProvider>
+        
+        {/* Toast Notifications */}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+            success: {
+              duration: 3000,
+              iconTheme: {
+                primary: '#10b981',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              duration: 5000,
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
       </body>
     </html>
   )
