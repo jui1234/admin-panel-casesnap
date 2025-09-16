@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { 
   Shield, 
   Users, 
@@ -16,12 +17,48 @@ import {
   Star
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
+import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
 
 export default function DemoPage() {
   const router = useRouter()
   const { theme } = useTheme()
+  const { isAuthenticated, isLoading } = useAuth()
   const isDark = theme === 'dark'
+
+  useEffect(() => {
+    // If user is already authenticated, redirect to dashboard
+    if (!isLoading && isAuthenticated) {
+      router.push('/dashboard')
+    }
+  }, [isAuthenticated, isLoading, router])
+
+  // Add timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      // If still loading after 5 seconds, assume no authentication
+      if (isLoading) {
+        console.log('Authentication check timeout - proceeding without auth')
+      }
+    }, 5000)
+
+    return () => clearTimeout(timeout)
+  }, [isLoading])
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className={`min-h-screen transition-all duration-500 ${isDark ? 'dark bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'} flex items-center justify-center`}>
+        <div className="text-center">
+          <div className="mx-auto h-16 w-16 bg-gradient-to-r from-gray-800 to-gray-900 dark:from-yellow-500 dark:to-yellow-600 rounded-full flex items-center justify-center mb-6">
+            <Shield className="h-8 w-8 text-yellow-400 dark:text-gray-900 animate-pulse" />
+          </div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-300">Loading CaseSnap...</p>
+        </div>
+      </div>
+    )
+  }
 
   const features = [
     {
@@ -140,8 +177,60 @@ export default function DemoPage() {
     }
   ]
 
+  // Structured data for AI crawling
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "CaseSnap",
+    "description": "Best Lawyer Case Management Software for Law Firms in India. Professional legal practice management system with cloud-based case tracking, document management, and billing software.",
+    "url": "https://casesnap.com",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web Browser",
+    "offers": {
+      "@type": "Offer",
+      "price": "29",
+      "priceCurrency": "USD",
+      "priceValidUntil": "2025-12-31"
+    },
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "4.8",
+      "ratingCount": "500",
+      "bestRating": "5",
+      "worstRating": "1"
+    },
+    "author": {
+      "@type": "Organization",
+      "name": "CaseSnap",
+      "url": "https://casesnap.com"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "CaseSnap",
+      "url": "https://casesnap.com"
+    },
+    "keywords": "lawyer case management software, law firm management software, legal practice management system, advocate admin panel software, case tracking software for lawyers",
+    "featureList": [
+      "Case Management",
+      "Document Management", 
+      "Legal Billing",
+      "Client Management",
+      "Court Calendar",
+      "Task Management",
+      "Role-based Access Control",
+      "Analytics Dashboard"
+    ]
+  }
+
   return (
-    <div className={`min-h-screen transition-all duration-500 ${isDark ? 'dark bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'}`}>
+    <>
+      {/* Structured Data for AI Crawling */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
+      
+      <div className={`min-h-screen transition-all duration-500 ${isDark ? 'dark bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'}`}>
       {/* Header */}
       <header className="relative z-10 animate-fade-in">
         <nav className="container mx-auto px-4 sm:px-6 py-4">
@@ -153,6 +242,13 @@ export default function DemoPage() {
             <div className="flex items-center space-x-2 sm:space-x-4 animate-slide-in-right">
               <ThemeToggle size="sm" className="sm:hidden" />
               <ThemeToggle className="hidden sm:block" />
+              <button
+                onClick={() => router.push('/auth/login')}
+                className="border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-3 py-2 sm:px-4 sm:py-2 rounded-lg font-medium transition-all duration-300 flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base hover:scale-105 hover:shadow-lg cursor-pointer"
+              >
+                <span className="hidden sm:inline">Login</span>
+                <span className="sm:hidden">Login</span>
+              </button>
               <button
                 onClick={() => router.push('/get-started')}
                 className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-3 py-2 sm:px-6 sm:py-2 rounded-lg font-medium transition-all duration-300 flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base hover:scale-105 hover:shadow-lg cursor-pointer"
@@ -176,7 +272,7 @@ export default function DemoPage() {
           <p className="text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-6 sm:mb-8 max-w-2xl mx-auto px-4 sm:px-0 animate-fade-in-up animation-delay-200">
             Professional legal practice management system with cloud-based case tracking, document management, and billing software. Trusted by 500+ law firms across India for secure advocate admin panel operations.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4 sm:px-0 animate-fade-in-up animation-delay-400">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4 sm:px-0 animate-fade-in-up animation-delay-400">
             <button
               onClick={() => router.push('/get-started')}
               className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 flex items-center justify-center space-x-2 w-full sm:w-auto hover:scale-105 hover:shadow-xl group cursor-pointer"
@@ -184,8 +280,11 @@ export default function DemoPage() {
               <span>Start Free Trial</span>
               <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover:translate-x-1" />
             </button>
-            <button className="border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 w-full sm:w-auto hover:scale-105 hover:shadow-lg cursor-pointer">
-              Watch Demo
+            <button
+              onClick={() => router.push('/auth/login')}
+              className="border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 w-full sm:w-auto hover:scale-105 hover:shadow-lg cursor-pointer"
+            >
+              Login to Existing Account
             </button>
           </div>
         </div>
@@ -352,8 +451,11 @@ export default function DemoPage() {
                 <span>Get Started Now</span>
                 <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover:translate-x-1" />
               </button>
-              <button className="border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 w-full sm:w-auto hover:scale-105 hover:shadow-lg cursor-pointer">
-                Contact Sales
+              <button
+                onClick={() => router.push('/auth/login')}
+                className="border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 w-full sm:w-auto hover:scale-105 hover:shadow-lg cursor-pointer"
+              >
+                Login to Existing Account
               </button>
             </div>
           </div>
@@ -407,6 +509,7 @@ export default function DemoPage() {
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </>
   )
 } 

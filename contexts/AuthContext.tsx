@@ -8,6 +8,8 @@ interface User {
   email: string
   name: string
   role: string
+  organizationId?: string
+  organizationName?: string
 }
 
 interface AuthContextType {
@@ -28,25 +30,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Check for existing auth token on mount
     const checkAuth = () => {
-      const token = localStorage.getItem('authToken')
-      const userData = localStorage.getItem('userData')
-      const organizationData = localStorage.getItem('organizationData')
-      
-      if (token && userData && organizationData) {
-        try {
-          const parsedUser = JSON.parse(userData)
-          setUser(parsedUser)
-        } catch (error) {
-          // Invalid user data, clear it
-          localStorage.removeItem('authToken')
-          localStorage.removeItem('userData')
-          localStorage.removeItem('organizationData')
+      try {
+        const token = localStorage.getItem('authToken')
+        const userData = localStorage.getItem('userData')
+        const organizationData = localStorage.getItem('organizationData')
+        
+        if (token && userData && organizationData) {
+          try {
+            const parsedUser = JSON.parse(userData)
+            setUser(parsedUser)
+          } catch (error) {
+            // Invalid user data, clear it
+            localStorage.removeItem('authToken')
+            localStorage.removeItem('userData')
+            localStorage.removeItem('organizationData')
+          }
         }
+      } catch (error) {
+        // localStorage not available (SSR or disabled)
+        console.log('localStorage not available')
+      } finally {
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
 
-    checkAuth()
+    // Add a small delay to ensure proper hydration
+    const timeout = setTimeout(checkAuth, 100)
+    
+    return () => clearTimeout(timeout)
   }, [])
 
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -63,17 +74,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false
       }
 
+      // Get organization data if available
+      let organizationInfo = {}
+      try {
+        const organizationData = localStorage.getItem('organizationData')
+        
+        if (organizationData) {
+          try {
+            const orgData = JSON.parse(organizationData)
+            organizationInfo = {
+              organizationId: orgData.companyName.toLowerCase().replace(/\s+/g, '-'),
+              organizationName: orgData.companyName
+            }
+          } catch (error) {
+            console.error('Error parsing organization data:', error)
+          }
+        }
+      } catch (error) {
+        // localStorage not available
+        console.log('localStorage not available during login')
+      }
+
       // Mock successful login
       const mockUser: User = {
         id: '1',
         email: email,
         name: email.split('@')[0],
-        role: 'admin'
+        role: 'admin',
+        ...organizationInfo
       }
 
       // Store auth data
-      localStorage.setItem('authToken', 'mock-jwt-token')
-      localStorage.setItem('userData', JSON.stringify(mockUser))
+      try {
+        localStorage.setItem('authToken', 'mock-jwt-token')
+        localStorage.setItem('userData', JSON.stringify(mockUser))
+      } catch (error) {
+        // localStorage not available, continue without storing
+        console.log('localStorage not available for storing auth data')
+      }
       
       setUser(mockUser)
       return true
@@ -83,9 +121,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = () => {
-    localStorage.removeItem('authToken')
-    localStorage.removeItem('userData')
-    localStorage.removeItem('organizationData')
+    try {
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('userData')
+      localStorage.removeItem('organizationData')
+    } catch (error) {
+      // localStorage not available
+      console.log('localStorage not available during logout')
+    }
     setUser(null)
     router.push('/auth/login')
   }

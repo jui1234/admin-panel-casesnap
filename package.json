@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "setup-env": "node --input-type=module scripts/setup-env.js",
+    "env:local": "node --input-type=module scripts/setup-env.js"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^1.9.5",
@@ -19,7 +21,9 @@
     "@mui/x-data-grid": "^6.18.0",
     "@emotion/react": "^11.11.0",
     "@emotion/styled": "^11.11.0",
-    "@mui/icons-material": "^5.15.0"
+    "@mui/icons-material": "^5.15.0",
+    "react-hot-toast": "^2.4.1",
+    "yup": "^1.4.0"
   },
   "devDependencies": {
     "@types/node": "24.0.15",
