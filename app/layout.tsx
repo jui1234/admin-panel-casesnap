@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext'
 import { AuthProvider } from '@/contexts/AuthContext'
 import SetupGuard from '@/components/SetupGuard'
 import MuiThemeProviderWrapper from '@/components/ThemeProvider'
+import ReduxProvider from '@/components/ReduxProvider'
 import { env } from '@/config/env'
 import { Toaster } from 'react-hot-toast'
 
@@ -215,15 +216,17 @@ export default function RootLayout({
           </div>
         </noscript>
 
-        <ThemeProvider>
-          <AuthProvider>
-            <SetupGuard>
-              <MuiThemeProviderWrapper>
-                {children}
-              </MuiThemeProviderWrapper>
-            </SetupGuard>
-          </AuthProvider>
-        </ThemeProvider>
+        <ReduxProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <SetupGuard>
+                <MuiThemeProviderWrapper>
+                  {children}
+                </MuiThemeProviderWrapper>
+              </SetupGuard>
+            </AuthProvider>
+          </ThemeProvider>
+        </ReduxProvider>
         
         {/* Toast Notifications */}
         <Toaster

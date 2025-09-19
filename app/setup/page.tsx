@@ -18,6 +18,7 @@ import {
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
+import { useSetupOrganizationMutation } from '@/redux/api/authApi'
 import toast from 'react-hot-toast'
 import * as yup from 'yup'
 
@@ -70,13 +71,15 @@ const superAdminSchema = yup.object().shape({
 
 export default function SetupPage() {
   const [currentStep, setCurrentStep] = useState(1)
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isPracticeAreasOpen, setIsPracticeAreasOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  
+  // RTK Query mutation
+  const [setupOrganization, { isLoading, error: setupError }] = useSetupOrganizationMutation()
 
   const [organizationData, setOrganizationData] = useState<OrganizationData>({
     companyName: '',
@@ -167,11 +170,11 @@ export default function SetupPage() {
         const firstError = error.errors[0]
         setError(firstError)
         toast.error(firstError)
-        return false
-      }
       return false
     }
-  }
+        return false
+      }
+    }
 
   const validateSuperAdminData = async () => {
     try {
@@ -182,8 +185,8 @@ export default function SetupPage() {
         const firstError = error.errors[0]
         setError(firstError)
         toast.error(firstError)
-        return false
-      }
+      return false
+    }
       return false
     }
   }
@@ -193,7 +196,7 @@ export default function SetupPage() {
     if (currentStep === 1) {
       const isValid = await validateOrganizationData()
       if (isValid) {
-        setCurrentStep(2)
+      setCurrentStep(2)
         toast.success('Organization details validated successfully!')
       }
     }
@@ -238,7 +241,6 @@ export default function SetupPage() {
     const isValid = await validateSuperAdminData()
     if (!isValid) return
 
-    setIsLoading(true)
     const loadingToast = toast.loading('Setting up your organization...')
     
     try {
@@ -269,26 +271,8 @@ export default function SetupPage() {
 
       console.log('Sending setup request to API:', payload)
 
-      // Call the actual API endpoint
-      const response = await fetch('https://casesnapbackend.vercel.app/api/setup/initialize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      })
-
-      console.log('API Response status:', response.status)
-      console.log('API Response headers:', response.headers)
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('API Error:', errorData)
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
+      // Call the API using RTK Query
+      const result = await setupOrganization(payload).unwrap()
       console.log('Setup successful:', result)
 
       // Dismiss loading toast and show success
@@ -317,7 +301,7 @@ export default function SetupPage() {
         toast.error('Account created but login failed. Please try logging in manually.')
         setError('Account created successfully, but login failed. Please try logging in manually.')
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Setup error:', err)
       
       // Dismiss loading toast
@@ -325,16 +309,14 @@ export default function SetupPage() {
       
       let errorMessage = 'Setup failed. Please try again.'
       
-      if (err instanceof TypeError && err.message.includes('fetch')) {
-        errorMessage = 'Network error: Unable to connect to the server. Please check your internet connection and try again.'
-      } else if (err instanceof Error) {
+      if (err?.data?.error) {
+        errorMessage = err.data.error
+      } else if (err?.message) {
         errorMessage = err.message
       }
       
       setError(errorMessage)
       toast.error(`❌ ${errorMessage}`)
-    } finally {
-      setIsLoading(false)
     }
   }
 

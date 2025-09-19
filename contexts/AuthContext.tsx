@@ -62,10 +62,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // Basic validation
+      // Check if we already have real API data in localStorage
+      try {
+        const authToken = localStorage.getItem('authToken')
+        const userData = localStorage.getItem('userData')
+        
+        if (authToken && userData) {
+          // We have real API data, use it
+          const parsedUser = JSON.parse(userData)
+          setUser(parsedUser)
+          return true
+        }
+      } catch (error) {
+        console.error('Error parsing stored user data:', error)
+      }
+
+      // Fallback: Basic validation for mock login
       if (!email || !password) {
         return false
       }
@@ -95,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('localStorage not available during login')
       }
 
-      // Mock successful login
+      // Mock successful login (fallback)
       const mockUser: User = {
         id: '1',
         email: email,
@@ -125,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('authToken')
       localStorage.removeItem('userData')
       localStorage.removeItem('organizationData')
+      localStorage.removeItem('token') // Also remove the 'token' key for compatibility
     } catch (error) {
       // localStorage not available
       console.log('localStorage not available during logout')

@@ -6,18 +6,22 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
+import { useLoginMutation } from '@/redux/api/authApi'
+import toast from 'react-hot-toast'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [organizationData, setOrganizationData] = useState<any>(null)
   const router = useRouter()
   const { theme } = useTheme()
   const { login } = useAuth()
   const isDark = theme === 'dark'
+  
+  // RTK Query mutation
+  const [loginMutation, { isLoading, error: loginError }] = useLoginMutation()
 
   useEffect(() => {
     // Check if organization data exists
@@ -38,21 +42,49 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
     setError('')
 
     try {
-      const success = await login(email, password)
-      
-      if (success) {
-        router.push('/dashboard')
-      } else {
-        setError('Invalid email or password. Please try again.')
+      const result = await loginMutation({ email, password }).unwrap()
+
+      if (result.success) {
+        // Save token + organization in localStorage with correct keys for AuthContext
+        localStorage.setItem('authToken', result.token)
+        localStorage.setItem('token', result.token) // Keep both for compatibility
+        
+        // Store user data in the format expected by AuthContext
+        const userData = {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+          role: result.user.role,
+          organizationId: result.user.organization?._id,
+          organizationName: result.user.organization?.companyName
+        }
+        localStorage.setItem('userData', JSON.stringify(userData))
+        
+        // Store organization data
+        if (result.user?.organization) {
+          localStorage.setItem('organizationData', JSON.stringify(result.user.organization))
+          setOrganizationData(result.user.organization)
+        }
+        
+        toast.success('Login successful! 🎉')
+        
+        // Use AuthContext login to update the state properly
+        const loginSuccess = await login(email, password)
+        
+        if (loginSuccess) {
+          router.push('/dashboard')
+        } else {
+          // Fallback: redirect anyway since we have the data
+          router.push('/dashboard')
+        }
       }
-    } catch (err) {
-      setError('Login failed. Please try again.')
-    } finally {
-      setIsLoading(false)
+    } catch (err: any) {
+      const errorMessage = err?.data?.error || err?.message || 'Login failed. Please try again.'
+      setError(errorMessage)
+      toast.error(errorMessage)
     }
   }
 

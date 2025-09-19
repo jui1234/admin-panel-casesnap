@@ -103,3 +103,22 @@ jspm_packages/
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.* 
+
+# Logs and caches
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Env files
+.env
+.env.*
+!.env.example 
+
+# Ignore TypeScript env config file (kept local)
+config/env.ts

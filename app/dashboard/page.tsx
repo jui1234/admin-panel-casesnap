@@ -1,11 +1,28 @@
 'use client'
 
-import { Shield, Users, Settings, TrendingUp, Activity, Clock, UserCheck, BarChart3 } from 'lucide-react'
+import { Shield, Users, Settings, TrendingUp, Activity, Clock, UserCheck, BarChart3, Building2, Mail, Phone, MapPin } from 'lucide-react'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import { useAuth } from '@/contexts/AuthContext'
 import { ROLES } from '@/utils/roles'
+import { useState, useEffect } from 'react'
 
 export default function DashboardPage() {
+  const { user } = useAuth()
+  const [organizationData, setOrganizationData] = useState<any>(null)
+
+  useEffect(() => {
+    // Load organization data from localStorage
+    try {
+      const orgData = localStorage.getItem('organizationData')
+      if (orgData) {
+        setOrganizationData(JSON.parse(orgData))
+      }
+    } catch (error) {
+      console.error('Error loading organization data:', error)
+    }
+  }, [])
+
   const stats = [
     {
       name: 'Total Users',
@@ -38,7 +55,7 @@ export default function DashboardPage() {
   ]
 
   const recentActivity = [
-    { id: 1, user: 'John Doe', action: 'Logged in', time: '2 minutes ago', role: 'Super Admin' },
+    { id: 1, user: user?.name || 'Admin User', action: 'Logged in', time: 'Just now', role: user?.role || 'Admin' },
     { id: 2, user: 'Jane Smith', action: 'Updated profile', time: '5 minutes ago', role: 'Admin' },
     { id: 3, user: 'Mike Johnson', action: 'Created new user', time: '10 minutes ago', role: 'Admin' },
     { id: 4, user: 'Sarah Wilson', action: 'Changed permissions', time: '15 minutes ago', role: 'Employee' },
@@ -57,7 +74,58 @@ export default function DashboardPage() {
         {/* Page Header */}
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">Welcome back! Here's what's happening with your admin panel.</p>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+            Welcome back, {user?.name || 'Admin'}! Here's what's happening with your admin panel.
+          </p>
+        </div>
+
+        {/* Welcome Section with User & Organization Info */}
+        <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 rounded-lg border border-yellow-200 dark:border-yellow-800 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex-1">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                Welcome to {organizationData?.companyName || 'CaseSnap'} Dashboard
+              </h2>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
+                <div className="flex items-center">
+                  <UserCheck className="h-4 w-4 mr-2 text-yellow-600" />
+                  <span>Role: <span className="font-medium capitalize">{user?.role || 'Admin'}</span></span>
+                </div>
+                {organizationData && (
+                  <>
+                    <div className="flex items-center">
+                      <Building2 className="h-4 w-4 mr-2 text-yellow-600" />
+                      <span>Industry: <span className="font-medium">{organizationData.industry}</span></span>
+                    </div>
+                    <div className="flex items-center">
+                      <MapPin className="h-4 w-4 mr-2 text-yellow-600" />
+                      <span>{organizationData.city}, {organizationData.province}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            {organizationData && (
+              <div className="mt-4 sm:mt-0 sm:ml-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-3 sm:p-4 border border-yellow-200 dark:border-yellow-700">
+                  <div className="flex items-center mb-2">
+                    <Building2 className="h-5 w-5 text-yellow-600 mr-2" />
+                    <span className="font-medium text-gray-900 dark:text-white">Organization</span>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex items-center text-gray-600 dark:text-gray-300">
+                      <Mail className="h-3 w-3 mr-2" />
+                      <span>{organizationData.companyEmail}</span>
+                    </div>
+                    <div className="flex items-center text-gray-600 dark:text-gray-300">
+                      <Phone className="h-3 w-3 mr-2" />
+                      <span>{organizationData.companyPhone}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Stats Grid */}
@@ -206,6 +274,57 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Organization Details */}
+        {organizationData && (
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+              <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white mb-3 sm:mb-4">
+                Organization Details
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Company Name</p>
+                  <p className="text-sm text-gray-900 dark:text-white">{organizationData.companyName}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Industry</p>
+                  <p className="text-sm text-gray-900 dark:text-white">{organizationData.industry}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Location</p>
+                  <p className="text-sm text-gray-900 dark:text-white">{organizationData.city}, {organizationData.province}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Website</p>
+                  <a href={organizationData.companyWebsite} target="_blank" rel="noopener noreferrer" className="text-sm text-yellow-600 hover:text-yellow-500">
+                    {organizationData.companyWebsite}
+                  </a>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Address</p>
+                  <p className="text-sm text-gray-900 dark:text-white">{organizationData.streetAddress}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Postal Code</p>
+                  <p className="text-sm text-gray-900 dark:text-white">{organizationData.postalCode}</p>
+                </div>
+              </div>
+              {organizationData.practiceAreas && organizationData.practiceAreas.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Practice Areas</p>
+                  <div className="flex flex-wrap gap-2">
+                    {organizationData.practiceAreas.map((area: string, index: number) => (
+                      <span key={index} className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-400">
+                        {area}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* System Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
