@@ -230,7 +230,7 @@ export default function DemoPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
       
-      <div className={`min-h-screen transition-all duration-500 ${isDark ? 'dark bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'}`}>
+    <div className={`min-h-screen transition-all duration-500 ${isDark ? 'dark bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'}`}>
       {/* Header */}
       <header className="relative z-10 animate-fade-in">
         <nav className="container mx-auto px-4 sm:px-6 py-4">
@@ -272,7 +272,7 @@ export default function DemoPage() {
           <p className="text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-6 sm:mb-8 max-w-2xl mx-auto px-4 sm:px-0 animate-fade-in-up animation-delay-200">
             Professional legal practice management system with cloud-based case tracking, document management, and billing software. Trusted by 500+ law firms across India for secure advocate admin panel operations.
           </p>
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4 sm:px-0 animate-fade-in-up animation-delay-400">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4 sm:px-0 animate-fade-in-up animation-delay-400">
             <button
               onClick={() => router.push('/get-started')}
               className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-6 py-3 sm:px-8 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-300 flex items-center justify-center space-x-2 w-full sm:w-auto hover:scale-105 hover:shadow-xl group cursor-pointer"
@@ -509,7 +509,7 @@ export default function DemoPage() {
           </div>
         </div>
       </footer>
-      </div>
+    </div>
     </>
   )
 } 

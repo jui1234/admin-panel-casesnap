@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { 
   Shield, 
@@ -16,7 +16,11 @@ import {
   Bell,
   Search,
   UserPlus,
-  Building
+  Building,
+  CheckCircle,
+  AlertCircle,
+  Info,
+  Clock
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -41,11 +45,67 @@ const navigation = [
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const notificationRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const pathname = usePathname()
   const { theme } = useTheme()
   const { logout, user } = useAuth()
   const isDark = theme === 'dark'
+
+  // Sample notifications
+  const [notifications] = useState([
+    {
+      id: 1,
+      type: 'success',
+      title: 'Login Successful',
+      message: `Welcome back, ${user?.name || 'Admin'}!`,
+      time: 'Just now',
+      icon: CheckCircle,
+      read: false
+    },
+    {
+      id: 2,
+      type: 'info',
+      title: 'System Update',
+      message: 'CaseSnap has been updated to version 2.1.0',
+      time: '2 hours ago',
+      icon: Info,
+      read: false
+    },
+    {
+      id: 3,
+      type: 'warning',
+      title: 'Backup Reminder',
+      message: 'Scheduled backup will run tonight at 2:00 AM',
+      time: '4 hours ago',
+      icon: AlertCircle,
+      read: true
+    },
+    {
+      id: 4,
+      type: 'info',
+      title: 'New User Added',
+      message: 'Sarah Wilson has been added to your organization',
+      time: '1 day ago',
+      icon: UserPlus,
+      read: true
+    }
+  ])
+
+  // Close notifications when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setShowNotifications(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
 
   const handleLogout = () => {
     setShowLogoutModal(true)
@@ -64,8 +124,58 @@ export default function Layout({ children }: LayoutProps) {
     return pathname === href
   }
 
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'success':
+        return 'text-green-500'
+      case 'warning':
+        return 'text-yellow-500'
+      case 'error':
+        return 'text-red-500'
+      default:
+        return 'text-blue-500'
+    }
+  }
+
+  const getNotificationBg = (type: string) => {
+    switch (type) {
+      case 'success':
+        return 'bg-green-50 dark:bg-green-900/20'
+      case 'warning':
+        return 'bg-yellow-50 dark:bg-yellow-900/20'
+      case 'error':
+        return 'bg-red-50 dark:bg-red-900/20'
+      default:
+        return 'bg-blue-50 dark:bg-blue-900/20'
+    }
+  }
+
+  const unreadCount = notifications.filter(n => !n.read).length
+
   return (
-    <div className={`h-screen flex overflow-hidden transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
+    <>
+      <style jsx>{`
+        .notification-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .notification-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .notification-scroll::-webkit-scrollbar-thumb {
+          background: #d1d5db;
+          border-radius: 3px;
+        }
+        .notification-scroll::-webkit-scrollbar-thumb:hover {
+          background: #9ca3af;
+        }
+        .dark .notification-scroll::-webkit-scrollbar-thumb {
+          background: #4b5563;
+        }
+        .dark .notification-scroll::-webkit-scrollbar-thumb:hover {
+          background: #6b7280;
+        }
+      `}</style>
+      <div className={`h-screen flex overflow-hidden transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div 
@@ -167,19 +277,100 @@ export default function Layout({ children }: LayoutProps) {
               <ThemeToggle size="sm" />
               
               {/* Notifications */}
-              <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-200 relative">
-                <Bell className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="absolute top-1 right-1 h-2 w-2 bg-yellow-500 rounded-full"></span>
-              </button>
+              <div className="relative" ref={notificationRef}>
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-200 relative"
+                >
+                  <Bell className="h-5 w-5 sm:h-6 sm:w-6" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 h-2 w-2 bg-yellow-500 rounded-full"></span>
+                  )}
+                </button>
+
+                {/* Notification Dropdown */}
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Notifications</h3>
+                        {unreadCount > 0 && (
+                          <span className="bg-yellow-500 text-white text-xs font-medium px-2 py-1 rounded-full">
+                            {unreadCount} new
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="max-h-80 overflow-y-auto notification-scroll">
+                      {notifications.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                          <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p>No notifications</p>
+                        </div>
+                      ) : (
+                        notifications.map((notification) => {
+                          const Icon = notification.icon
+                          return (
+                            <div
+                              key={notification.id}
+                              className={`p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${
+                                !notification.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
+                              }`}
+                            >
+                              <div className="flex items-start space-x-3">
+                                <div className={`flex-shrink-0 p-1 rounded-full ${getNotificationBg(notification.type)}`}>
+                                  <Icon className={`h-4 w-4 ${getNotificationIcon(notification.type)}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                      {notification.title}
+                                    </p>
+                                    {!notification.read && (
+                                      <div className="h-2 w-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                                    {notification.message}
+                                  </p>
+                                  <div className="flex items-center mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    {notification.time}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                    
+                    {notifications.length > 0 && (
+                      <div className="p-3 border-t border-gray-200 dark:border-gray-700">
+                        <button className="w-full text-center text-sm text-yellow-600 hover:text-yellow-500 font-medium">
+                          Mark all as read
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* User menu */}
               <div className="flex items-center space-x-2 sm:space-x-3">
                 <div className="h-7 w-7 sm:h-8 sm:w-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                  <span className="text-xs sm:text-sm font-medium text-gray-900">A</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900">
+                    {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
+                  </span>
                 </div>
                 <div className="hidden sm:block">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Admin User</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">admin@example.com</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {user?.name || 'Admin User'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {user?.email || 'admin@example.com'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -200,6 +391,7 @@ export default function Layout({ children }: LayoutProps) {
         onClose={cancelLogout}
         onConfirm={confirmLogout}
       />
-    </div>
+      </div>
+    </>
   )
 } 
