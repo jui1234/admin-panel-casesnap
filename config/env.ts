@@ -4,12 +4,12 @@
 export const env = {
   APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'CaseSnap',
   APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-  APP_BACKEND_URL:process.env.NEXT_PUBLIC_APP_BACKEND_URL,
+  APP_BACKEND_URL: process.env.NEXT_PUBLIC_APP_BACKEND_URL || 'https://casesnapbackend.onrender.com/',
   APP_DESCRIPTION:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION ||
     'Best Lawyer Case Management Software for Law Firms in India',
 }
 
-export const { APP_NAME, APP_URL, APP_DESCRIPTION,APP_BACKEND_URL } = env
+export const { APP_NAME, APP_URL, APP_DESCRIPTION, APP_BACKEND_URL } = env
 
 

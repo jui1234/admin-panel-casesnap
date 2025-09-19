@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Lock, Mail, Shield, ArrowRight, Building2, ArrowLeft } from 'lucide-react'
+import { Eye, EyeOff, Lock, Mail, Shield, ArrowRight, Building2, ArrowLeft, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [organizationData, setOrganizationData] = useState<any>(null)
+  const [isRedirecting, setIsRedirecting] = useState(false)
   const router = useRouter()
   const { theme } = useTheme()
   const { login } = useAuth()
@@ -69,27 +70,51 @@ export default function LoginPage() {
           setOrganizationData(result.user.organization)
         }
         
-        toast.success('Login successful! 🎉')
+        toast.success('Login successful!')
+        
+        // Set redirecting state
+        setIsRedirecting(true)
         
         // Use AuthContext login to update the state properly
         const loginSuccess = await login(email, password)
         
         if (loginSuccess) {
-          router.push('/dashboard')
+          setTimeout(() => {
+            router.push('/dashboard')
+          }, 800)
         } else {
           // Fallback: redirect anyway since we have the data
-          router.push('/dashboard')
+          setTimeout(() => {
+            router.push('/dashboard')
+          }, 800)
         }
       }
     } catch (err: any) {
       const errorMessage = err?.data?.error || err?.message || 'Login failed. Please try again.'
       setError(errorMessage)
       toast.error(errorMessage)
+      setIsRedirecting(false)
     }
   }
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'} flex items-center justify-center p-4`}>
+    <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'} flex items-center justify-center p-4 relative`}>
+      {/* Loading Overlay */}
+      {(isLoading || isRedirecting) && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-2xl">
+            <div className="text-center">
+              <div className="flex justify-center mb-3">
+                <Loader2 className="h-8 w-8 text-yellow-500 animate-spin" />
+              </div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                {isLoading ? 'Signing in...' : 'Redirecting...'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Theme Toggle */}
       <div className="fixed top-4 right-4 z-10">
         <ThemeToggle />
@@ -224,13 +249,13 @@ export default function LoginPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isRedirecting}
               className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-gray-900 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl"
             >
-              {isLoading ? (
+              {isLoading || isRedirecting ? (
                 <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900 mr-2"></div>
-                  Signing in...
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  {isLoading ? 'Signing in...' : 'Redirecting...'}
                 </div>
               ) : (
                 <div className="flex items-center">
