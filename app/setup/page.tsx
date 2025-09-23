@@ -315,6 +315,22 @@ export default function SetupPage() {
         errorMessage = err.message
       }
       
+      // Check if the error is about email already being registered
+      if (errorMessage.includes('This email address is already registered as an admin user') || 
+          errorMessage.includes('email address is already registered') ||
+          errorMessage.includes('already registered')) {
+        // Show specific message and redirect to login with pre-filled email
+        toast.error('This email is already registered. Redirecting to login...')
+        setError('This email address is already registered. Redirecting to login page...')
+        
+        // Redirect to login page with the email pre-filled
+        setTimeout(() => {
+          const encodedEmail = encodeURIComponent(superAdminData.email)
+          router.push(`/auth/login?email=${encodedEmail}&message=email_already_registered`)
+        }, 2000)
+        return
+      }
+      
       setError(errorMessage)
       toast.error(`❌ ${errorMessage}`)
     }

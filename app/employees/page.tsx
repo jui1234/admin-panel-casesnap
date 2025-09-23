@@ -12,7 +12,9 @@ import {
   Phone,
   Mail,
   Calendar,
-  MapPin
+  MapPin,
+  UserPlus as UserPlusIcon,
+  X
 } from 'lucide-react'
 import Layout from '@/components/Layout'
 import { ROLES, getRoleById } from '@/utils/roles'
@@ -22,6 +24,7 @@ import {
   GridActionsCellItem,
   GridToolbar
 } from '@mui/x-data-grid'
+import { useInviteEmployeeMutation } from '@/redux/api/employeesApi'
 import { 
   Box, 
   Button, 
@@ -36,7 +39,14 @@ import {
   Typography, 
   Chip,
   Avatar,
-  Grid
+  Grid,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
+  Alert,
+  CircularProgress
 } from '@mui/material'
 
 interface Employee {
@@ -52,12 +62,30 @@ interface Employee {
   salary?: string
 }
 
+interface InviteEmployeeData {
+  firstName: string
+  lastName: string
+  email: string
+}
+
 export default function EmployeesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [departmentFilter, setDepartmentFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showFilters, setShowFilters] = useState(false)
+  
+  // Invite Employee Modal State
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
+  const [inviteData, setInviteData] = useState<InviteEmployeeData>({
+    firstName: '',
+    lastName: '',
+    email: ''
+  })
+  const [inviteErrors, setInviteErrors] = useState<Partial<InviteEmployeeData>>({})
+  const [isInviting, setIsInviting] = useState(false)
+  const [inviteSuccess, setInviteSuccess] = useState(false)
+  const [inviteEmployee, { isLoading: isInviteLoading }] = useInviteEmployeeMutation()
 
   const employees: Employee[] = [
     { id: 1, name: 'Alex Johnson', email: 'alex@company.com', phone: '+1 (555) 111-2222', role: 'employee', department: 'Engineering', status: 'Active', hireDate: '2023-01-15', location: 'New York', salary: '$75,000' },
@@ -105,6 +133,90 @@ export default function EmployeesPage() {
 
   const handleDelete = (id: number) => {
     console.log('Delete employee:', id)
+  }
+
+  // Invite Employee Functions
+  const validateInviteData = (): boolean => {
+    const errors: Partial<InviteEmployeeData> = {}
+    
+    if (!inviteData.firstName.trim()) {
+      errors.firstName = 'First name is required'
+    }
+    if (!inviteData.lastName.trim()) {
+      errors.lastName = 'Last name is required'
+    }
+    if (!inviteData.email.trim()) {
+      errors.email = 'Email is required'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteData.email)) {
+      errors.email = 'Please enter a valid email address'
+    }
+    
+    setInviteErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleInviteEmployee = async () => {
+    if (!validateInviteData()) {
+      return
+    }
+    
+    setIsInviting(true)
+    setInviteSuccess(false)
+    
+    try {
+      const res = await inviteEmployee({
+        firstName: inviteData.firstName.trim(),
+        lastName: inviteData.lastName.trim(),
+        email: inviteData.email.trim(),
+        // Temporary backend-required fields not present in UI
+        dateOfBirth: '2000-01-01',
+        gender: 'female',
+        address: 'sunanda surve chawl no 1 room no 1 kajupada bhatwadi ghatkopar west mumbai 400084',
+        phone: '9833288295'
+      }).unwrap()
+      
+      console.log('Invite response:', res)
+      
+      // Reset form
+      setInviteData({
+        firstName: '',
+        lastName: '',
+        email: ''
+      })
+      setInviteErrors({})
+      setInviteSuccess(true)
+      
+      // Close modal after success
+      setTimeout(() => {
+        setIsInviteModalOpen(false)
+        setInviteSuccess(false)
+      }, 2000)
+      
+    } catch (error: any) {
+      console.error('Error inviting employee:', error)
+    } finally {
+      setIsInviting(false)
+    }
+  }
+
+  const handleInviteDataChange = (field: keyof InviteEmployeeData, value: string) => {
+    setInviteData(prev => ({ ...prev, [field]: value }))
+    // Clear error when user starts typing
+    if (inviteErrors[field]) {
+      setInviteErrors(prev => ({ ...prev, [field]: undefined }))
+    }
+  }
+
+
+  const handleCloseInviteModal = () => {
+    setIsInviteModalOpen(false)
+    setInviteData({
+      firstName: '',
+      lastName: '',
+      email: ''
+    })
+    setInviteErrors({})
+    setInviteSuccess(false)
   }
 
   const columns: GridColDef[] = [
@@ -228,6 +340,18 @@ export default function EmployeesPage() {
     { name: 'Locations', value: Array.from(new Set(employees.map(e => e.location))).length.toString(), change: '+1', icon: UserPlus },
   ]
 
+  const buttonBoxSx = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 0.5,
+    py: 1.5,
+    px: 3,
+    lineHeight: 1.25,
+    textTransform: 'none',
+    '& .MuiButton-startIcon': { marginRight: 0.5, marginBottom: '2px', display: 'inline-flex', alignItems: 'center' },
+    '& .MuiButton-startIcon svg': { display: 'block' }
+  } as const
+
   return (
     <Layout>
       <Box sx={{ p: 3 }}>
@@ -243,10 +367,14 @@ export default function EmployeesPage() {
           </Box>
           <Button
             variant="contained"
-            startIcon={<Plus />}
-            sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
+            startIcon={<UserPlusIcon size={20} />}
+            onClick={() => setIsInviteModalOpen(true)}
+            sx={{ 
+              minWidth: { xs: '100%', sm: 'auto' },
+              ...buttonBoxSx
+            }}
           >
-            Add Employee
+            Invite Employee
           </Button>
         </Box>
 
@@ -274,6 +402,7 @@ export default function EmployeesPage() {
                   variant="outlined"
                   startIcon={<Filter />}
                   onClick={() => setShowFilters(!showFilters)}
+                  sx={{ ...buttonBoxSx }}
                 >
                   Filters
                 </Button>
@@ -392,6 +521,95 @@ export default function EmployeesPage() {
             />
           </Box>
         </Card>
+
+        {/* Invite Employee Modal */}
+        <Dialog 
+          open={isInviteModalOpen} 
+          onClose={handleCloseInviteModal}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <UserPlusIcon size={20} />
+              <Typography variant="h5">Invite Employee</Typography>
+            </Box>
+            <IconButton onClick={handleCloseInviteModal} size="small">
+              <X size={20} />
+            </IconButton>
+          </DialogTitle>
+          
+          <DialogContent>
+            {inviteSuccess && (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                Employee invitation sent successfully!
+              </Alert>
+            )}
+            
+            <Box sx={{ mt: 2, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+              <TextField
+                fullWidth
+                label="First Name"
+                value={inviteData.firstName}
+                onChange={(e) => handleInviteDataChange('firstName', e.target.value)}
+                error={!!inviteErrors.firstName}
+                helperText={inviteErrors.firstName}
+                disabled={isInviting}
+                required
+              />
+              <TextField
+                fullWidth
+                label="Last Name"
+                value={inviteData.lastName}
+                onChange={(e) => handleInviteDataChange('lastName', e.target.value)}
+                error={!!inviteErrors.lastName}
+                helperText={inviteErrors.lastName}
+                disabled={isInviting}
+                required
+              />
+              <TextField
+                fullWidth
+                label="Email Address"
+                type="email"
+                value={inviteData.email}
+                onChange={(e) => handleInviteDataChange('email', e.target.value)}
+                error={!!inviteErrors.email}
+                helperText={inviteErrors.email || 'Enter the email address to send invitation'}
+                disabled={isInviting}
+                placeholder="employee@company.com"
+                required
+                sx={{ gridColumn: '1 / -1' }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Mail size={20} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Box>
+          </DialogContent>
+          
+          <DialogActions sx={{ p: 3, pt: 1 }}>
+            <Button 
+              variant="contained"
+              onClick={handleCloseInviteModal}
+              disabled={isInviting}
+              sx={{ ...buttonBoxSx }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleInviteEmployee}
+              disabled={isInviting}
+              startIcon={isInviting ? <CircularProgress size={16} /> : <UserPlusIcon size={16} />}
+              sx={{ ...buttonBoxSx }}
+            >
+              {isInviting ? 'Sending Invite...' : 'Send Invitation'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Layout>
   )
