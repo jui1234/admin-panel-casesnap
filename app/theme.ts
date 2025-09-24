@@ -1,40 +1,41 @@
 import { createTheme } from '@mui/material/styles'
+import { Colors } from '@/config/colors'
 
 // Light theme
 export const lightTheme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#facc15', // Yellow
-      light: '#fef08a',
-      dark: '#ca8a04',
-      contrastText: '#0f172a', // Tile black for contrast
+      main: Colors.brandYellow.main,
+      light: Colors.brandYellow.light,
+      dark: Colors.brandYellow.dark,
+      contrastText: Colors.brandYellow.contrastText,
     },
     secondary: {
-      main: '#64748b', // Tile gray
-      light: '#94a3b8',
-      dark: '#334155',
-      contrastText: '#ffffff',
+      main: Colors.slate.main,
+      light: Colors.slate.light,
+      dark: Colors.slate.dark,
+      contrastText: Colors.slate.contrastText,
     },
     background: {
-      default: '#f8fafc', // Tile 50
-      paper: '#ffffff',
+      default: Colors.backgroundLight.default,
+      paper: Colors.backgroundLight.paper,
     },
     text: {
-      primary: '#0f172a', // Tile 900
-      secondary: '#475569', // Tile 600
+      primary: Colors.textLight.primary,
+      secondary: Colors.textLight.secondary,
     },
     grey: {
-      50: '#f8fafc',
-      100: '#f1f5f9',
-      200: '#e2e8f0',
-      300: '#cbd5e1',
-      400: '#94a3b8',
-      500: '#64748b',
-      600: '#475569',
-      700: '#334155',
-      800: '#1e293b',
-      900: '#0f172a',
+      50: Colors.grey[50],
+      100: Colors.grey[100],
+      200: Colors.grey[200],
+      300: Colors.grey[300],
+      400: Colors.grey[400],
+      500: Colors.grey[500],
+      600: Colors.grey[600],
+      700: Colors.grey[700],
+      800: Colors.grey[800],
+      900: Colors.grey[900],
     },
   },
   typography: {
@@ -106,36 +107,36 @@ export const darkTheme = createTheme({
   palette: {
     mode: 'dark',
     primary: {
-      main: '#facc15', // Yellow
-      light: '#fef08a',
-      dark: '#ca8a04',
-      contrastText: '#0f172a', // Tile black for contrast
+      main: Colors.brandYellow.main,
+      light: Colors.brandYellow.light,
+      dark: Colors.brandYellow.dark,
+      contrastText: Colors.brandYellow.contrastText,
     },
     secondary: {
-      main: '#64748b', // Tile gray
-      light: '#94a3b8',
-      dark: '#334155',
-      contrastText: '#ffffff',
+      main: Colors.slate.main,
+      light: Colors.slate.light,
+      dark: Colors.slate.dark,
+      contrastText: Colors.slate.contrastText,
     },
     background: {
-      default: '#0f172a', // Tile 900
-      paper: '#1e293b', // Tile 800
+      default: Colors.backgroundDark.default,
+      paper: Colors.backgroundDark.paper,
     },
     text: {
-      primary: '#f8fafc', // Tile 50
-      secondary: '#cbd5e1', // Tile 300
+      primary: Colors.textDark.primary,
+      secondary: Colors.textDark.secondary,
     },
     grey: {
-      50: '#f8fafc',
-      100: '#f1f5f9',
-      200: '#e2e8f0',
-      300: '#cbd5e1',
-      400: '#94a3b8',
-      500: '#64748b',
-      600: '#475569',
-      700: '#334155',
-      800: '#1e293b',
-      900: '#0f172a',
+      50: Colors.grey[50],
+      100: Colors.grey[100],
+      200: Colors.grey[200],
+      300: Colors.grey[300],
+      400: Colors.grey[400],
+      500: Colors.grey[500],
+      600: Colors.grey[600],
+      700: Colors.grey[700],
+      800: Colors.grey[800],
+      900: Colors.grey[900],
     },
   },
   typography: {

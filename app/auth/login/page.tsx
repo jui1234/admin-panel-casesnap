@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Eye, EyeOff, Lock, Mail, Shield, ArrowRight, Building2, ArrowLeft, Loader2 } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [organizationData, setOrganizationData] = useState<any>(null)
   const [isRedirecting, setIsRedirecting] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { theme } = useTheme()
   const { login } = useAuth()
   const isDark = theme === 'dark'
@@ -39,7 +40,21 @@ export default function LoginPage() {
       // localStorage not available
       console.log('localStorage not available')
     }
-  }, [])
+
+    // Check for URL parameters to pre-fill email
+    const emailParam = searchParams.get('email')
+    const messageParam = searchParams.get('message')
+    
+    if (emailParam) {
+      setEmail(decodeURIComponent(emailParam))
+      
+      // Show appropriate message based on the redirect reason
+      if (messageParam === 'email_already_registered') {
+        toast.success('Email pre-filled. Please enter your password to sign in.')
+        setError('This email is already registered. Please sign in with your password.')
+      }
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -143,6 +158,18 @@ export default function LoginPage() {
           <p className="text-gray-600 dark:text-gray-300">
             Sign in to your admin account
           </p>
+          
+          {/* Pre-filled email notification */}
+          {searchParams.get('email') && searchParams.get('message') === 'email_already_registered' && (
+            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <Mail className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm text-blue-800 dark:text-blue-200">
+                  Email pre-filled from setup
+                </span>
+              </div>
+            </div>
+          )}
           
           {/* Organization Info */}
           {organizationData && (
