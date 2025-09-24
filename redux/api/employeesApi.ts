@@ -37,16 +37,7 @@ export const employeesApi = createApi({
       query: (body) => ({
         url: 'api/employees/invite',
         method: 'POST',
-        // Temporarily include fields the backend requires but UI doesn't collect yet
-        body: {
-          firstName: body.firstName,
-          lastName: body.lastName,
-          email: body.email,
-          dateOfBirth: body.dateOfBirth ?? '2000-01-01',
-          gender: body.gender ?? 'Not Specified',
-          address: body.address ?? 'N/A',
-          phone: body.phone ?? '0000000000'
-        },
+        body,
       }),
       invalidatesTags: ['Employees']
     })

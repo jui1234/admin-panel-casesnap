@@ -169,10 +169,10 @@ export default function EmployeesPage() {
         lastName: inviteData.lastName.trim(),
         email: inviteData.email.trim(),
         // Temporary backend-required fields not present in UI
-        dateOfBirth: '2000-01-01',
-        gender: 'female',
-        address: 'sunanda surve chawl no 1 room no 1 kajupada bhatwadi ghatkopar west mumbai 400084',
-        phone: '9833288295'
+        // dateOfBirth: '2000-01-01',
+        // gender: 'female',
+        // address: 'sunanda surve chawl no 1 room no 1 kajupada bhatwadi ghatkopar west mumbai 400084',
+        // phone: '9833288295'
       }).unwrap()
       
       console.log('Invite response:', res)
@@ -194,6 +194,22 @@ export default function EmployeesPage() {
       
     } catch (error: any) {
       console.error('Error inviting employee:', error)
+      
+      // Display backend error message
+      let errorMessage = 'Failed to send invitation. Please try again.'
+      
+      if (error?.data?.error) {
+        errorMessage = error.data.error
+      } else if (error?.data?.message) {
+        errorMessage = error.data.message
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+      
+      // Show error in the modal
+      setInviteErrors({ 
+        email: errorMessage 
+      })
     } finally {
       setIsInviting(false)
     }
