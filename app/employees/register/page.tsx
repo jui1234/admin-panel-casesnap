@@ -42,6 +42,11 @@ interface EmployeeRegistrationData {
   dateOfBirth: string
   gender: string
   address: string
+  aadharCard: string
+  employeeType: string
+  advocateLicense: string
+  internYear: string
+  age: string
   department: string
   position: string
   salary: string
@@ -70,6 +75,11 @@ export default function EmployeeRegisterPage() {
     dateOfBirth: '',
     gender: '',
     address: '',
+    aadharCard: '',
+    employeeType: '',
+    advocateLicense: '',
+    internYear: '',
+    age: '',
     department: '',
     position: '',
     salary: '',
@@ -121,6 +131,14 @@ export default function EmployeeRegisterPage() {
     }
   }, [searchParams])
 
+  // Calculate age when date of birth changes
+  useEffect(() => {
+    if (formData.dateOfBirth) {
+      const age = calculateAge(formData.dateOfBirth)
+      setFormData(prev => ({ ...prev, age: age.toString() }))
+    }
+  }, [formData.dateOfBirth])
+
   const handleInputChange = (field: keyof EmployeeRegistrationData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     // Clear error when user starts typing
@@ -139,6 +157,101 @@ export default function EmployeeRegisterPage() {
     // Remove all non-digit characters and limit to 10 digits
     const digitsOnly = value.replace(/\D/g, '').slice(0, 10)
     handleInputChange('emergencyContactPhone', digitsOnly)
+  }
+
+  const handleAadharChange = (value: string) => {
+    // Remove all non-digit characters and limit to 12 digits
+    const digitsOnly = value.replace(/\D/g, '').slice(0, 12)
+    handleInputChange('aadharCard', digitsOnly)
+  }
+
+  const calculateAge = (dateOfBirth: string): number => {
+    if (!dateOfBirth) return 0
+    const today = new Date()
+    const birthDate = new Date(dateOfBirth)
+    let age = today.getFullYear() - birthDate.getFullYear()
+    const monthDiff = today.getMonth() - birthDate.getMonth()
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--
+    }
+    return age
+  }
+
+  const validateAdvocateLicense = (license: string): boolean => {
+    // Format: name-MAH/XXXX/YYYY
+    const pattern = /^[a-zA-Z\s]+-MAH\/\d{4}\/\d{4}$/
+    if (!pattern.test(license)) return false
+    
+    const parts = license.split('/')
+    const year = parseInt(parts[2])
+    const currentYear = new Date().getFullYear()
+    
+    return year <= currentYear
+  }
+
+  const handleAdvocateLicenseChange = (value: string) => {
+    // Auto-format the license number
+    let formattedValue = value
+    
+    // Only apply formatting if the value is longer than current value (user is typing, not deleting)
+    const currentValue = formData.advocateLicense
+    const isTyping = value.length > currentValue.length
+    
+    if (isTyping) {
+      // If user types MAH, automatically add the first slash
+      if (formattedValue.includes('MAH') && !formattedValue.includes('MAH/')) {
+        formattedValue = formattedValue.replace('MAH', 'MAH/')
+      }
+      
+      // If we have MAH/ followed by exactly 4 digits (not more), automatically add the second slash
+      const mahWithFourDigits = /MAH\/\d{4}$/
+      if (mahWithFourDigits.test(formattedValue)) {
+        formattedValue = formattedValue.replace(/(MAH\/\d{4})$/, '$1/')
+      }
+    }
+    
+    // Block input after 13 characters (excluding auto-added slashes)
+    const baseLength = formattedValue.replace(/\//g, '').length
+    if (baseLength <= 13) {
+      handleInputChange('advocateLicense', formattedValue)
+    }
+  }
+
+  const handleSalaryChange = (value: string) => {
+    // Only allow numbers and decimal point
+    const numericValue = value.replace(/[^0-9.]/g, '')
+    // Prevent multiple decimal points
+    const parts = numericValue.split('.')
+    if (parts.length > 2) {
+      const finalValue = parts[0] + '.' + parts.slice(1).join('')
+      handleInputChange('salary', finalValue)
+    } else {
+      handleInputChange('salary', numericValue)
+    }
+  }
+
+  const handleContactNameChange = (value: string) => {
+    // Only allow letters and spaces
+    const lettersOnly = value.replace(/[^a-zA-Z\s]/g, '')
+    handleInputChange('emergencyContactName', lettersOnly)
+  }
+
+  const handleContactRelationChange = (value: string) => {
+    // Only allow letters and spaces
+    const lettersOnly = value.replace(/[^a-zA-Z\s]/g, '')
+    handleInputChange('emergencyContactRelation', lettersOnly)
+  }
+
+  const handleFirstNameChange = (value: string) => {
+    // Only allow letters and spaces
+    const lettersOnly = value.replace(/[^a-zA-Z\s]/g, '')
+    handleInputChange('firstName', lettersOnly)
+  }
+
+  const handleLastNameChange = (value: string) => {
+    // Only allow letters and spaces
+    const lettersOnly = value.replace(/[^a-zA-Z\s]/g, '')
+    handleInputChange('lastName', lettersOnly)
   }
 
   const validateForm = (): boolean => {
@@ -160,6 +273,60 @@ export default function EmployeeRegisterPage() {
     if (!formData.dateOfBirth) newErrors.dateOfBirth = 'Date of birth is required'
     if (!formData.gender) newErrors.gender = 'Gender is required'
     if (!formData.address.trim()) newErrors.address = 'Address is required'
+    if (!formData.aadharCard.trim()) {
+      newErrors.aadharCard = 'Aadhar Card Number is required'
+    } else if (!/^\d{12}$/.test(formData.aadharCard)) {
+      newErrors.aadharCard = 'Aadhar Card Number must be exactly 12 digits'
+    }
+    if (!formData.employeeType) newErrors.employeeType = 'Employee type is required'
+    if (formData.employeeType === 'advocate') {
+      if (!formData.advocateLicense.trim()) {
+        newErrors.advocateLicense = 'Advocate License Number is required'
+      } else {
+        // Yup-style validation for advocate license
+        const license = formData.advocateLicense.trim()
+        
+        // Check if it starts with MAH (after the name part)
+        if (!license.includes('-MAH/')) {
+          newErrors.advocateLicense = 'License must contain -MAH/ format'
+        } else {
+          const parts = license.split('-MAH/')
+          if (parts.length !== 2) {
+            newErrors.advocateLicense = 'Invalid license format. Use: name-MAH/XXXX/YYYY'
+          } else {
+            const numberPart = parts[1]
+            const numberParts = numberPart.split('/')
+            
+            if (numberParts.length !== 2) {
+              newErrors.advocateLicense = 'Invalid license format. Use: name-MAH/XXXX/YYYY'
+            } else {
+              const [middleDigits, yearDigits] = numberParts
+              
+              // Check middle 4 digits are numbers
+              if (!/^\d{4}$/.test(middleDigits)) {
+                newErrors.advocateLicense = 'Middle part must be 4 digits'
+              }
+              
+              // Check year is 4 digits and not greater than current year
+              if (!/^\d{4}$/.test(yearDigits)) {
+                newErrors.advocateLicense = 'Year must be 4 digits'
+              } else {
+                const year = parseInt(yearDigits)
+                const currentYear = new Date().getFullYear()
+                if (year > currentYear) {
+                  newErrors.advocateLicense = `Please enter a proper license number. Year cannot be greater than ${currentYear}`
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    if (formData.employeeType === 'intern') {
+      if (!formData.internYear.trim()) {
+        newErrors.internYear = 'Intern year is required'
+      }
+    }
     if (!formData.department.trim()) newErrors.department = 'Department is required'
     if (!formData.position.trim()) newErrors.position = 'Position is required'
     if (!formData.salary.trim()) newErrors.salary = 'Salary is required'
@@ -214,6 +381,11 @@ export default function EmployeeRegisterPage() {
           dateOfBirth: '',
           gender: '',
           address: '',
+          aadharCard: '',
+          employeeType: '',
+          advocateLicense: '',
+          internYear: '',
+          age: '',
           department: '',
           position: '',
           salary: '',
@@ -310,9 +482,9 @@ export default function EmployeeRegisterPage() {
                     fullWidth
                     label="First Name"
                     value={formData.firstName}
-                    onChange={(e) => handleInputChange('firstName', e.target.value)}
+                    onChange={(e) => handleFirstNameChange(e.target.value)}
                     error={!!errors.firstName}
-                    helperText={errors.firstName}
+                    helperText={errors.firstName || 'Letters only'}
                     disabled={isSubmitting}
                     required
                   />
@@ -323,9 +495,9 @@ export default function EmployeeRegisterPage() {
                     fullWidth
                     label="Last Name"
                     value={formData.lastName}
-                    onChange={(e) => handleInputChange('lastName', e.target.value)}
+                    onChange={(e) => handleLastNameChange(e.target.value)}
                     error={!!errors.lastName}
-                    helperText={errors.lastName}
+                    helperText={errors.lastName || 'Letters only'}
                     disabled={isSubmitting}
                     required
                   />
@@ -395,6 +567,19 @@ export default function EmployeeRegisterPage() {
                 </Grid>
 
                 <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Age"
+                    value={formData.age}
+                    disabled
+                    helperText="Calculated automatically from date of birth"
+                    InputProps={{
+                      readOnly: true,
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
                   <FormControl fullWidth error={!!errors.gender} disabled={isSubmitting} required>
                     <InputLabel>Gender</InputLabel>
                     <Select
@@ -437,6 +622,72 @@ export default function EmployeeRegisterPage() {
                   />
                 </Grid>
 
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Aadhar Card Number"
+                    value={formData.aadharCard}
+                    onChange={(e) => handleAadharChange(e.target.value)}
+                    error={!!errors.aadharCard}
+                    helperText={errors.aadharCard || 'Enter 12-digit Aadhar number'}
+                    disabled={isSubmitting}
+                    required
+                    placeholder="123456789012"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth error={!!errors.employeeType} disabled={isSubmitting} required>
+                    <InputLabel>Employee Type</InputLabel>
+                    <Select
+                      value={formData.employeeType}
+                      label="Employee Type"
+                      onChange={(e) => handleInputChange('employeeType', e.target.value)}
+                    >
+                      <MenuItem value="advocate">Advocate</MenuItem>
+                      <MenuItem value="intern">Intern</MenuItem>
+                    </Select>
+                    {errors.employeeType && (
+                      <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
+                        {errors.employeeType}
+                      </Typography>
+                    )}
+                  </FormControl>
+                </Grid>
+
+                {formData.employeeType === 'advocate' && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Advocate License Number"
+                      value={formData.advocateLicense}
+                      onChange={(e) => handleAdvocateLicenseChange(e.target.value)}
+                      error={!!errors.advocateLicense}
+                      helperText={errors.advocateLicense || 'Format: name-MAH/XXXX/YYYY (slashes added automatically)'}
+                      disabled={isSubmitting}
+                      required
+                      placeholder="MAH/9720/2025"
+                      inputProps={{ maxLength: 13 }}
+                    />
+                  </Grid>
+                )}
+
+                {formData.employeeType === 'intern' && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Intern Year"
+                      value={formData.internYear}
+                      onChange={(e) => handleInputChange('internYear', e.target.value)}
+                      error={!!errors.internYear}
+                      helperText={errors.internYear}
+                      disabled={isSubmitting}
+                      required
+                      placeholder="e.g., 2024"
+                    />
+                  </Grid>
+                )}
+
                 {/* Employment Information Section */}
                 <Grid item xs={12}>
                   <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
@@ -476,9 +727,9 @@ export default function EmployeeRegisterPage() {
                     fullWidth
                     label="Salary"
                     value={formData.salary}
-                    onChange={(e) => handleInputChange('salary', e.target.value)}
+                    onChange={(e) => handleSalaryChange(e.target.value)}
                     error={!!errors.salary}
-                    helperText={errors.salary}
+                    helperText={errors.salary || 'Enter numeric value only'}
                     disabled={isSubmitting}
                     required
                     placeholder="e.g., 50000"
@@ -520,9 +771,9 @@ export default function EmployeeRegisterPage() {
                     fullWidth
                     label="Contact Name"
                     value={formData.emergencyContactName}
-                    onChange={(e) => handleInputChange('emergencyContactName', e.target.value)}
+                    onChange={(e) => handleContactNameChange(e.target.value)}
                     error={!!errors.emergencyContactName}
-                    helperText={errors.emergencyContactName}
+                    helperText={errors.emergencyContactName || 'Letters only'}
                     disabled={isSubmitting}
                     required
                   />
@@ -553,9 +804,9 @@ export default function EmployeeRegisterPage() {
                     fullWidth
                     label="Relation"
                     value={formData.emergencyContactRelation}
-                    onChange={(e) => handleInputChange('emergencyContactRelation', e.target.value)}
+                    onChange={(e) => handleContactRelationChange(e.target.value)}
                     error={!!errors.emergencyContactRelation}
-                    helperText={errors.emergencyContactRelation}
+                    helperText={errors.emergencyContactRelation || 'Letters only'}
                     disabled={isSubmitting}
                     required
                     placeholder="e.g., Spouse, Parent, Sibling"
