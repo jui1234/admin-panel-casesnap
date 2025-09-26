@@ -5,6 +5,7 @@ export interface InviteEmployeeRequest {
   firstName: string
   lastName: string
   email: string
+  salary: string
   // Optional fields temporarily filled for backend requirements
   dateOfBirth?: string
   gender?: string
@@ -13,6 +14,35 @@ export interface InviteEmployeeRequest {
 }
 
 export interface InviteEmployeeResponse {
+  success: boolean
+  message: string
+}
+
+export interface RegisterEmployeeRequest {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  address: string
+  gender: string
+  dateOfBirth: string
+  age: number
+  aadharCardNumber: string
+  employeeType: string
+  advocateLicenseNumber?: string
+  internYear?: number
+  salary: number
+  department: string
+  position: string
+  startDate: string
+  emergencyContactName: string
+  emergencyContactPhone: string
+  emergencyContactRelation: string
+  password: string
+  confirmPassword: string
+}
+
+export interface RegisterEmployeeResponse {
   success: boolean
   message: string
 }
@@ -40,10 +70,18 @@ export const employeesApi = createApi({
         body,
       }),
       invalidatesTags: ['Employees']
+    }),
+    registerEmployee: builder.mutation<RegisterEmployeeResponse, RegisterEmployeeRequest>({
+      query: (body) => ({
+        url: 'api/employees/register',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Employees']
     })
   })
 })
 
-export const { useInviteEmployeeMutation } = employeesApi
+export const { useInviteEmployeeMutation, useRegisterEmployeeMutation } = employeesApi
 
 

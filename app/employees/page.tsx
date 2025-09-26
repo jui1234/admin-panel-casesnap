@@ -66,6 +66,7 @@ interface InviteEmployeeData {
   firstName: string
   lastName: string
   email: string
+  salary: string
 }
 
 export default function EmployeesPage() {
@@ -80,7 +81,8 @@ export default function EmployeesPage() {
   const [inviteData, setInviteData] = useState<InviteEmployeeData>({
     firstName: '',
     lastName: '',
-    email: ''
+    email: '',
+    salary: ''
   })
   const [inviteErrors, setInviteErrors] = useState<Partial<InviteEmployeeData>>({})
   const [isInviting, setIsInviting] = useState(false)
@@ -150,6 +152,11 @@ export default function EmployeesPage() {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteData.email)) {
       errors.email = 'Please enter a valid email address'
     }
+    if (!inviteData.salary.trim()) {
+      errors.salary = 'Salary is required'
+    } else if (!/^\d+(\.\d{1,2})?$/.test(inviteData.salary)) {
+      errors.salary = 'Please enter a valid salary amount'
+    }
     
     setInviteErrors(errors)
     return Object.keys(errors).length === 0
@@ -168,6 +175,7 @@ export default function EmployeesPage() {
         firstName: inviteData.firstName.trim(),
         lastName: inviteData.lastName.trim(),
         email: inviteData.email.trim(),
+        salary: inviteData.salary.trim(),
         // Temporary backend-required fields not present in UI
         // dateOfBirth: '2000-01-01',
         // gender: 'female',
@@ -181,7 +189,8 @@ export default function EmployeesPage() {
       setInviteData({
         firstName: '',
         lastName: '',
-        email: ''
+        email: '',
+        salary: ''
       })
       setInviteErrors({})
       setInviteSuccess(true)
@@ -223,13 +232,40 @@ export default function EmployeesPage() {
     }
   }
 
+  const handleSalaryChange = (value: string) => {
+    // Only allow numbers and a single decimal point
+    const numbersOnly = value.replace(/[^0-9.]/g, '')
+    // Prevent multiple decimal points
+    const parts = numbersOnly.split('.')
+    const formattedValue = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : numbersOnly
+    handleInviteDataChange('salary', formattedValue)
+  }
+
+  const getSalaryUnit = (salary: string) => {
+    if (!salary || salary === '') return ''
+    
+    const num = parseFloat(salary)
+    if (isNaN(num)) return ''
+    
+    if (num >= 10000000) { // 1 crore
+      return `${(num / 10000000).toFixed(1)} Cr`
+    } else if (num >= 100000) { // 1 lakh
+      return `${(num / 100000).toFixed(1)} L`
+    } else if (num >= 1000) { // 1 thousand
+      return `${(num / 1000).toFixed(1)} K`
+    } else {
+      return `${num.toFixed(0)}`
+    }
+  }
+
 
   const handleCloseInviteModal = () => {
     setIsInviteModalOpen(false)
     setInviteData({
       firstName: '',
       lastName: '',
-      email: ''
+      email: '',
+      salary: ''
     })
     setInviteErrors({})
     setInviteSuccess(false)
@@ -594,11 +630,50 @@ export default function EmployeesPage() {
                 disabled={isInviting}
                 placeholder="employee@company.com"
                 required
-                sx={{ gridColumn: '1 / -1' }}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
                       <Mail size={20} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+              <TextField
+                fullWidth
+                label="Salary"
+                type="text"
+                value={inviteData.salary}
+                onChange={(e) => handleSalaryChange(e.target.value)}
+                error={!!inviteErrors.salary}
+                helperText={inviteErrors.salary || 'Enter the salary amount'}
+                disabled={isInviting}
+                placeholder="50000"
+                required
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <span style={{ fontSize: '16px', fontWeight: 'bold' }}>₹</span>
+                    </InputAdornment>
+                  ),
+                  endAdornment: inviteData.salary && (
+                    <InputAdornment position="end">
+                      <Box
+                        sx={{
+                          bgcolor: 'primary.100',
+                          color: 'primary.main',
+                          px: 1,
+                          py: 0.5,
+                          borderRadius: 1,
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          minWidth: '40px',
+                          textAlign: 'center',
+                          border: '1px solid',
+                          borderColor: 'primary.300'
+                        }}
+                      >
+                        {getSalaryUnit(inviteData.salary)}
+                      </Box>
                     </InputAdornment>
                   ),
                 }}

@@ -33,6 +33,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import ThemeToggle from '@/components/ThemeToggle'
+import { useRegisterEmployeeMutation } from '@/redux/api/employeesApi'
 
 interface EmployeeRegistrationData {
   firstName: string
@@ -64,6 +65,7 @@ interface URLParams {
   organizationName: string
   adminName: string
   employeeEmail: string
+  salary: string
 }
 
 export default function EmployeeRegisterPage() {
@@ -97,6 +99,10 @@ export default function EmployeeRegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [success, setSuccess] = useState(false)
   const [urlParams, setUrlParams] = useState<URLParams | null>(null)
+  const [registerEmployee, { isLoading: isRegisterLoading }] = useRegisterEmployeeMutation()
+  const [registrationError, setRegistrationError] = useState<string>('')
+  const [isAccountActive, setIsAccountActive] = useState(false)
+
   
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -110,6 +116,7 @@ export default function EmployeeRegisterPage() {
     const organizationName = searchParams.get('organizationName')
     const adminName = searchParams.get('adminName')
     const employeeEmail = searchParams.get('employeeEmail')
+    const salary = searchParams.get('salary')
 
     if (token && employeeName && organizationName && adminName && employeeEmail) {
       setUrlParams({
@@ -117,7 +124,8 @@ export default function EmployeeRegisterPage() {
         employeeName: decodeURIComponent(employeeName),
         organizationName: decodeURIComponent(organizationName),
         adminName: decodeURIComponent(adminName),
-        employeeEmail: decodeURIComponent(employeeEmail)
+        employeeEmail: decodeURIComponent(employeeEmail),
+        salary: salary ? decodeURIComponent(salary) : ''
       })
 
       // Pre-fill form data from URL parameters
@@ -126,7 +134,8 @@ export default function EmployeeRegisterPage() {
         ...prev,
         firstName: nameParts[0] || '',
         lastName: nameParts.slice(1).join(' ') || '',
-        email: decodeURIComponent(employeeEmail)
+        email: decodeURIComponent(employeeEmail),
+        salary: salary ? decodeURIComponent(salary) : ''
       }))
     }
   }, [searchParams])
@@ -210,9 +219,8 @@ export default function EmployeeRegisterPage() {
       }
     }
     
-    // Block input after 13 characters (excluding auto-added slashes)
-    const baseLength = formattedValue.replace(/\//g, '').length
-    if (baseLength <= 13) {
+    // Allow up to 13 characters for the license format MAH/XXXX/YYYY
+    if (formattedValue.length <= 13) {
       handleInputChange('advocateLicense', formattedValue)
     }
   }
@@ -254,6 +262,23 @@ export default function EmployeeRegisterPage() {
     handleInputChange('lastName', lettersOnly)
   }
 
+  const getSalaryUnit = (salary: string) => {
+    if (!salary || salary === '') return ''
+    
+    const num = parseFloat(salary)
+    if (isNaN(num)) return ''
+    
+    if (num >= 10000000) { // 1 crore
+      return `${(num / 10000000).toFixed(1)} Cr`
+    } else if (num >= 100000) { // 1 lakh
+      return `${(num / 100000).toFixed(1)} L`
+    } else if (num >= 1000) { // 1 thousand
+      return `${(num / 1000).toFixed(1)} K`
+    } else {
+      return `${num.toFixed(0)}`
+    }
+  }
+
   const validateForm = (): boolean => {
     const newErrors: Partial<EmployeeRegistrationData> = {}
     
@@ -283,25 +308,24 @@ export default function EmployeeRegisterPage() {
       if (!formData.advocateLicense.trim()) {
         newErrors.advocateLicense = 'Advocate License Number is required'
       } else {
-        // Yup-style validation for advocate license
+        // Validate advocate license format: MAH/XXXX/YYYY
         const license = formData.advocateLicense.trim()
         
-        // Check if it starts with MAH (after the name part)
-        if (!license.includes('-MAH/')) {
-          newErrors.advocateLicense = 'License must contain -MAH/ format'
+        // Check if it starts with MAH/
+        if (!license.startsWith('MAH/')) {
+          newErrors.advocateLicense = 'License must start with MAH/'
         } else {
-          const parts = license.split('-MAH/')
-          if (parts.length !== 2) {
-            newErrors.advocateLicense = 'Invalid license format. Use: name-MAH/XXXX/YYYY'
+          const parts = license.split('/')
+          
+          if (parts.length !== 3) {
+            newErrors.advocateLicense = 'Invalid license format. Use: MAH/XXXX/YYYY'
           } else {
-            const numberPart = parts[1]
-            const numberParts = numberPart.split('/')
+            const [mahPart, middleDigits, yearDigits] = parts
             
-            if (numberParts.length !== 2) {
-              newErrors.advocateLicense = 'Invalid license format. Use: name-MAH/XXXX/YYYY'
+            // Check MAH part
+            if (mahPart !== 'MAH') {
+              newErrors.advocateLicense = 'License must start with MAH/'
             } else {
-              const [middleDigits, yearDigits] = numberParts
-              
               // Check middle 4 digits are numbers
               if (!/^\d{4}$/.test(middleDigits)) {
                 newErrors.advocateLicense = 'Middle part must be 4 digits'
@@ -362,12 +386,40 @@ export default function EmployeeRegisterPage() {
     
     setIsSubmitting(true)
     setSuccess(false)
+    setRegistrationError('')
+    setIsAccountActive(false)
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Prepare API payload
+      const payload = {
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        address: formData.address.trim(),
+        gender: formData.gender,
+        dateOfBirth: formData.dateOfBirth,
+        age: parseInt(formData.age) || 0,
+        aadharCardNumber: formData.aadharCard.trim(),
+        employeeType: formData.employeeType,
+        ...(formData.employeeType === 'advocate' && { advocateLicenseNumber: formData.advocateLicense.trim() }),
+        ...(formData.employeeType === 'intern' && { internYear: parseInt(formData.internYear) || 0 }),
+        salary: parseFloat(formData.salary) || 0,
+        department: formData.department.trim(),
+        position: formData.position.trim(),
+        startDate: formData.startDate,
+        emergencyContactName: formData.emergencyContactName.trim(),
+        emergencyContactPhone: formData.emergencyContactPhone.trim(),
+        emergencyContactRelation: formData.emergencyContactRelation.trim(),
+        password: formData.password,
+        confirmPassword: formData.confirmPassword
+      }
       
-      console.log('Registering employee:', formData)
+      console.log('Registering employee:', payload)
+      
+      const response = await registerEmployee(payload).unwrap()
+      
+      console.log('Registration response:', response)
       
       setSuccess(true)
       
@@ -401,8 +453,38 @@ export default function EmployeeRegisterPage() {
         router.push('/auth/login')
       }, 2000)
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error registering employee:', error)
+      
+      // Handle API errors
+      let errorMessage = 'Registration failed. Please try again.'
+      
+      if (error?.data?.error) {
+        errorMessage = error.data.error
+      } else if (error?.data?.message) {
+        errorMessage = error.data.message
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+      
+      
+      // Check if it's the specific "already completed registration" error
+      if (errorMessage.includes('account is pending admin approval')) {
+        setRegistrationError(errorMessage)
+      } else if (errorMessage.includes('account is active') || 
+                 errorMessage.includes('Your account is active') ||
+                 errorMessage.includes('cannot register again') ||
+                 errorMessage.includes('You have already completed your registration and your account is active. You cannot register again.') ||
+                 errorMessage.includes('You have already completed your registration and your account is active')) {
+        // Show active account message with login option
+        setRegistrationError(errorMessage)
+        setIsAccountActive(true)
+      } else {
+        // Show other errors in the email field
+        setErrors({ 
+          email: errorMessage 
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -465,8 +547,55 @@ export default function EmployeeRegisterPage() {
           </div>
         )}
 
+
+        {/* Registration Error */}
+        {registrationError && (
+          <div className={`mb-4 sm:mb-6 p-4 border rounded-lg ${
+            isAccountActive 
+              ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
+              : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+          }`}>
+            <div className="flex items-center justify-center space-x-2 mb-2">
+              <UserCheck className={`w-4 h-4 ${
+                isAccountActive 
+                  ? 'text-green-600 dark:text-green-400' 
+                  : 'text-yellow-600 dark:text-yellow-400'
+              }`} />
+              <span className={`text-sm font-medium ${
+                isAccountActive 
+                  ? 'text-green-800 dark:text-green-200' 
+                  : 'text-yellow-800 dark:text-yellow-200'
+              }`}>
+                Registration Status
+              </span>
+            </div>
+            <p className={`text-sm text-center ${
+              isAccountActive 
+                ? 'text-green-700 dark:text-green-300' 
+                : 'text-yellow-700 dark:text-yellow-300'
+            }`}>
+              {registrationError}
+            </p>
+            {isAccountActive && (
+              <div className="mt-3 flex justify-center">
+                <button
+                  onClick={() => {
+                    const email = formData.email
+                    const encodedEmail = encodeURIComponent(email)
+                    router.push(`/auth/login?email=${encodedEmail}&message=account_active`)
+                  }}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200 flex items-center space-x-2"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>Go to Login</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Registration Form */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8 border border-gray-200 dark:border-gray-700 mx-2 sm:mx-0">
+        <div className={`bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8 border border-gray-200 dark:border-gray-700 mx-2 sm:mx-0 ${registrationError ? 'opacity-50 pointer-events-none' : ''}`}>
             <form onSubmit={handleSubmit}>
               <Grid container spacing={3}>
                 {/* Personal Information Section */}
@@ -587,10 +716,10 @@ export default function EmployeeRegisterPage() {
                       label="Gender"
                       onChange={(e) => handleInputChange('gender', e.target.value)}
                     >
-                      <MenuItem value="male">Male</MenuItem>
-                      <MenuItem value="female">Female</MenuItem>
-                      <MenuItem value="other">Other</MenuItem>
-                      <MenuItem value="prefer-not-to-say">Prefer not to say</MenuItem>
+                      <MenuItem value="Male">Male</MenuItem>
+                      <MenuItem value="Female">Female</MenuItem>
+                      <MenuItem value="Other">Other</MenuItem>
+                      <MenuItem value="Prefer not to say">Prefer not to say</MenuItem>
                     </Select>
                     {errors.gender && (
                       <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
@@ -663,7 +792,7 @@ export default function EmployeeRegisterPage() {
                       value={formData.advocateLicense}
                       onChange={(e) => handleAdvocateLicenseChange(e.target.value)}
                       error={!!errors.advocateLicense}
-                      helperText={errors.advocateLicense || 'Format: name-MAH/XXXX/YYYY (slashes added automatically)'}
+                      helperText={errors.advocateLicense || 'Format: MAH/XXXX/YYYY (slashes added automatically)'}
                       disabled={isSubmitting}
                       required
                       placeholder="MAH/9720/2025"
@@ -674,17 +803,25 @@ export default function EmployeeRegisterPage() {
 
                 {formData.employeeType === 'intern' && (
                   <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label="Intern Year"
-                      value={formData.internYear}
-                      onChange={(e) => handleInputChange('internYear', e.target.value)}
-                      error={!!errors.internYear}
-                      helperText={errors.internYear}
-                      disabled={isSubmitting}
-                      required
-                      placeholder="e.g., 2024"
-                    />
+                    <FormControl fullWidth error={!!errors.internYear} disabled={isSubmitting} required>
+                      <InputLabel>Intern Year</InputLabel>
+                      <Select
+                        value={formData.internYear}
+                        label="Intern Year"
+                        onChange={(e) => handleInputChange('internYear', e.target.value)}
+                      >
+                        <MenuItem value="1">1st Year</MenuItem>
+                        <MenuItem value="2">2nd Year</MenuItem>
+                        <MenuItem value="3">3rd Year</MenuItem>
+                        <MenuItem value="4">4th Year</MenuItem>
+                        <MenuItem value="5">5th Year</MenuItem>
+                      </Select>
+                      {errors.internYear && (
+                        <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
+                          {errors.internYear}
+                        </Typography>
+                      )}
+                    </FormControl>
                   </Grid>
                 )}
 
@@ -729,10 +866,33 @@ export default function EmployeeRegisterPage() {
                     value={formData.salary}
                     onChange={(e) => handleSalaryChange(e.target.value)}
                     error={!!errors.salary}
-                    helperText={errors.salary || 'Enter numeric value only'}
-                    disabled={isSubmitting}
+                    helperText={errors.salary || (urlParams?.salary ? 'Salary provided in invitation' : 'Enter numeric value only')}
+                    disabled={isSubmitting || !!urlParams?.salary}
                     required
                     placeholder="e.g., 50000"
+                    InputProps={{
+                      endAdornment: formData.salary && (
+                        <InputAdornment position="end">
+                          <Box
+                            sx={{
+                              bgcolor: 'primary.100',
+                              color: 'primary.main',
+                              px: 1,
+                              py: 0.5,
+                              borderRadius: 1,
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              minWidth: '40px',
+                              textAlign: 'center',
+                              border: '1px solid',
+                              borderColor: 'primary.300'
+                            }}
+                          >
+                            {getSalaryUnit(formData.salary)}
+                          </Box>
+                        </InputAdornment>
+                      ),
+                    }}
                   />
                 </Grid>
 
@@ -879,11 +1039,11 @@ export default function EmployeeRegisterPage() {
                     <Button
                       type="submit"
                       variant="contained"
-                      disabled={isSubmitting}
-                      startIcon={isSubmitting ? <CircularProgress size={16} /> : <UserCheck size={16} />}
+                      disabled={isSubmitting || isRegisterLoading}
+                      startIcon={isSubmitting || isRegisterLoading ? <CircularProgress size={16} /> : <UserCheck size={16} />}
                       sx={{ ...buttonBoxSx }}
                     >
-                      {isSubmitting ? 'Registering...' : 'Complete Registration'}
+                      {isSubmitting || isRegisterLoading ? 'Registering...' : 'Complete Registration'}
                     </Button>
                   </Box>
                 </Grid>

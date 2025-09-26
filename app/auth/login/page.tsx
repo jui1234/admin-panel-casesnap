@@ -52,6 +52,9 @@ export default function LoginPage() {
       if (messageParam === 'email_already_registered') {
         toast.success('Email pre-filled. Please enter your password to sign in.')
         setError('This email is already registered. Please sign in with your password.')
+      } else if (messageParam === 'account_active') {
+        toast.success('Your account is active! Please sign in with your credentials.')
+        setError('Your account is active. Please sign in with your password.')
       }
     }
   }, [searchParams])
@@ -166,6 +169,18 @@ export default function LoginPage() {
                 <Mail className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 <span className="text-sm text-blue-800 dark:text-blue-200">
                   Email pre-filled from setup
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Account active notification */}
+          {searchParams.get('email') && searchParams.get('message') === 'account_active' && (
+            <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <Shield className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <span className="text-sm text-green-800 dark:text-green-200">
+                  Your account is active! Please sign in with your credentials.
                 </span>
               </div>
             </div>
