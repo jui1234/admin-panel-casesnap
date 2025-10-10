@@ -10,10 +10,7 @@ import {
   Box
 } from '@mui/material'
 import {
-  MoreVert,
-  Eye,
-  Edit as EditIcon,
-  Delete as DeleteIcon
+  MoreVert
 } from '@mui/icons-material'
 
 interface ActionMenuItem {
