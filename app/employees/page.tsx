@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { 
   UserPlus, 
   Plus, 
@@ -17,14 +18,16 @@ import {
   X
 } from 'lucide-react'
 import Layout from '@/components/Layout'
+import ActionMenu from '@/components/ActionMenu'
+import { useAuth } from '@/contexts/AuthContext'
 import { ROLES, getRoleById } from '@/utils/roles'
 import { 
   DataGrid, 
   GridColDef, 
-  GridActionsCellItem,
   GridToolbar
 } from '@mui/x-data-grid'
-import { useInviteEmployeeMutation } from '@/redux/api/employeesApi'
+import { useInviteEmployeeMutation, useGetEmployeesQuery, useUpdateEmployeeStatusMutation } from '@/redux/api/employeesApi'
+import toast from 'react-hot-toast'
 import { 
   Box, 
   Button, 
@@ -49,66 +52,109 @@ import {
   CircularProgress
 } from '@mui/material'
 
-interface Employee {
-  id: number
-  name: string
-  email: string
-  phone: string
-  role: string
-  department: string
-  status: 'Active' | 'Inactive' | 'On Leave'
-  hireDate: string
-  location: string
-  salary?: string
-}
+// Import Employee type from Redux API
+import type { Employee } from '@/redux/api/employeesApi'
 
 interface InviteEmployeeData {
   firstName: string
   lastName: string
   email: string
+  salary: string
 }
 
 export default function EmployeesPage() {
+  const router = useRouter()
+  const { user, isLoading: isAuthLoading } = useAuth()
+  const isAdmin = user?.role === 'admin' || user?.role === 'super-admin'
+  if (!isAdmin) return null
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [departmentFilter, setDepartmentFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [employeeTypeFilter, setEmployeeTypeFilter] = useState('all')
   const [showFilters, setShowFilters] = useState(false)
+  const [paginationModel, setPaginationModel] = useState({
+    page: 0,
+    pageSize: 10,
+  })
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
   
   // Invite Employee Modal State
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
   const [inviteData, setInviteData] = useState<InviteEmployeeData>({
     firstName: '',
     lastName: '',
-    email: ''
+    email: '',
+    salary: ''
   })
   const [inviteErrors, setInviteErrors] = useState<Partial<InviteEmployeeData>>({})
   const [isInviting, setIsInviting] = useState(false)
   const [inviteSuccess, setInviteSuccess] = useState(false)
   const [inviteEmployee, { isLoading: isInviteLoading }] = useInviteEmployeeMutation()
+  
+  // Status change modal state
+  const [selectedEmployeeForStatus, setSelectedEmployeeForStatus] = useState<Employee | null>(null)
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
+  const [statusForm, setStatusForm] = useState<{ status: 'active' | 'inactive' | 'pending'; reason: string; notes: string }>({
+    status: 'active',
+    reason: '',
+    notes: ''
+  })
+  const [statusFormError, setStatusFormError] = useState<string>('')
+  const [updateEmployeeStatus, { isLoading: isUpdatingStatus }] = useUpdateEmployeeStatusMutation()
+  // Notifications via react-toastify
+  
+  // Fetch employees data with server-side filtering
+  const { 
+    data: employeesData, 
+    isLoading: isEmployeesLoading, 
+    error: employeesError,
+    refetch: refetchEmployees 
+  } = useGetEmployeesQuery({
+    page: paginationModel.page + 1, // API uses 1-based pagination
+    limit: paginationModel.pageSize,
+    search: debouncedSearchTerm || undefined,
+    role: roleFilter !== 'all' ? roleFilter : undefined,
+    department: departmentFilter !== 'all' ? departmentFilter : undefined,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    employeeType: employeeTypeFilter !== 'all' ? employeeTypeFilter : undefined,
+  })
 
-  const employees: Employee[] = [
-    { id: 1, name: 'Alex Johnson', email: 'alex@company.com', phone: '+1 (555) 111-2222', role: 'employee', department: 'Engineering', status: 'Active', hireDate: '2023-01-15', location: 'New York', salary: '$75,000' },
-    { id: 2, name: 'Maria Garcia', email: 'maria@company.com', phone: '+1 (555) 222-3333', role: 'admin', department: 'HR', status: 'Active', hireDate: '2022-08-20', location: 'Los Angeles', salary: '$85,000' },
-    { id: 3, name: 'David Chen', email: 'david@company.com', phone: '+1 (555) 333-4444', role: 'employee', department: 'Marketing', status: 'Active', hireDate: '2023-03-10', location: 'Chicago', salary: '$70,000' },
-    { id: 4, name: 'Sarah Wilson', email: 'sarah@company.com', phone: '+1 (555) 444-5555', role: 'employee', department: 'Sales', status: 'On Leave', hireDate: '2022-11-05', location: 'Boston', salary: '$65,000' },
-    { id: 5, name: 'Michael Brown', email: 'michael@company.com', phone: '+1 (555) 555-6666', role: 'admin', department: 'Finance', status: 'Active', hireDate: '2021-06-12', location: 'San Francisco', salary: '$90,000' },
-    { id: 6, name: 'Lisa Davis', email: 'lisa@company.com', phone: '+1 (555) 666-7777', role: 'employee', department: 'Engineering', status: 'Active', hireDate: '2023-02-28', location: 'Seattle', salary: '$80,000' },
-    { id: 7, name: 'Robert Taylor', email: 'robert@company.com', phone: '+1 (555) 777-8888', role: 'employee', department: 'Operations', status: 'Inactive', hireDate: '2022-04-15', location: 'Austin', salary: '$72,000' },
-    { id: 8, name: 'Jennifer Lee', email: 'jennifer@company.com', phone: '+1 (555) 888-9999', role: 'admin', department: 'Legal', status: 'Active', hireDate: '2021-09-30', location: 'Washington DC', salary: '$95,000' },
-  ]
+  // Get employees from API or fallback to empty array
+  const employees: Employee[] = employeesData?.data || []
+  const pagination = employeesData
 
-  const filteredEmployees = useMemo(() => {
-    return employees.filter(employee => {
-      const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           employee.department.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesRole = roleFilter === 'all' || employee.role === roleFilter
-      const matchesDepartment = departmentFilter === 'all' || employee.department === departmentFilter
-      const matchesStatus = statusFilter === 'all' || employee.status === statusFilter
-      return matchesSearch && matchesRole && matchesDepartment && matchesStatus
-    })
-  }, [employees, searchTerm, roleFilter, departmentFilter, statusFilter])
+  // Reset pagination when filters change
+  const handleFilterChange = (filterType: string, value: string) => {
+    setPaginationModel(prev => ({ ...prev, page: 0 }))
+    
+    switch (filterType) {
+      case 'search':
+        setSearchTerm(value)
+        break
+      case 'role':
+        setRoleFilter(value)
+        break
+      case 'department':
+        setDepartmentFilter(value)
+        break
+      case 'status':
+        setStatusFilter(value)
+        break
+      case 'employeeType':
+        setEmployeeTypeFilter(value)
+        break
+    }
+  }
 
   const getRoleInfo = (roleId: string) => {
     return getRoleById(roleId)
@@ -116,22 +162,58 @@ export default function EmployeesPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Active': return 'success'
-      case 'Inactive': return 'error'
-      case 'On Leave': return 'warning'
+      case 'active': return 'success'
+      case 'pending': return 'warning'
+      case 'inactive': return 'error'
       default: return 'default'
     }
   }
 
-  const handleView = (id: number) => {
+  const openStatusModal = (employee: Employee) => {
+    setSelectedEmployeeForStatus(employee)
+    setStatusForm({ status: (employee.status as any) || 'active', reason: '', notes: '' })
+    setIsStatusModalOpen(true)
+  }
+
+  const closeStatusModal = () => {
+    setIsStatusModalOpen(false)
+    setStatusFormError('')
+  }
+
+  const handleSubmitStatus = async () => {
+    if (!selectedEmployeeForStatus) return
+    if (!statusForm.reason.trim()) {
+      setStatusFormError('Reason is required')
+      return
+    }
+    try {
+      setStatusFormError('')
+      const res = await updateEmployeeStatus({
+        employeeId: selectedEmployeeForStatus.id,
+        status: statusForm.status,
+        reason: statusForm.reason.trim(),
+        notes: statusForm.notes.trim() || undefined,
+      }).unwrap()
+      closeStatusModal()
+      refetchEmployees()
+      const successMessage = (res as any)?.message || 'Employee status updated successfully.'
+      toast.success(successMessage)
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.data?.error || e?.message || 'Failed to update status'
+      setStatusFormError(msg)
+      toast.error(msg)
+    }
+  }
+
+  const handleView = (id: string) => {
     console.log('View employee:', id)
   }
 
-  const handleEdit = (id: number) => {
+  const handleEdit = (id: string) => {
     console.log('Edit employee:', id)
   }
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     console.log('Delete employee:', id)
   }
 
@@ -149,6 +231,11 @@ export default function EmployeesPage() {
       errors.email = 'Email is required'
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteData.email)) {
       errors.email = 'Please enter a valid email address'
+    }
+    if (!inviteData.salary.trim()) {
+      errors.salary = 'Salary is required'
+    } else if (!/^\d+(\.\d{1,2})?$/.test(inviteData.salary)) {
+      errors.salary = 'Please enter a valid salary amount'
     }
     
     setInviteErrors(errors)
@@ -168,6 +255,7 @@ export default function EmployeesPage() {
         firstName: inviteData.firstName.trim(),
         lastName: inviteData.lastName.trim(),
         email: inviteData.email.trim(),
+        salary: inviteData.salary.trim(),
         // Temporary backend-required fields not present in UI
         // dateOfBirth: '2000-01-01',
         // gender: 'female',
@@ -181,12 +269,14 @@ export default function EmployeesPage() {
       setInviteData({
         firstName: '',
         lastName: '',
-        email: ''
+        email: '',
+        salary: ''
       })
       setInviteErrors({})
       setInviteSuccess(true)
       
-      // Close modal after success
+      // Refetch employees list and close modal after success
+      refetchEmployees()
       setTimeout(() => {
         setIsInviteModalOpen(false)
         setInviteSuccess(false)
@@ -223,13 +313,40 @@ export default function EmployeesPage() {
     }
   }
 
+  const handleSalaryChange = (value: string) => {
+    // Only allow numbers and a single decimal point
+    const numbersOnly = value.replace(/[^0-9.]/g, '')
+    // Prevent multiple decimal points
+    const parts = numbersOnly.split('.')
+    const formattedValue = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : numbersOnly
+    handleInviteDataChange('salary', formattedValue)
+  }
+
+  const getSalaryUnit = (salary: string) => {
+    if (!salary || salary === '') return ''
+    
+    const num = parseFloat(salary)
+    if (isNaN(num)) return ''
+    
+    if (num >= 10000000) { // 1 crore
+      return `${(num / 10000000).toFixed(1)} Cr`
+    } else if (num >= 100000) { // 1 lakh
+      return `${(num / 100000).toFixed(1)} L`
+    } else if (num >= 1000) { // 1 thousand
+      return `${(num / 1000).toFixed(1)} K`
+    } else {
+      return `${num.toFixed(0)}`
+    }
+  }
+
 
   const handleCloseInviteModal = () => {
     setIsInviteModalOpen(false)
     setInviteData({
       firstName: '',
       lastName: '',
-      email: ''
+      email: '',
+      salary: ''
     })
     setInviteErrors({})
     setInviteSuccess(false)
@@ -243,11 +360,11 @@ export default function EmployeesPage() {
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Avatar sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>
-            {params.row.name.split(' ').map((n: string) => n[0]).join('')}
+            {params.row.fullName.split(' ').map((n: string) => n[0]).join('')}
           </Avatar>
           <Box>
             <Typography variant="body2" fontWeight={500}>
-              {params.row.name}
+              {params.row.fullName}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {params.row.email}
@@ -257,23 +374,27 @@ export default function EmployeesPage() {
       ),
     },
     {
-      field: 'role',
-      headerName: 'Role',
+      field: 'phone',
+      headerName: 'Phone',
       width: 150,
-      renderCell: (params) => {
-        const roleInfo = getRoleInfo(params.row.role)
-        return roleInfo ? (
-          <Chip 
-            label={roleInfo.name} 
-            size="small"
-            sx={{ 
-              bgcolor: roleInfo.color.split(' ')[0].replace('bg-', ''),
-              color: roleInfo.color.split(' ')[1].replace('text-', ''),
-              fontWeight: 600
-            }}
-          />
-        ) : null
-      },
+      renderCell: (params) => (
+        <Typography variant="body2" color="text.secondary">
+          {params.row.phone}
+        </Typography>
+      ),
+    },
+    {
+      field: 'employeeType',
+      headerName: 'Type',
+      width: 120,
+      renderCell: (params) => (
+        <Chip 
+          label={params.row.employeeType} 
+          size="small"
+          color="primary"
+          variant="outlined"
+        />
+      ),
     },
     {
       field: 'department',
@@ -284,76 +405,118 @@ export default function EmployeesPage() {
           label={params.row.department} 
           size="small"
           variant="outlined"
-          color="primary"
+          color="secondary"
         />
+      ),
+    },
+    {
+      field: 'position',
+      headerName: 'Position',
+      width: 150,
+      renderCell: (params) => (
+        <Typography variant="body2" color="text.secondary">
+          {params.row.position}
+        </Typography>
       ),
     },
     {
       field: 'status',
       headerName: 'Status',
+      width: 140,
+      renderCell: (params) => (
+        <Box>
+          <Chip 
+            label={params.row.status}
+            color={getStatusColor(params.row.status) as any}
+            size="small"
+            variant="outlined"
+            onClick={() => openStatusModal(params.row)}
+            sx={{ cursor: 'pointer' }}
+          />
+        </Box>
+      ),
+    },
+    {
+      field: 'invitationStatus',
+      headerName: 'Invitation',
       width: 120,
       renderCell: (params) => (
         <Chip 
-          label={params.row.status} 
-          color={getStatusColor(params.row.status) as any}
+          label={params.row.invitationStatus} 
+          color={params.row.invitationStatus === 'completed' ? 'success' : 'warning'}
           size="small"
           variant="outlined"
         />
       ),
     },
     {
-      field: 'location',
-      headerName: 'Location',
-      width: 150,
+      field: 'salary',
+      headerName: 'Salary',
+      width: 120,
       renderCell: (params) => (
-        <Typography variant="body2" color="text.secondary">
-          {params.row.location}
+        <Typography variant="body2" fontWeight={500}>
+          ₹{params.row.salary.toLocaleString()}
         </Typography>
       ),
     },
     {
-      field: 'hireDate',
-      headerName: 'Hire Date',
+      field: 'startDate',
+      headerName: 'Start Date',
       width: 120,
       renderCell: (params) => (
         <Typography variant="body2" color="text.secondary">
-          {new Date(params.row.hireDate).toLocaleDateString()}
+          {new Date(params.row.startDate).toLocaleDateString()}
+        </Typography>
+      ),
+    },
+    {
+      field: 'createdAt',
+      headerName: 'Created',
+      width: 120,
+      renderCell: (params) => (
+        <Typography variant="body2" color="text.secondary">
+          {new Date(params.row.createdAt).toLocaleDateString()}
         </Typography>
       ),
     },
     {
       field: 'actions',
       headerName: 'Actions',
-      type: 'actions',
-      width: 120,
-      getActions: (params) => [
-        <GridActionsCellItem
-          icon={<Eye />}
-          label="View"
-          onClick={() => handleView(params.id as number)}
-          color="primary"
-        />,
-        <GridActionsCellItem
-          icon={<EditIcon />}
-          label="Edit"
-          onClick={() => handleEdit(params.id as number)}
-          color="primary"
-        />,
-        <GridActionsCellItem
-          icon={<DeleteIcon />}
-          label="Delete"
-          onClick={() => handleDelete(params.id as number)}
-          color="error"
-        />,
-      ],
+      width: 80,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <ActionMenu
+          items={[
+            {
+              label: 'View',
+              icon: <Eye size={18} />,
+              onClick: () => handleView(params.row.id),
+              color: 'primary'
+            },
+            {
+              label: 'Edit',
+              icon: <EditIcon size={18} />,
+              onClick: () => handleEdit(params.row.id),
+              color: 'primary'
+            },
+            {
+              label: 'Delete',
+              icon: <DeleteIcon size={18} />,
+              onClick: () => handleDelete(params.row.id),
+              color: 'error'
+            }
+          ]}
+        />
+      ),
     },
   ]
 
   const metrics = [
-    { name: 'Total Employees', value: employees.length.toString(), change: '+12%', icon: UserPlus },
-    { name: 'Active Employees', value: employees.filter(e => e.status === 'Active').length.toString(), change: '+8%', icon: UserPlus },
+    { name: 'Total Employees', value: pagination?.totalCount?.toString() || '0', change: '+12%', icon: UserPlus },
+    { name: 'Active Employees', value: employees.filter(e => e.status === 'active').length.toString(), change: '+8%', icon: UserPlus },
     { name: 'Departments', value: Array.from(new Set(employees.map(e => e.department))).length.toString(), change: '+2', icon: UserPlus },
-    { name: 'Locations', value: Array.from(new Set(employees.map(e => e.location))).length.toString(), change: '+1', icon: UserPlus },
+    { name: 'Employee Types', value: Array.from(new Set(employees.map(e => e.employeeType))).length.toString(), change: '+1', icon: UserPlus },
   ]
 
   const buttonBoxSx = {
@@ -402,7 +565,10 @@ export default function EmployeesPage() {
                 fullWidth
                 placeholder="Search employees..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setPaginationModel(prev => ({ ...prev, page: 0 }))
+                }}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -429,7 +595,7 @@ export default function EmployeesPage() {
                       <Select
                         value={roleFilter}
                         label="Role"
-                        onChange={(e) => setRoleFilter(e.target.value)}
+                        onChange={(e) => handleFilterChange('role', e.target.value)}
                         size="small"
                       >
                         <MenuItem value="all">All Roles</MenuItem>
@@ -443,7 +609,7 @@ export default function EmployeesPage() {
                       <Select
                         value={departmentFilter}
                         label="Department"
-                        onChange={(e) => setDepartmentFilter(e.target.value)}
+                        onChange={(e) => handleFilterChange('department', e.target.value)}
                         size="small"
                       >
                         <MenuItem value="all">All Departments</MenuItem>
@@ -457,13 +623,27 @@ export default function EmployeesPage() {
                       <Select
                         value={statusFilter}
                         label="Status"
-                        onChange={(e) => setStatusFilter(e.target.value)}
+                        onChange={(e) => handleFilterChange('status', e.target.value)}
                         size="small"
                       >
                         <MenuItem value="all">All Status</MenuItem>
-                        <MenuItem value="Active">Active</MenuItem>
-                        <MenuItem value="Inactive">Inactive</MenuItem>
-                        <MenuItem value="On Leave">On Leave</MenuItem>
+                        <MenuItem value="active">Active</MenuItem>
+                        <MenuItem value="pending">Pending</MenuItem>
+                        <MenuItem value="inactive">Inactive</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <FormControl sx={{ minWidth: 120 }}>
+                      <InputLabel>Type</InputLabel>
+                      <Select
+                        value={employeeTypeFilter}
+                        label="Type"
+                        onChange={(e) => handleFilterChange('employeeType', e.target.value)}
+                        size="small"
+                      >
+                        <MenuItem value="all">All Types</MenuItem>
+                        <MenuItem value="advocate">Advocate</MenuItem>
+                        <MenuItem value="intern">Intern</MenuItem>
+                        <MenuItem value="staff">Staff</MenuItem>
                       </Select>
                     </FormControl>
                   </>
@@ -507,36 +687,110 @@ export default function EmployeesPage() {
         {/* Employees DataGrid */}
         <Card>
           <Box sx={{ height: 600, width: '100%' }}>
-            <DataGrid
-              rows={filteredEmployees}
-              columns={columns}
-              pageSizeOptions={[5, 10, 25]}
-              initialState={{
-                pagination: {
-                  paginationModel: { page: 0, pageSize: 10 },
-                },
-                sorting: {
-                  sortModel: [{ field: 'hireDate', sort: 'desc' }],
-                },
-              }}
-              slots={{
-                toolbar: GridToolbar,
-              }}
-              slotProps={{
-                toolbar: {
-                  showQuickFilter: true,
-                  quickFilterProps: { debounceMs: 500 },
-                },
-              }}
-              disableRowSelectionOnClick
-              sx={{
-                '& .MuiDataGrid-cell:focus': {
-                  outline: 'none',
-                },
-              }}
-            />
+            {/* Status context menu removed: open modal directly on click */}
+            {isEmployeesLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                <CircularProgress />
+              </Box>
+            ) : employeesError ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', flexDirection: 'column', gap: 2 }}>
+                <Typography color="error">Failed to load employees</Typography>
+                <Button variant="outlined" onClick={() => refetchEmployees()}>
+                  Retry
+                </Button>
+              </Box>
+            ) : (
+              <DataGrid
+                rows={employees}
+                columns={columns}
+                pageSizeOptions={[5, 10, 25]}
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                rowCount={pagination?.totalCount || 0}
+                paginationMode="server"
+                loading={isEmployeesLoading}
+                slots={{
+                  toolbar: GridToolbar,
+                }}
+                slotProps={{
+                  toolbar: {
+                    showQuickFilter: false, // Disable client-side filtering since we're using server-side
+                    quickFilterProps: { debounceMs: 500 },
+                  },
+                }}
+                disableRowSelectionOnClick
+                sx={{
+                  '& .MuiDataGrid-cell:focus': {
+                    outline: 'none',
+                  },
+                }}
+              />
+            )}
           </Box>
         </Card>
+
+        {/* Change Status Modal */}
+        <Dialog 
+          open={isStatusModalOpen}
+          onClose={closeStatusModal}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Change Employee Status</DialogTitle>
+          <DialogContent>
+            <Box sx={{ display: 'grid', gap: 2, mt: 1 }}>
+              <TextField
+                label="Employee"
+                value={selectedEmployeeForStatus?.fullName || ''}
+                disabled
+                fullWidth
+              />
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  label="Status"
+                  value={statusForm.status}
+                  onChange={(e) => setStatusForm(prev => ({ ...prev, status: e.target.value as any }))}
+                >
+                  <MenuItem value="active">Active</MenuItem>
+                  <MenuItem value="pending">Pending</MenuItem>
+                  <MenuItem value="inactive">Inactive</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                label="Reason"
+                value={statusForm.reason}
+                onChange={(e) => setStatusForm(prev => ({ ...prev, reason: e.target.value }))}
+                fullWidth
+                required
+                placeholder="Why is this status being changed?"
+              />
+              <TextField
+                label="Notes"
+                value={statusForm.notes}
+                onChange={(e) => setStatusForm(prev => ({ ...prev, notes: e.target.value }))}
+                fullWidth
+                multiline
+                minRows={3}
+                placeholder="Additional context (optional)"
+              />
+              {statusFormError && (
+                <Alert severity="error">{statusFormError}</Alert>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, pt: 1 }}>
+            <Button onClick={closeStatusModal}>Cancel</Button>
+            <Button
+              variant="contained"
+              onClick={handleSubmitStatus}
+              disabled={isUpdatingStatus}
+              startIcon={isUpdatingStatus ? <CircularProgress size={16} /> : undefined}
+            >
+              {isUpdatingStatus ? 'Updating...' : 'Update Status'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Invite Employee Modal */}
         <Dialog 
@@ -594,11 +848,50 @@ export default function EmployeesPage() {
                 disabled={isInviting}
                 placeholder="employee@company.com"
                 required
-                sx={{ gridColumn: '1 / -1' }}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
                       <Mail size={20} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+              <TextField
+                fullWidth
+                label="Salary"
+                type="text"
+                value={inviteData.salary}
+                onChange={(e) => handleSalaryChange(e.target.value)}
+                error={!!inviteErrors.salary}
+                helperText={inviteErrors.salary || 'Enter the salary amount'}
+                disabled={isInviting}
+                placeholder="50000"
+                required
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <span style={{ fontSize: '16px', fontWeight: 'bold' }}>₹</span>
+                    </InputAdornment>
+                  ),
+                  endAdornment: inviteData.salary && (
+                    <InputAdornment position="end">
+                      <Box
+                        sx={{
+                          bgcolor: 'primary.100',
+                          color: 'primary.main',
+                          px: 1,
+                          py: 0.5,
+                          borderRadius: 1,
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          minWidth: '40px',
+                          textAlign: 'center',
+                          border: '1px solid',
+                          borderColor: 'primary.300'
+                        }}
+                      >
+                        {getSalaryUnit(inviteData.salary)}
+                      </Box>
                     </InputAdornment>
                   ),
                 }}
@@ -626,6 +919,8 @@ export default function EmployeesPage() {
             </Button>
           </DialogActions>
         </Dialog>
+
+        
       </Box>
     </Layout>
   )

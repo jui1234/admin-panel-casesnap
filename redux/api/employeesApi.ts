@@ -5,6 +5,7 @@ export interface InviteEmployeeRequest {
   firstName: string
   lastName: string
   email: string
+  salary: string
   // Optional fields temporarily filled for backend requirements
   dateOfBirth?: string
   gender?: string
@@ -15,6 +16,107 @@ export interface InviteEmployeeRequest {
 export interface InviteEmployeeResponse {
   success: boolean
   message: string
+}
+
+export interface RegisterEmployeeRequest {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  address: string
+  gender: string
+  dateOfBirth: string
+  age: number
+  aadharCardNumber: string
+  employeeType: string
+  advocateLicenseNumber?: string
+  internYear?: number
+  salary: number
+  department: string
+  position: string
+  startDate: string
+  emergencyContactName: string
+  emergencyContactPhone: string
+  emergencyContactRelation: string
+  password: string
+  confirmPassword: string
+}
+
+export interface RegisterEmployeeResponse {
+  success: boolean
+  message: string
+}
+
+export interface Employee {
+  _id: string
+  id: string
+  adminId: {
+    _id: string
+    firstName: string
+    lastName: string
+    email: string
+  }
+  firstName: string
+  lastName: string
+  fullName: string
+  email: string
+  phone: string
+  salary: number
+  organization: string
+  invitationStatus: 'pending' | 'completed' | 'expired'
+  status: 'pending' | 'active' | 'inactive'
+  isDeleted: boolean
+  deletedAt: string | null
+  invitationExpires: string
+  createdAt: string
+  updatedAt: string
+  aadharCardNumber: string
+  address: string
+  advocateLicenseNumber?: string
+  age: number
+  dateOfBirth: string
+  department: string
+  emergencyContactName: string
+  emergencyContactPhone: string
+  emergencyContactRelation: string
+  employeeType: 'advocate' | 'intern' | 'staff'
+  gender: 'Male' | 'Female' | 'Other'
+  position: string
+  startDate: string
+}
+
+export interface GetEmployeesRequest {
+  page?: number
+  limit?: number
+  search?: string
+  role?: string
+  department?: string
+  status?: string
+  employeeType?: string
+}
+
+export interface GetEmployeesResponse {
+  success: boolean
+  count: number
+  totalCount: number
+  totalPages: number
+  currentPage: number
+  hasNextPage: boolean
+  hasPrevPage: boolean
+  nextPage: number | null
+  prevPage: number | null
+  data: Employee[]
+  filters: {
+    includeDeleted: boolean
+    status: string
+    search: string | null
+  }
+  pagination: {
+    page: number
+    limit: number
+    sortBy: string
+    sortOrder: 'asc' | 'desc'
+  }
 }
 
 export const employeesApi = createApi({
@@ -33,9 +135,35 @@ export const employeesApi = createApi({
   }),
   tagTypes: ['Employees'],
   endpoints: (builder) => ({
+    getEmployees: builder.query<GetEmployeesResponse, GetEmployeesRequest>({
+      query: ({ page = 1, limit = 10 }) => ({
+        url: 'api/employees/admin/all',
+        params: { page, limit },
+      }),
+      providesTags: ['Employees']
+    }),
+    updateEmployeeStatus: builder.mutation<
+      { success: boolean; message?: string },
+      { employeeId: string; status: 'active' | 'inactive' | 'pending'; reason?: string; notes?: string }
+    >({
+      query: ({ employeeId, status, reason, notes }) => ({
+        url: `api/employees/${employeeId}/status`,
+        method: 'POST',
+        body: { status, reason, notes },
+      }),
+      invalidatesTags: ['Employees']
+    }),
     inviteEmployee: builder.mutation<InviteEmployeeResponse, InviteEmployeeRequest>({
       query: (body) => ({
         url: 'api/employees/invite',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Employees']
+    }),
+    registerEmployee: builder.mutation<RegisterEmployeeResponse, RegisterEmployeeRequest>({
+      query: (body) => ({
+        url: 'api/employees/register',
         method: 'POST',
         body,
       }),
@@ -44,6 +172,11 @@ export const employeesApi = createApi({
   })
 })
 
-export const { useInviteEmployeeMutation } = employeesApi
+export const { 
+  useGetEmployeesQuery,
+  useUpdateEmployeeStatusMutation,
+  useInviteEmployeeMutation, 
+  useRegisterEmployeeMutation 
+} = employeesApi
 
 

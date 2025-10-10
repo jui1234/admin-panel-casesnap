@@ -51,6 +51,14 @@ export default function Layout({ children }: LayoutProps) {
   const pathname = usePathname()
   const { theme } = useTheme()
   const { logout, user } = useAuth()
+  const isAdmin = user?.role === 'admin' || user?.role === 'super-admin'
+  // Global route guard for employee listing: only admins can access
+  useEffect(() => {
+    if (pathname === '/employees' && !isAdmin) {
+      router.replace('/dashboard')
+    }
+  }, [pathname, isAdmin, router])
+
   const isDark = theme === 'dark'
 
   // Sample notifications
@@ -204,7 +212,11 @@ export default function Layout({ children }: LayoutProps) {
         {/* Navigation */}
         <nav className="mt-4 sm:mt-6 px-2 sm:px-3 flex-1">
           <div className="space-y-1">
-            {navigation.map((item) => {
+            {(navigation.filter(item => {
+              // Hide Employee List for non-admin users
+              if (item.href === '/employees' && !isAdmin) return false
+              return true
+            })).map((item) => {
               const Icon = item.icon
               return (
                 <a
