@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface SetupGuardProps {
@@ -11,18 +11,44 @@ interface SetupGuardProps {
 export default function SetupGuard({ children }: SetupGuardProps) {
   const { isAuthenticated, isLoading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     if (!isLoading) {
       const organizationData = localStorage.getItem('organizationData')
       
-      // If user is not authenticated, redirect to get-started page to choose their path
-      if (!isAuthenticated) {
+      // Define public paths that don't require authentication
+      const publicPaths = [
+        '/', // Home page
+        '/employees/register', // Employee registration
+        '/auth/login', // Login page
+        '/get-started', // Get started page
+        '/setup', // Setup page
+        '/blog' // Blog pages
+      ]
+      
+      // Define protected paths that require authentication
+      const protectedPaths = [
+        '/dashboard',
+        '/users',
+        '/clients', 
+        '/employees',
+        '/permissions',
+        '/reports',
+        '/analytics',
+        '/settings'
+      ]
+      
+      const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
+      const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path))
+      
+      // Only redirect if user is not authenticated and trying to access a protected path
+      if (!isAuthenticated && isProtectedPath) {
         router.push('/get-started')
         return
       }
     }
-  }, [isAuthenticated, isLoading, router])
+  }, [isAuthenticated, isLoading, router, pathname])
 
   if (isLoading) {
     return (
