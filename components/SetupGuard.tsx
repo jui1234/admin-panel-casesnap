@@ -42,6 +42,11 @@ export default function SetupGuard({ children }: SetupGuardProps) {
       const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
       const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path))
       
+      // Special handling for employee registration - always allow access
+      if (pathname.startsWith('/employees/register')) {
+        return // Allow access to employee registration without any redirects
+      }
+      
       // Only redirect if user is not authenticated and trying to access a protected path
       if (!isAuthenticated && isProtectedPath) {
         router.push('/get-started')
