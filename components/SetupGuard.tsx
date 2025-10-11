@@ -18,7 +18,7 @@ export default function SetupGuard({ children }: SetupGuardProps) {
       const organizationData = localStorage.getItem('organizationData')
       
       // Define public paths that don't require authentication
-      const publicPaths = [
+      const publicPaths = [ 
         '/', // Home page
         '/employees/register', // Employee registration
         '/auth/login', // Login page
