@@ -26,7 +26,7 @@ import {
   GridColDef, 
   GridToolbar
 } from '@mui/x-data-grid'
-import { useInviteEmployeeMutation, useGetEmployeesQuery, useUpdateEmployeeStatusMutation } from '@/redux/api/employeesApi'
+import { useInviteEmployeeMutation, useGetEmployeesQuery, useUpdateEmployeeStatusMutation, useLazyGetEmployeeByAdminQuery, useUpdateEmployeeByAdminMutation, useSoftDeleteEmployeeByAdminMutation } from '@/redux/api/employeesApi'
 import toast from 'react-hot-toast'
 import { 
   Box, 
@@ -111,6 +111,9 @@ export default function EmployeesPage() {
   })
   const [statusFormError, setStatusFormError] = useState<string>('')
   const [updateEmployeeStatus, { isLoading: isUpdatingStatus }] = useUpdateEmployeeStatusMutation()
+  const [fetchEmployeeByAdmin, { isFetching: isFetchingEmployee }] = useLazyGetEmployeeByAdminQuery()
+  const [updateEmployeeByAdmin, { isLoading: isUpdatingEmployee }] = useUpdateEmployeeByAdminMutation()
+  const [softDeleteEmployeeByAdmin, { isLoading: isDeletingEmployee }] = useSoftDeleteEmployeeByAdminMutation()
   // Notifications via react-toastify
   
   // Fetch employees data with server-side filtering
@@ -174,6 +177,9 @@ export default function EmployeesPage() {
     setStatusForm({ status: (employee.status as any) || 'active', reason: '', notes: '' })
     setIsStatusModalOpen(true)
   }
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null)
 
   const closeStatusModal = () => {
     setIsStatusModalOpen(false)
@@ -205,16 +211,96 @@ export default function EmployeesPage() {
     }
   }
 
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isViewMode, setIsViewMode] = useState(false)
+  const [editEmployeeId, setEditEmployeeId] = useState<string | null>(null)
+
   const handleView = (id: string) => {
-    console.log('View employee:', id)
+    setIsViewMode(true)
+    openEditModal(id, true)
+  }
+
+  // Edit Employee state
+  const [editForm, setEditForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    address: '',
+    gender: '',
+    dateOfBirth: '',
+    aadharCardNumber: '',
+    employeeType: '',
+    advocateLicenseNumber: '',
+    internYear: '',
+    salary: '',
+    department: '',
+    position: '',
+    startDate: '',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+    emergencyContactRelation: ''
+  })
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({})
+
+  const openEditModal = async (id: string, viewOnly: boolean = false) => {
+    try {
+      const res = await fetchEmployeeByAdmin({ id }).unwrap()
+      const emp: any = (res as any)?.data ?? res
+      const [firstName, ...rest] = (emp.fullName || '').split(' ')
+      setEditForm({
+        firstName: firstName || emp.firstName || '',
+        lastName: rest.join(' ') || emp.lastName || '',
+        email: emp.email || '',
+        phone: emp.phone || '',
+        address: emp.address || '',
+        gender: (emp.gender as any) || '',
+        dateOfBirth: emp.dateOfBirth ? emp.dateOfBirth.slice(0, 10) : '',
+        aadharCardNumber: emp.aadharCardNumber || '',
+        employeeType: (emp.employeeType as any) || '',
+        advocateLicenseNumber: emp.advocateLicenseNumber || '',
+        internYear: emp.internYear != null ? String(emp.internYear) : '',
+        salary: emp.salary != null ? String(emp.salary) : '',
+        department: emp.department || '',
+        position: emp.position || '',
+        startDate: emp.startDate ? emp.startDate.slice(0, 10) : '',
+        emergencyContactName: emp.emergencyContactName || '',
+        emergencyContactPhone: emp.emergencyContactPhone || '',
+        emergencyContactRelation: emp.emergencyContactRelation || ''
+      })
+      setEditErrors({})
+      setEditEmployeeId(id)
+      setIsEditModalOpen(true)
+      setIsViewMode(viewOnly)
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.data?.error || e?.message || 'Failed to load employee'
+      toast.error(msg)
+    }
   }
 
   const handleEdit = (id: string) => {
-    console.log('Edit employee:', id)
+    setIsViewMode(false)
+    openEditModal(id, false)
   }
 
-  const handleDelete = (id: string) => {
-    console.log('Delete employee:', id)
+  const performDelete = async (id: string) => {
+    if (deletingId) return
+    try {
+      setDeletingId(id)
+      await softDeleteEmployeeByAdmin({ id }).unwrap()
+      toast.success('Employee deleted')
+      refetchEmployees()
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.data?.error || e?.message || 'Failed to delete employee'
+      toast.error(msg)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const handleDeleteClick = (employee: Employee) => {
+    setDeleteTarget(employee)
+    setIsDeleteConfirmOpen(true)
   }
 
   // Invite Employee Functions
@@ -503,7 +589,7 @@ export default function EmployeesPage() {
             {
               label: 'Delete',
               icon: <DeleteIcon size={18} />,
-              onClick: () => handleDelete(params.row.id),
+              onClick: () => handleDeleteClick(params.row),
               color: 'error'
             }
           ]}
@@ -788,6 +874,216 @@ export default function EmployeesPage() {
               startIcon={isUpdatingStatus ? <CircularProgress size={16} /> : undefined}
             >
               {isUpdatingStatus ? 'Updating...' : 'Update Status'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Edit Employee Modal */}
+        <Dialog 
+          open={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            Edit Employee
+            <IconButton onClick={() => setIsEditModalOpen(false)} size="small">
+              <X size={20} />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent>
+            {isFetchingEmployee ? (
+              <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <Box sx={{ mt: 2 }}>
+                {/* Personal Information */}
+                <Typography variant="h6" sx={{ mb: 2, color: 'warning.light' }}>Personal Information</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                <TextField label="First Name" value={editForm.firstName} onChange={(e) => setEditForm(p => ({...p, firstName: e.target.value}))} error={!!editErrors.firstName} helperText={editErrors.firstName} required fullWidth disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField label="Last Name" value={editForm.lastName} onChange={(e) => setEditForm(p => ({...p, lastName: e.target.value}))} error={!!editErrors.lastName} helperText={editErrors.lastName} required fullWidth disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField label="Email" type="email" value={editForm.email} onChange={(e) => setEditForm(p => ({...p, email: e.target.value}))} error={!!editErrors.email} helperText={editErrors.email} required fullWidth disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField label="Phone" value={editForm.phone} onChange={(e) => setEditForm(p => ({...p, phone: e.target.value}))} error={!!editErrors.phone} helperText={editErrors.phone} required fullWidth disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField label="Address" value={editForm.address} onChange={(e) => setEditForm(p => ({...p, address: e.target.value}))} fullWidth multiline minRows={2} disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth disabled={isViewMode}>
+                      <InputLabel>Gender</InputLabel>
+                      <Select label="Gender" value={editForm.gender} onChange={(e) => setEditForm(p => ({...p, gender: e.target.value as string}))}>
+                        <MenuItem value="Male">Male</MenuItem>
+                        <MenuItem value="Female">Female</MenuItem>
+                        <MenuItem value="Other">Other</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField label="Date of Birth" type="date" value={editForm.dateOfBirth} onChange={(e) => setEditForm(p => ({...p, dateOfBirth: e.target.value}))} InputLabelProps={{ shrink: true }} fullWidth disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField label="Aadhar Card Number" value={editForm.aadharCardNumber} onChange={(e) => setEditForm(p => ({...p, aadharCardNumber: e.target.value}))} fullWidth disabled={isViewMode} />
+                  </Grid>
+                </Grid>
+
+                {/* Employment Information */}
+                <Typography variant="h6" sx={{ mt: 3, mb: 2,color: 'warning.light' }}>Employment Information</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth disabled={isViewMode}>
+                      <InputLabel>Employee Type</InputLabel>
+                      <Select label="Employee Type" value={editForm.employeeType} onChange={(e) => setEditForm(p => ({...p, employeeType: e.target.value as string}))}>
+                        <MenuItem value="advocate">Advocate</MenuItem>
+                        <MenuItem value="intern">Intern</MenuItem>
+                        <MenuItem value="staff">Staff</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  {editForm.employeeType === 'advocate' && (
+                    <Grid item xs={12} sm={6}>
+                      <TextField label="Advocate License Number" value={editForm.advocateLicenseNumber} onChange={(e) => setEditForm(p => ({...p, advocateLicenseNumber: e.target.value}))} fullWidth disabled={isViewMode} />
+                    </Grid>
+                  )}
+                  {editForm.employeeType === 'intern' && (
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth disabled={isViewMode}>
+                        <InputLabel>Intern Year</InputLabel>
+                        <Select label="Intern Year" value={editForm.internYear} onChange={(e) => setEditForm(p => ({...p, internYear: e.target.value as string}))}>
+                          <MenuItem value="1">1st Year</MenuItem>
+                          <MenuItem value="2">2nd Year</MenuItem>
+                          <MenuItem value="3">3rd Year</MenuItem>
+                          <MenuItem value="4">4th Year</MenuItem>
+                          <MenuItem value="5">5th Year</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  )}
+                  <Grid item xs={12} sm={6}>
+                    <TextField label="Salary" value={editForm.salary} onChange={(e) => setEditForm(p => ({...p, salary: e.target.value}))} fullWidth disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField label="Department" value={editForm.department} onChange={(e) => setEditForm(p => ({...p, department: e.target.value}))} error={!!editErrors.department} helperText={editErrors.department} required fullWidth disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField label="Position" value={editForm.position} onChange={(e) => setEditForm(p => ({...p, position: e.target.value}))} error={!!editErrors.position} helperText={editErrors.position} required fullWidth disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField label="Start Date" type="date" value={editForm.startDate} onChange={(e) => setEditForm(p => ({...p, startDate: e.target.value}))} InputLabelProps={{ shrink: true }} fullWidth disabled={isViewMode} />
+                  </Grid>
+                </Grid>
+
+                {/* Emergency Contact */}
+                <Typography variant="h6" sx={{ mt: 3, mb: 2,color: 'warning.light' }}>Emergency Contact</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={4}>
+                    <TextField label="Contact Name" value={editForm.emergencyContactName} onChange={(e) => setEditForm(p => ({...p, emergencyContactName: e.target.value}))} fullWidth disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField label="Contact Phone" value={editForm.emergencyContactPhone} onChange={(e) => setEditForm(p => ({...p, emergencyContactPhone: e.target.value}))} fullWidth disabled={isViewMode} />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField label="Relation" value={editForm.emergencyContactRelation} onChange={(e) => setEditForm(p => ({...p, emergencyContactRelation: e.target.value}))} fullWidth disabled={isViewMode} />
+                  </Grid>
+                </Grid>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ p: 3, pt: 1 }}>
+            {!isViewMode && (
+            <Button
+              variant="contained"
+              onClick={async () => {
+                // basic validation
+                const errs: Record<string, string> = {}
+                if (!editForm.firstName.trim()) errs.firstName = 'First name is required'
+                if (!editForm.lastName.trim()) errs.lastName = 'Last name is required'
+                if (!editForm.email.trim()) errs.email = 'Email is required'
+                if (!editForm.phone.trim()) errs.phone = 'Phone is required'
+                if (!editForm.department.trim()) errs.department = 'Department is required'
+                if (!editForm.position.trim()) errs.position = 'Position is required'
+                setEditErrors(errs)
+                if (Object.keys(errs).length) return
+
+                if (!editEmployeeId) return
+                const data: any = {
+                  firstName: editForm.firstName.trim(),
+                  lastName: editForm.lastName.trim(),
+                  email: editForm.email.trim(),
+                  phone: editForm.phone.trim(),
+                  address: editForm.address.trim(),
+                  gender: editForm.gender || undefined,
+                  dateOfBirth: editForm.dateOfBirth || undefined,
+                  aadharCardNumber: editForm.aadharCardNumber.trim() || undefined,
+                  employeeType: editForm.employeeType || undefined,
+                  advocateLicenseNumber: editForm.advocateLicenseNumber.trim() || undefined,
+                  internYear: editForm.internYear ? Number(editForm.internYear) : undefined,
+                  salary: editForm.salary ? Number(editForm.salary) : undefined,
+                  department: editForm.department.trim(),
+                  position: editForm.position.trim(),
+                  startDate: editForm.startDate || undefined,
+                  emergencyContactName: editForm.emergencyContactName.trim() || undefined,
+                  emergencyContactPhone: editForm.emergencyContactPhone.trim() || undefined,
+                  emergencyContactRelation: editForm.emergencyContactRelation.trim() || undefined,
+                }
+                try {
+                  await updateEmployeeByAdmin({ id: editEmployeeId, data }).unwrap()
+                  toast.success('Employee updated successfully')
+                  setIsEditModalOpen(false)
+                  refetchEmployees()
+                } catch (e: any) {
+                  const msg = e?.data?.message || e?.data?.error || e?.message || 'Failed to update employee'
+                  toast.error(msg)
+                }
+              }}
+              disabled={isUpdatingEmployee}
+              startIcon={isUpdatingEmployee ? <CircularProgress size={16} /> : undefined}
+            >
+              {isUpdatingEmployee ? 'Saving...' : 'Save Changes'}
+            </Button>
+            )}
+          </DialogActions>
+        </Dialog>
+
+        {/* Delete Confirmation Modal */}
+        <Dialog
+          open={isDeleteConfirmOpen}
+          onClose={() => setIsDeleteConfirmOpen(false)}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            Confirm Deletion
+            <IconButton onClick={() => setIsDeleteConfirmOpen(false)} size="small">
+              <X size={20} />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body2">
+              Are you sure you want to delete {deleteTarget?.fullName || 'this employee'}?
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, pt: 1 }}>
+            <Button onClick={() => setIsDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button
+              color="error"
+              variant="contained"
+              onClick={async () => {
+                if (!deleteTarget) return
+                await performDelete(deleteTarget.id)
+                setIsDeleteConfirmOpen(false)
+              }}
+              disabled={!!deletingId}
+              startIcon={deletingId ? <CircularProgress size={16} /> : undefined}
+            >
+              {deletingId ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogActions>
         </Dialog>

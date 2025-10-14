@@ -140,12 +140,43 @@ export const employeesApi = createApi({
   }),
   tagTypes: ['Employees'],
   endpoints: (builder) => ({
+    // Admin: get single employee by id
+    getEmployeeByAdmin: builder.query<Employee, { id: string }>({
+      query: ({ id }) => ({
+        url: `api/employees/admin/${id}`,
+        method: 'GET',
+      }),
+      providesTags: ['Employees']
+    }),
     getEmployees: builder.query<GetEmployeesResponse, GetEmployeesRequest>({
       query: ({ page = 1, limit = 10 }) => ({
         url: 'api/employees/admin/all',
         params: { page, limit },
       }),
       providesTags: ['Employees']
+    }),
+    // Admin: update employee by id
+    updateEmployeeByAdmin: builder.mutation<
+      { success: boolean; message?: string },
+      { id: string; data: Partial<RegisterEmployeeRequest> }
+    >({
+      query: ({ id, data }) => ({
+        url: `api/employees/admin/${id}`,
+        method: 'PUT',
+        body: data,
+      }),
+      invalidatesTags: ['Employees']
+    }),
+    // Admin: soft delete employee by id
+    softDeleteEmployeeByAdmin: builder.mutation<
+      { success: boolean; message?: string },
+      { id: string }
+    >({
+      query: ({ id }) => ({
+        url: `api/employees/admin/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Employees']
     }),
     updateEmployeeStatus: builder.mutation<
       { success: boolean; message?: string },
@@ -183,8 +214,12 @@ export const employeesApi = createApi({
 })
 
 export const { 
+  useGetEmployeeByAdminQuery,
+  useLazyGetEmployeeByAdminQuery,
   useGetEmployeesQuery,
   useUpdateEmployeeStatusMutation,
+  useUpdateEmployeeByAdminMutation,
+  useSoftDeleteEmployeeByAdminMutation,
   useInviteEmployeeMutation, 
   useRegisterEmployeeMutation 
 } = employeesApi
