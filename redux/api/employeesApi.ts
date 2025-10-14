@@ -42,6 +42,11 @@ export interface RegisterEmployeeRequest {
   confirmPassword: string
 }
 
+export interface RegisterEmployeeRequestWithToken {
+  data: RegisterEmployeeRequest
+  token: string
+}
+
 export interface RegisterEmployeeResponse {
   success: boolean
   message: string
@@ -161,11 +166,16 @@ export const employeesApi = createApi({
       }),
       invalidatesTags: ['Employees']
     }),
-    registerEmployee: builder.mutation<RegisterEmployeeResponse, RegisterEmployeeRequest>({
-      query: (body) => ({
+    registerEmployee: builder.mutation<RegisterEmployeeResponse, RegisterEmployeeRequestWithToken>({
+      query: ({ data, token }) => ({
         url: 'api/employees/register',
         method: 'POST',
-        body,
+        body: data,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
       }),
       invalidatesTags: ['Employees']
     })

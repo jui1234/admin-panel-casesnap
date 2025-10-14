@@ -112,6 +112,7 @@ export default function EmployeeRegisterPage() {
   // Extract URL parameters on component mount
   useEffect(() => {
     const token = searchParams.get('token')
+    console.log('token', token)
     const employeeName = searchParams.get('employeeName')
     const organizationName = searchParams.get('organizationName')
     const adminName = searchParams.get('adminName')
@@ -417,7 +418,13 @@ export default function EmployeeRegisterPage() {
       
       console.log('Registering employee:', payload)
       
-      const response = await registerEmployee(payload).unwrap()
+      // Prepare the API call with token in Authorization header
+      const apiPayload = {
+        data: payload,
+        token: urlParams?.token || ''
+      }
+      
+      const response = await registerEmployee(apiPayload).unwrap()
       
       console.log('Registration response:', response)
       
