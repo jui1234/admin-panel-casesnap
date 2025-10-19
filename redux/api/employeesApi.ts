@@ -158,8 +158,7 @@ export const employeesApi = createApi({
     // Admin: update employee by id
     updateEmployeeByAdmin: builder.mutation<
       { success: boolean; message?: string },
-      { id: string; data: Partial<RegisterEmployeeRequest> }
-    >({
+      { id: string; data: Partial<RegisterEmployeeRequest> }>({
       query: ({ id, data }) => ({
         url: `api/employees/admin/${id}`,
         method: 'PUT',
@@ -199,13 +198,12 @@ export const employeesApi = createApi({
     }),
     registerEmployee: builder.mutation<RegisterEmployeeResponse, RegisterEmployeeRequestWithToken>({
       query: ({ data, token }) => ({
-        url: 'api/employees/register',
+        url: `api/employees/register/${token}`,
         method: 'POST',
         body: data,
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Accept': 'application/json'
         }
       }),
       invalidatesTags: ['Employees']
