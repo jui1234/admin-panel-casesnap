@@ -34,6 +34,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import ThemeToggle from '@/components/ThemeToggle'
 import { useRegisterEmployeeMutation } from '@/redux/api/employeesApi'
+import toast from 'react-hot-toast'
 
 interface EmployeeRegistrationData {
   firstName: string
@@ -107,7 +108,7 @@ export default function EmployeeRegisterPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { theme } = useTheme()
-  const isDark = theme === 'dark'
+  const isDark = theme === 'dark' 
 
   // Extract URL parameters on component mount
   useEffect(() => {
@@ -171,7 +172,16 @@ export default function EmployeeRegisterPage() {
   const handleAadharChange = (value: string) => {
     // Remove all non-digit characters and limit to 12 digits
     const digitsOnly = value.replace(/\D/g, '').slice(0, 12)
-    handleInputChange('aadharCard', digitsOnly)
+    
+    // Format with spaces: 1234 5678 8901
+    let formattedValue = digitsOnly
+    if (digitsOnly.length > 4) {
+      formattedValue = digitsOnly.slice(0, 4) + ' ' + digitsOnly.slice(4, 8) + ' ' + digitsOnly.slice(8)
+    } else if (digitsOnly.length > 8) {
+      formattedValue = digitsOnly.slice(0, 4) + ' ' + digitsOnly.slice(4, 8) + ' ' + digitsOnly.slice(8)
+    }
+    
+    handleInputChange('aadharCard', formattedValue)
   }
 
   const calculateAge = (dateOfBirth: string): number => {
@@ -201,6 +211,19 @@ export default function EmployeeRegisterPage() {
   const handleAdvocateLicenseChange = (value: string) => {
     // Auto-format the license number
     let formattedValue = value
+    
+    // Convert 'mah' to 'MAH' (case insensitive)
+    if (formattedValue.toLowerCase().startsWith('mah')) {
+      formattedValue = 'MAH' + formattedValue.substring(3)
+    }
+    
+    // After MAH/, only allow numbers and slashes
+    if (formattedValue.startsWith('MAH/')) {
+      // Remove any non-numeric characters except slashes after MAH/
+      const afterMah = formattedValue.substring(4) // Get everything after "MAH/"
+      const numbersOnly = afterMah.replace(/[^0-9/]/g, '') // Keep only numbers and slashes
+      formattedValue = 'MAH/' + numbersOnly
+    }
     
     // Only apply formatting if the value is longer than current value (user is typing, not deleting)
     const currentValue = formData.advocateLicense
@@ -300,7 +323,7 @@ export default function EmployeeRegisterPage() {
     if (!formData.address.trim()) newErrors.address = 'Address is required'
     if (!formData.aadharCard.trim()) {
       newErrors.aadharCard = 'Aadhar Card Number is required'
-    } else if (!/^\d{12}$/.test(formData.aadharCard)) {
+    } else if (!/^\d{12}$/.test(formData.aadharCard.replace(/\s/g, ''))) {
       newErrors.aadharCard = 'Aadhar Card Number must be exactly 12 digits'
     }
     if (!formData.employeeType) newErrors.employeeType = 'Employee type is required'
@@ -364,8 +387,24 @@ export default function EmployeeRegisterPage() {
     if (!formData.emergencyContactRelation.trim()) newErrors.emergencyContactRelation = 'Emergency contact relation is required'
     if (!formData.password.trim()) {
       newErrors.password = 'Password is required'
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters'
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters'
+    } else {
+      // Check for password strength requirements
+      const hasUpperCase = /[A-Z]/.test(formData.password)
+      const hasLowerCase = /[a-z]/.test(formData.password)
+      const hasNumbers = /\d/.test(formData.password)
+      const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password)
+      
+      if (!hasUpperCase) {
+        newErrors.password = 'Password must contain at least one uppercase letter'
+      } else if (!hasLowerCase) {
+        newErrors.password = 'Password must contain at least one lowercase letter'
+      } else if (!hasNumbers) {
+        newErrors.password = 'Password must contain at least one number'
+      } else if (!hasSpecialChar) {
+        newErrors.password = 'Password must contain at least one special character'
+      }
     }
     if (!formData.confirmPassword.trim()) {
       newErrors.confirmPassword = 'Please confirm your password'
@@ -400,7 +439,7 @@ export default function EmployeeRegisterPage() {
         gender: formData.gender,
         dateOfBirth: formData.dateOfBirth,
         age: parseInt(formData.age) || 0,
-        aadharCardNumber: formData.aadharCard.trim(),
+        aadharCardNumber: formData.aadharCard.replace(/\s/g, ''), // Remove spaces before sending to backend
         employeeType: formData.employeeType,
         ...(formData.employeeType === 'advocate' && { advocateLicenseNumber: formData.advocateLicense.trim() }),
         ...(formData.employeeType === 'intern' && { internYear: parseInt(formData.internYear) || 0 }),
@@ -473,6 +512,8 @@ export default function EmployeeRegisterPage() {
         errorMessage = error.message
       }
       
+      // Show error in toast
+      toast.error(errorMessage)
       
       // Check if it's the specific "already completed registration" error
       if (errorMessage.includes('account is pending admin approval')) {
@@ -485,11 +526,6 @@ export default function EmployeeRegisterPage() {
         // Show active account message with login option
         setRegistrationError(errorMessage)
         setIsAccountActive(true)
-      } else {
-        // Show other errors in the email field
-        setErrors({ 
-          email: errorMessage 
-        })
       }
     } finally {
       setIsSubmitting(false)
@@ -995,7 +1031,7 @@ export default function EmployeeRegisterPage() {
                     value={formData.password}
                     onChange={(e) => handleInputChange('password', e.target.value)}
                     error={!!errors.password}
-                    helperText={errors.password}
+                    helperText={errors.password || 'Must contain: 8+ chars, 1 uppercase, 1 lowercase, 1 number, 1 special char'}
                     disabled={isSubmitting}
                     required
                     InputProps={{
