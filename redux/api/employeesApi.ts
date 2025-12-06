@@ -149,10 +149,20 @@ export const employeesApi = createApi({
       providesTags: ['Employees']
     }),
     getEmployees: builder.query<GetEmployeesResponse, GetEmployeesRequest>({
-      query: ({ page = 1, limit = 10 }) => ({
-        url: 'api/employees/admin/all',
-        params: { page, limit },
-      }),
+      query: ({ page = 1, limit = 10, search, role, department, status, employeeType }) => {
+        const params: Record<string, string | number> = { page, limit }
+        
+        if (search) params.search = search
+        if (role) params.role = role
+        if (department) params.department = department
+        if (status) params.status = status
+        if (employeeType) params.type = employeeType // Map employeeType to 'type' in URL
+        
+        return {
+          url: 'api/employees/admin/all',
+          params,
+        }
+      },
       providesTags: ['Employees']
     }),
     // Admin: update employee by id

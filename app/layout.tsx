@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   metadataBase: new URL(env.APP_URL),
   title: 'CaseSnap - Best Lawyer Case Management Software | Legal Practice Management System',
   description: 'Professional lawyer case management software for law firms. Cloud-based legal practice management system with case tracking, document management, and billing. Trusted by 500+ law firms in India.',
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon-16x16.png',
+    apple: '/apple-touch-icon.png',
+  },
   keywords: [
     'lawyer case management software',
     'law firm management software', 
