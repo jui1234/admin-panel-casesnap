@@ -15,7 +15,9 @@ import {
   Calendar,
   MapPin,
   UserPlus as UserPlusIcon,
-  X
+  X,
+  RotateCcw,
+  Check
 } from 'lucide-react'
 import Layout from '@/components/Layout'
 import ActionMenu from '@/components/ActionMenu'
@@ -69,10 +71,19 @@ export default function EmployeesPage() {
   if (!isAdmin) return null
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+  
+  // Filter selection state (what user is selecting)
   const [roleFilter, setRoleFilter] = useState('all')
   const [departmentFilter, setDepartmentFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [employeeTypeFilter, setEmployeeTypeFilter] = useState('all')
+  
+  // Applied filters state (what's actually sent to API)
+  const [appliedRoleFilter, setAppliedRoleFilter] = useState<string | undefined>(undefined)
+  const [appliedDepartmentFilter, setAppliedDepartmentFilter] = useState<string | undefined>(undefined)
+  const [appliedStatusFilter, setAppliedStatusFilter] = useState<string | undefined>(undefined)
+  const [appliedEmployeeTypeFilter, setAppliedEmployeeTypeFilter] = useState<string | undefined>(undefined)
+  
   const [showFilters, setShowFilters] = useState(false)
   const [paginationModel, setPaginationModel] = useState({
     page: 0,
@@ -126,23 +137,22 @@ export default function EmployeesPage() {
     page: paginationModel.page + 1, // API uses 1-based pagination
     limit: paginationModel.pageSize,
     search: debouncedSearchTerm || undefined,
-    role: roleFilter !== 'all' ? roleFilter : undefined,
-    department: departmentFilter !== 'all' ? departmentFilter : undefined,
-    status: statusFilter !== 'all' ? statusFilter : undefined,
-    employeeType: employeeTypeFilter !== 'all' ? employeeTypeFilter : undefined,
+    role: appliedRoleFilter,
+    department: appliedDepartmentFilter,
+    status: appliedStatusFilter,
+    employeeType: appliedEmployeeTypeFilter,
   })
 
   // Get employees from API or fallback to empty array
   const employees: Employee[] = employeesData?.data || []
   const pagination = employeesData
 
-  // Reset pagination when filters change
+  // Handle filter selection changes (doesn't apply to API yet)
   const handleFilterChange = (filterType: string, value: string) => {
-    setPaginationModel(prev => ({ ...prev, page: 0 }))
-    
     switch (filterType) {
       case 'search':
         setSearchTerm(value)
+        setPaginationModel(prev => ({ ...prev, page: 0 }))
         break
       case 'role':
         setRoleFilter(value)
@@ -158,6 +168,32 @@ export default function EmployeesPage() {
         break
     }
   }
+
+  // Apply filters to API
+  const handleApplyFilters = () => {
+    setAppliedRoleFilter(roleFilter !== 'all' ? roleFilter : undefined)
+    setAppliedDepartmentFilter(departmentFilter !== 'all' ? departmentFilter : undefined)
+    setAppliedStatusFilter(statusFilter !== 'all' ? statusFilter : undefined)
+    setAppliedEmployeeTypeFilter(employeeTypeFilter !== 'all' ? employeeTypeFilter : undefined)
+    setPaginationModel(prev => ({ ...prev, page: 0 }))
+  }
+
+  // Reset all filters
+  const handleResetFilters = () => {
+    setRoleFilter('all')
+    setDepartmentFilter('all')
+    setStatusFilter('all')
+    setEmployeeTypeFilter('all')
+    setAppliedRoleFilter(undefined)
+    setAppliedDepartmentFilter(undefined)
+    setAppliedStatusFilter(undefined)
+    setAppliedEmployeeTypeFilter(undefined)
+    setShowFilters(false)
+    setPaginationModel(prev => ({ ...prev, page: 0 }))
+  }
+
+  // Check if any filters are currently applied
+  const hasActiveFilters = appliedRoleFilter || appliedDepartmentFilter || appliedStatusFilter || appliedEmployeeTypeFilter
 
   const getRoleInfo = (roleId: string) => {
     return getRoleById(roleId)
@@ -195,7 +231,7 @@ export default function EmployeesPage() {
     try {
       setStatusFormError('')
       const res = await updateEmployeeStatus({
-        employeeId: selectedEmployeeForStatus.id,
+        employeeId: selectedEmployeeForStatus._id || selectedEmployeeForStatus.id,
         status: statusForm.status,
         reason: statusForm.reason.trim(),
         notes: statusForm.notes.trim() || undefined,
@@ -214,6 +250,7 @@ export default function EmployeesPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isViewMode, setIsViewMode] = useState(false)
   const [editEmployeeId, setEditEmployeeId] = useState<string | null>(null)
+  const [originalEmployeeType, setOriginalEmployeeType] = useState<string | null>(null)
 
   const handleView = (id: string) => {
     setIsViewMode(true)
@@ -248,6 +285,7 @@ export default function EmployeesPage() {
       const res = await fetchEmployeeByAdmin({ id }).unwrap()
       const emp: any = (res as any)?.data ?? res
       const [firstName, ...rest] = (emp.fullName || '').split(' ')
+      const employeeType = (emp.employeeType as any) || (emp.type as any) || ''
       setEditForm({
         firstName: firstName || emp.firstName || '',
         lastName: rest.join(' ') || emp.lastName || '',
@@ -257,7 +295,7 @@ export default function EmployeesPage() {
         gender: (emp.gender as any) || '',
         dateOfBirth: emp.dateOfBirth ? emp.dateOfBirth.slice(0, 10) : '',
         aadharCardNumber: emp.aadharCardNumber || '',
-        employeeType: (emp.employeeType as any) || '',
+        employeeType: employeeType,
         advocateLicenseNumber: emp.advocateLicenseNumber || '',
         internYear: emp.internYear != null ? String(emp.internYear) : '',
         salary: emp.salary != null ? String(emp.salary) : '',
@@ -268,6 +306,7 @@ export default function EmployeesPage() {
         emergencyContactPhone: emp.emergencyContactPhone || '',
         emergencyContactRelation: emp.emergencyContactRelation || ''
       })
+      setOriginalEmployeeType(employeeType) // Store original employee type
       setEditErrors({})
       setEditEmployeeId(id)
       setIsEditModalOpen(true)
@@ -281,6 +320,55 @@ export default function EmployeesPage() {
   const handleEdit = (id: string) => {
     setIsViewMode(false)
     openEditModal(id, false)
+  }
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false)
+    setOriginalEmployeeType(null)
+  }
+
+  const handleAdvocateLicenseChange = (value: string) => {
+    // Auto-format the license number
+    let formattedValue = value
+    
+    // Convert 'mah' to 'MAH' (case insensitive)
+    if (formattedValue.toLowerCase().startsWith('mah')) {
+      formattedValue = 'MAH' + formattedValue.substring(3)
+    }
+    
+    // After MAH/, only allow numbers and slashes
+    if (formattedValue.startsWith('MAH/')) {
+      // Remove any non-numeric characters except slashes after MAH/
+      const afterMah = formattedValue.substring(4) // Get everything after "MAH/"
+      const numbersOnly = afterMah.replace(/[^0-9/]/g, '') // Keep only numbers and slashes
+      formattedValue = 'MAH/' + numbersOnly
+    }
+    
+    // Only apply formatting if the value is longer than current value (user is typing, not deleting)
+    const currentValue = editForm.advocateLicenseNumber
+    const isTyping = value.length > currentValue.length
+    
+    if (isTyping) {
+      // If user types MAH, automatically add the first slash
+      if (formattedValue.includes('MAH') && !formattedValue.includes('MAH/')) {
+        formattedValue = formattedValue.replace('MAH', 'MAH/')
+      }
+      
+      // If we have MAH/ followed by exactly 4 digits (not more), automatically add the second slash
+      const mahWithFourDigits = /MAH\/\d{4}$/
+      if (mahWithFourDigits.test(formattedValue)) {
+        formattedValue = formattedValue.replace(/(MAH\/\d{4})$/, '$1/')
+      }
+    }
+    
+    // Allow up to 13 characters for the license format MAH/XXXX/YYYY
+    if (formattedValue.length <= 13) {
+      setEditForm(p => ({...p, advocateLicenseNumber: formattedValue}))
+      // Clear error when user starts typing
+      if (editErrors.advocateLicenseNumber) {
+        setEditErrors(prev => ({ ...prev, advocateLicenseNumber: undefined }))
+      }
+    }
   }
 
   const performDelete = async (id: string) => {
@@ -438,26 +526,45 @@ export default function EmployeesPage() {
     setInviteSuccess(false)
   }
 
+  // Helper function to get initials
+  const getInitials = (firstName: string, lastName: string) => {
+    const first = firstName?.charAt(0)?.toUpperCase() || ''
+    const last = lastName?.charAt(0)?.toUpperCase() || ''
+    return first + last || '?'
+  }
+
+  // Helper function to get full name
+  const getFullName = (firstName: string, lastName: string) => {
+    return `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown'
+  }
+
   const columns: GridColDef[] = [
     {
       field: 'employee',
       headerName: 'Employee',
       width: 250,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>
-            {params.row.fullName.split(' ').map((n: string) => n[0]).join('')}
-          </Avatar>
-          <Box>
-            <Typography variant="body2" fontWeight={500}>
-              {params.row.fullName}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {params.row.email}
-            </Typography>
+      renderCell: (params) => {
+        const firstName = params.row.firstName || ''
+        const lastName = params.row.lastName || ''
+        const fullName = getFullName(firstName, lastName)
+        const initials = getInitials(firstName, lastName)
+        
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Avatar sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>
+              {initials}
+            </Avatar>
+            <Box>
+              <Typography variant="body2" fontWeight={500}>
+                {fullName}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {params.row.email || 'N/A'}
+              </Typography>
+            </Box>
           </Box>
-        </Box>
-      ),
+        )
+      },
     },
     {
       field: 'phone',
@@ -465,7 +572,7 @@ export default function EmployeesPage() {
       width: 150,
       renderCell: (params) => (
         <Typography variant="body2" color="text.secondary">
-          {params.row.phone}
+          {params.row.phone || 'N/A'}
         </Typography>
       ),
     },
@@ -473,37 +580,46 @@ export default function EmployeesPage() {
       field: 'employeeType',
       headerName: 'Type',
       width: 120,
-      renderCell: (params) => (
-        <Chip 
-          label={params.row.employeeType} 
-          size="small"
-          color="primary"
-          variant="outlined"
-        />
-      ),
+      renderCell: (params) => {
+        const type = params.row.type || params.row.employeeType
+        return (
+          <Chip 
+            label={type || 'N/A'} 
+            size="small"
+            color="primary"
+            variant="outlined"
+          />
+        )
+      },
     },
     {
       field: 'department',
       headerName: 'Department',
       width: 150,
-      renderCell: (params) => (
-        <Chip 
-          label={params.row.department} 
-          size="small"
-          variant="outlined"
-          color="secondary"
-        />
-      ),
+      renderCell: (params) => {
+        const dept = params.row.department
+        return (
+          <Chip 
+            label={dept || 'N/A'} 
+            size="small"
+            variant="outlined"
+            color="secondary"
+          />
+        )
+      },
     },
     {
       field: 'position',
       headerName: 'Position',
       width: 150,
-      renderCell: (params) => (
-        <Typography variant="body2" color="text.secondary">
-          {params.row.position}
-        </Typography>
-      ),
+      renderCell: (params) => {
+        const pos = params.row.position
+        return (
+          <Typography variant="body2" color="text.secondary">
+            {pos || 'N/A'}
+          </Typography>
+        )
+      },
     },
     {
       field: 'status',
@@ -541,7 +657,7 @@ export default function EmployeesPage() {
       width: 120,
       renderCell: (params) => (
         <Typography variant="body2" fontWeight={500}>
-          ₹{params.row.salary.toLocaleString()}
+          {params.row.salary ? `₹${params.row.salary.toLocaleString()}` : 'N/A'}
         </Typography>
       ),
     },
@@ -551,7 +667,7 @@ export default function EmployeesPage() {
       width: 120,
       renderCell: (params) => (
         <Typography variant="body2" color="text.secondary">
-          {new Date(params.row.startDate).toLocaleDateString()}
+          {params.row.startDate ? new Date(params.row.startDate).toLocaleDateString() : 'N/A'}
         </Typography>
       ),
     },
@@ -561,7 +677,7 @@ export default function EmployeesPage() {
       width: 120,
       renderCell: (params) => (
         <Typography variant="body2" color="text.secondary">
-          {new Date(params.row.createdAt).toLocaleDateString()}
+          {params.row.createdAt ? new Date(params.row.createdAt).toLocaleDateString() : 'N/A'}
         </Typography>
       ),
     },
@@ -571,30 +687,35 @@ export default function EmployeesPage() {
       width: 80,
       sortable: false,
       filterable: false,
-      renderCell: (params) => (
-        <ActionMenu
-          items={[
-            {
-              label: 'View',
-              icon: <Eye size={18} />,
-              onClick: () => handleView(params.row.id),
-              color: 'primary'
-            },
-            {
-              label: 'Edit',
-              icon: <EditIcon size={18} />,
-              onClick: () => handleEdit(params.row.id),
-              color: 'primary'
-            },
-            {
-              label: 'Delete',
-              icon: <DeleteIcon size={18} />,
-              onClick: () => handleDeleteClick(params.row),
-              color: 'error'
-            }
-          ]}
-        />
-      ),
+      renderCell: (params) => {
+        const employeeId = params.row._id || params.row.id
+        if (!employeeId) return null
+        
+        return (
+          <ActionMenu
+            items={[
+              {
+                label: 'View',
+                icon: <Eye size={18} />,
+                onClick: () => handleView(employeeId),
+                color: 'primary'
+              },
+              {
+                label: 'Edit',
+                icon: <EditIcon size={18} />,
+                onClick: () => handleEdit(employeeId),
+                color: 'primary'
+              },
+              {
+                label: 'Delete',
+                icon: <DeleteIcon size={18} />,
+                onClick: () => handleDeleteClick(params.row),
+                color: 'error'
+              }
+            ]}
+          />
+        )
+      },
     },
   ]
 
@@ -645,8 +766,8 @@ export default function EmployeesPage() {
 
         {/* Search and Filters */}
         <Box sx={{ mb: 3 }}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={6} md={4}>
+          <Grid container spacing={2} alignItems="flex-start">
+            <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
                 placeholder="Search employees..."
@@ -664,25 +785,45 @@ export default function EmployeesPage() {
                 }}
               />
             </Grid>
-            <Grid item xs={12} sm={6} md={8}>
-              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Grid item xs={12} md={8}>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
                 <Button
                   variant="outlined"
-                  startIcon={<Filter />}
+                  startIcon={<Filter size={18} />}
                   onClick={() => setShowFilters(!showFilters)}
-                  sx={{ ...buttonBoxSx }}
+                  sx={{ 
+                    ...buttonBoxSx,
+                    minWidth: 'auto',
+                    px: 2
+                  }}
                 >
                   Filters
                 </Button>
+                
+                {hasActiveFilters && (
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<RotateCcw size={18} />}
+                    onClick={handleResetFilters}
+                    sx={{ 
+                      ...buttonBoxSx,
+                      minWidth: 'auto',
+                      px: 2
+                    }}
+                  >
+                    Reset
+                  </Button>
+                )}
+                
                 {showFilters && (
                   <>
-                    <FormControl sx={{ minWidth: 120 }}>
+                    <FormControl sx={{ minWidth: 140 }} size="small">
                       <InputLabel>Role</InputLabel>
                       <Select
                         value={roleFilter}
                         label="Role"
                         onChange={(e) => handleFilterChange('role', e.target.value)}
-                        size="small"
                       >
                         <MenuItem value="all">All Roles</MenuItem>
                         {ROLES.map(role => (
@@ -690,27 +831,27 @@ export default function EmployeesPage() {
                         ))}
                       </Select>
                     </FormControl>
-                    <FormControl sx={{ minWidth: 120 }}>
+                    
+                    <FormControl sx={{ minWidth: 140 }} size="small">
                       <InputLabel>Department</InputLabel>
                       <Select
                         value={departmentFilter}
                         label="Department"
                         onChange={(e) => handleFilterChange('department', e.target.value)}
-                        size="small"
                       >
                         <MenuItem value="all">All Departments</MenuItem>
-                        {Array.from(new Set(employees.map(e => e.department))).map(dept => (
+                        {Array.from(new Set(employees.map(e => e.department).filter(Boolean))).map(dept => (
                           <MenuItem key={dept} value={dept}>{dept}</MenuItem>
                         ))}
                       </Select>
                     </FormControl>
-                    <FormControl sx={{ minWidth: 120 }}>
+                    
+                    <FormControl sx={{ minWidth: 140 }} size="small">
                       <InputLabel>Status</InputLabel>
                       <Select
                         value={statusFilter}
                         label="Status"
                         onChange={(e) => handleFilterChange('status', e.target.value)}
-                        size="small"
                       >
                         <MenuItem value="all">All Status</MenuItem>
                         <MenuItem value="active">Active</MenuItem>
@@ -718,20 +859,32 @@ export default function EmployeesPage() {
                         <MenuItem value="inactive">Inactive</MenuItem>
                       </Select>
                     </FormControl>
-                    <FormControl sx={{ minWidth: 120 }}>
+                    
+                    <FormControl sx={{ minWidth: 140 }} size="small">
                       <InputLabel>Type</InputLabel>
                       <Select
                         value={employeeTypeFilter}
                         label="Type"
                         onChange={(e) => handleFilterChange('employeeType', e.target.value)}
-                        size="small"
                       >
                         <MenuItem value="all">All Types</MenuItem>
                         <MenuItem value="advocate">Advocate</MenuItem>
                         <MenuItem value="intern">Intern</MenuItem>
-                        <MenuItem value="staff">Staff</MenuItem>
                       </Select>
                     </FormControl>
+                    
+                    <Button
+                      variant="contained"
+                      startIcon={<Check size={18} />}
+                      onClick={handleApplyFilters}
+                      sx={{ 
+                        ...buttonBoxSx,
+                        minWidth: 'auto',
+                        px: 2
+                      }}
+                    >
+                      Apply
+                    </Button>
                   </>
                 )}
               </Box>
@@ -789,6 +942,7 @@ export default function EmployeesPage() {
               <DataGrid
                 rows={employees}
                 columns={columns}
+                getRowId={(row) => row._id || row.id}
                 pageSizeOptions={[5, 10, 25]}
                 paginationModel={paginationModel}
                 onPaginationModelChange={setPaginationModel}
@@ -827,7 +981,7 @@ export default function EmployeesPage() {
             <Box sx={{ display: 'grid', gap: 2, mt: 1 }}>
               <TextField
                 label="Employee"
-                value={selectedEmployeeForStatus?.fullName || ''}
+                value={selectedEmployeeForStatus ? getFullName(selectedEmployeeForStatus.firstName || '', selectedEmployeeForStatus.lastName || '') : ''}
                 disabled
                 fullWidth
               />
@@ -881,13 +1035,13 @@ export default function EmployeesPage() {
         {/* Edit Employee Modal */}
         <Dialog 
           open={isEditModalOpen}
-          onClose={() => setIsEditModalOpen(false)}
+          onClose={handleCloseEditModal}
           maxWidth="md"
           fullWidth
         >
           <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             Edit Employee
-            <IconButton onClick={() => setIsEditModalOpen(false)} size="small">
+            <IconButton onClick={handleCloseEditModal} size="small">
               <X size={20} />
             </IconButton>
           </DialogTitle>
@@ -940,16 +1094,43 @@ export default function EmployeesPage() {
                   <Grid item xs={12} sm={6}>
                     <FormControl fullWidth disabled={isViewMode}>
                       <InputLabel>Employee Type</InputLabel>
-                      <Select label="Employee Type" value={editForm.employeeType} onChange={(e) => setEditForm(p => ({...p, employeeType: e.target.value as string}))}>
+                      <Select 
+                        label="Employee Type" 
+                        value={editForm.employeeType} 
+                        onChange={(e) => {
+                          const newType = e.target.value as string
+                          // Prevent changing from advocate to intern
+                          if (originalEmployeeType === 'advocate' && newType === 'intern') {
+                            toast.error('Cannot change employee type from Advocate to Intern')
+                            return
+                          }
+                          setEditForm(p => ({...p, employeeType: newType}))
+                        }}
+                      >
                         <MenuItem value="advocate">Advocate</MenuItem>
-                        <MenuItem value="intern">Intern</MenuItem>
-                        <MenuItem value="staff">Staff</MenuItem>
+                        <MenuItem 
+                          value="intern" 
+                          disabled={originalEmployeeType === 'advocate'}
+                        >
+                          Intern
+                        </MenuItem>
                       </Select>
                     </FormControl>
                   </Grid>
                   {editForm.employeeType === 'advocate' && (
                     <Grid item xs={12} sm={6}>
-                      <TextField label="Advocate License Number" value={editForm.advocateLicenseNumber} onChange={(e) => setEditForm(p => ({...p, advocateLicenseNumber: e.target.value}))} fullWidth disabled={isViewMode} />
+                      <TextField 
+                        label="Advocate License Number" 
+                        value={editForm.advocateLicenseNumber} 
+                        onChange={(e) => handleAdvocateLicenseChange(e.target.value)} 
+                        error={!!editErrors.advocateLicenseNumber}
+                        helperText={editErrors.advocateLicenseNumber || 'Format: MAH/XXXX/YYYY (slashes added automatically)'}
+                        fullWidth 
+                        disabled={isViewMode}
+                        required
+                        placeholder="MAH/9720/2025"
+                        inputProps={{ maxLength: 13 }}
+                      />
                     </Grid>
                   )}
                   {editForm.employeeType === 'intern' && (
@@ -1009,6 +1190,51 @@ export default function EmployeesPage() {
                 if (!editForm.phone.trim()) errs.phone = 'Phone is required'
                 if (!editForm.department.trim()) errs.department = 'Department is required'
                 if (!editForm.position.trim()) errs.position = 'Position is required'
+                
+                // Validate advocate license if employee type is advocate
+                if (editForm.employeeType === 'advocate') {
+                  if (!editForm.advocateLicenseNumber.trim()) {
+                    errs.advocateLicenseNumber = 'Advocate License Number is required'
+                  } else {
+                    // Validate advocate license format: MAH/XXXX/YYYY
+                    const license = editForm.advocateLicenseNumber.trim()
+                    
+                    // Check if it starts with MAH/
+                    if (!license.startsWith('MAH/')) {
+                      errs.advocateLicenseNumber = 'License must start with MAH/'
+                    } else {
+                      const parts = license.split('/')
+                      
+                      if (parts.length !== 3) {
+                        errs.advocateLicenseNumber = 'Invalid license format. Use: MAH/XXXX/YYYY'
+                      } else {
+                        const [mahPart, middleDigits, yearDigits] = parts
+                        
+                        // Check MAH part
+                        if (mahPart !== 'MAH') {
+                          errs.advocateLicenseNumber = 'License must start with MAH/'
+                        } else {
+                          // Check middle 4 digits are numbers
+                          if (!/^\d{4}$/.test(middleDigits)) {
+                            errs.advocateLicenseNumber = 'Middle part must be 4 digits'
+                          }
+                          
+                          // Check year is 4 digits and not greater than current year
+                          if (!/^\d{4}$/.test(yearDigits)) {
+                            errs.advocateLicenseNumber = 'Year must be 4 digits'
+                          } else {
+                            const year = parseInt(yearDigits)
+                            const currentYear = new Date().getFullYear()
+                            if (year > currentYear) {
+                              errs.advocateLicenseNumber = `Please enter a proper license number. Year cannot be greater than ${currentYear}`
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                
                 setEditErrors(errs)
                 if (Object.keys(errs).length) return
 
@@ -1036,7 +1262,7 @@ export default function EmployeesPage() {
                 try {
                   await updateEmployeeByAdmin({ id: editEmployeeId, data }).unwrap()
                   toast.success('Employee updated successfully')
-                  setIsEditModalOpen(false)
+                  handleCloseEditModal()
                   refetchEmployees()
                 } catch (e: any) {
                   const msg = e?.data?.message || e?.data?.error || e?.message || 'Failed to update employee'
@@ -1067,7 +1293,7 @@ export default function EmployeesPage() {
           </DialogTitle>
           <DialogContent>
             <Typography variant="body2">
-              Are you sure you want to delete {deleteTarget?.fullName || 'this employee'}?
+              Are you sure you want to delete {deleteTarget ? getFullName(deleteTarget.firstName || '', deleteTarget.lastName || '') : 'this employee'}?
             </Typography>
           </DialogContent>
           <DialogActions sx={{ p: 3, pt: 1 }}>
@@ -1077,7 +1303,12 @@ export default function EmployeesPage() {
               variant="contained"
               onClick={async () => {
                 if (!deleteTarget) return
-                await performDelete(deleteTarget.id)
+                const targetId = deleteTarget._id || deleteTarget.id
+                if (!targetId) {
+                  toast.error('Employee ID not found')
+                  return
+                }
+                await performDelete(targetId)
                 setIsDeleteConfirmOpen(false)
               }}
               disabled={!!deletingId}

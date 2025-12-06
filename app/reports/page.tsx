@@ -228,6 +228,7 @@ export default function ReportsPage() {
             <DataGrid
               rows={reports}
               columns={columns}
+              getRowId={(row) => row._id || row.id}
               pageSizeOptions={[5, 10, 25]}
               initialState={{
                 pagination: {

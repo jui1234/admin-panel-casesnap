@@ -33,7 +33,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import ThemeToggle from '@/components/ThemeToggle'
-import { useRegisterEmployeeMutation } from '@/redux/api/employeesApi'
+import { useRegisterEmployeeMutation, RegisterEmployeeRequest, RegisterEmployeeRequestWithToken } from '@/redux/api/employeesApi'
 import toast from 'react-hot-toast'
 
 interface EmployeeRegistrationData {
@@ -429,8 +429,8 @@ export default function EmployeeRegisterPage() {
     setIsAccountActive(false)
     
     try {
-      // Prepare API payload
-      const payload = {
+      // Prepare API payload - ensure all fields are included
+      const payload: RegisterEmployeeRequest = {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.trim(),
@@ -441,8 +441,6 @@ export default function EmployeeRegisterPage() {
         age: parseInt(formData.age) || 0,
         aadharCardNumber: formData.aadharCard.replace(/\s/g, ''), // Remove spaces before sending to backend
         employeeType: formData.employeeType,
-        ...(formData.employeeType === 'advocate' && { advocateLicenseNumber: formData.advocateLicense.trim() }),
-        ...(formData.employeeType === 'intern' && { internYear: parseInt(formData.internYear) || 0 }),
         salary: parseFloat(formData.salary) || 0,
         department: formData.department.trim(),
         position: formData.position.trim(),
@@ -454,13 +452,44 @@ export default function EmployeeRegisterPage() {
         confirmPassword: formData.confirmPassword
       }
       
-      console.log('Registering employee:', payload)
+      // Add conditional fields
+      if (formData.employeeType === 'advocate' && formData.advocateLicense.trim()) {
+        payload.advocateLicenseNumber = formData.advocateLicense.trim()
+      }
+      
+      if (formData.employeeType === 'intern' && formData.internYear) {
+        payload.internYear = parseInt(formData.internYear) || 0
+      }
+      
+      // Validate that all required fields are present
+      const requiredFields = [
+        'firstName', 'lastName', 'email', 'phone', 'address', 'gender',
+        'dateOfBirth', 'aadharCardNumber', 'employeeType', 'salary',
+        'department', 'position', 'startDate', 'emergencyContactName',
+        'emergencyContactPhone', 'emergencyContactRelation', 'password', 'confirmPassword'
+      ]
+      
+      const missingFields = requiredFields.filter(field => !payload[field as keyof RegisterEmployeeRequest])
+      
+      if (missingFields.length > 0) {
+        console.error('Missing required fields:', missingFields)
+        toast.error(`Missing required fields: ${missingFields.join(', ')}`)
+        setIsSubmitting(false)
+        return
+      }
+      
+      console.log('Registering employee - Full payload:', JSON.stringify(payload, null, 2))
+      console.log('Payload keys:', Object.keys(payload))
+      console.log('Payload field count:', Object.keys(payload).length)
       
       // Prepare the API call with token in Authorization header
-      const apiPayload = {
+      const apiPayload: RegisterEmployeeRequestWithToken = {
         data: payload,
         token: urlParams?.token || ''
       }
+      
+      console.log('API Payload structure:', JSON.stringify(apiPayload, null, 2))
+      console.log('Data object keys:', Object.keys(apiPayload.data))
       
       const response = await registerEmployee(apiPayload).unwrap()
       
