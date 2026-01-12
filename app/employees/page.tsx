@@ -51,7 +51,9 @@ import {
   DialogActions,
   IconButton,
   Alert,
-  CircularProgress
+  CircularProgress,
+  ToggleButton,
+  ToggleButtonGroup
 } from '@mui/material'
 
 // Import Employee type from Redux API
@@ -85,6 +87,7 @@ export default function EmployeesPage() {
   const [appliedEmployeeTypeFilter, setAppliedEmployeeTypeFilter] = useState<string | undefined>(undefined)
   
   const [showFilters, setShowFilters] = useState(false)
+  const [statusToggle, setStatusToggle] = useState<'all' | 'active' | 'inactive'>('all')
   const [paginationModel, setPaginationModel] = useState({
     page: 0,
     pageSize: 10,
@@ -128,6 +131,7 @@ export default function EmployeesPage() {
   // Notifications via react-toastify
   
   // Fetch employees data with server-side filtering
+  // When statusToggle is 'inactive', send both 'inactive' and 'pending' statuses to the API
   const { 
     data: employeesData, 
     isLoading: isEmployeesLoading, 
@@ -139,7 +143,9 @@ export default function EmployeesPage() {
     search: debouncedSearchTerm || undefined,
     role: appliedRoleFilter,
     department: appliedDepartmentFilter,
-    status: appliedStatusFilter,
+    status: statusToggle === 'inactive' 
+      ? 'inactive,pending' 
+      : (statusToggle !== 'all' ? statusToggle : appliedStatusFilter),
     employeeType: appliedEmployeeTypeFilter,
   })
 
@@ -368,6 +374,56 @@ export default function EmployeesPage() {
       if (editErrors.advocateLicenseNumber) {
         setEditErrors(prev => ({ ...prev, advocateLicenseNumber: undefined }))
       }
+    }
+  }
+
+  const handleEditSalaryChange = (value: string) => {
+    // Only allow numbers and a single decimal point
+    const numbersOnly = value.replace(/[^0-9.]/g, '')
+    // Prevent multiple decimal points
+    const parts = numbersOnly.split('.')
+    const formattedValue = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : numbersOnly
+    setEditForm(p => ({...p, salary: formattedValue}))
+    // Clear error when user starts typing
+    if (editErrors.salary) {
+      setEditErrors(prev => ({ ...prev, salary: undefined }))
+    }
+  }
+
+  const handlePhoneChange = (value: string, field: 'phone' | 'emergencyContactPhone') => {
+    // Only allow digits, max 10 digits
+    const digitsOnly = value.replace(/[^0-9]/g, '').slice(0, 10)
+    setEditForm(p => ({...p, [field]: digitsOnly}))
+    // Clear error when user starts typing
+    if (editErrors[field]) {
+      setEditErrors(prev => ({ ...prev, [field]: undefined }))
+    }
+  }
+
+  const handleAadharChange = (value: string) => {
+    // Only allow digits, max 12 digits
+    const digitsOnly = value.replace(/[^0-9]/g, '').slice(0, 12)
+    setEditForm(p => ({...p, aadharCardNumber: digitsOnly}))
+    // Clear error when user starts typing
+    if (editErrors.aadharCardNumber) {
+      setEditErrors(prev => ({ ...prev, aadharCardNumber: undefined }))
+    }
+  }
+
+  const getEditSalaryUnit = (salary: string) => {
+    if (!salary || salary === '') return ''
+    
+    const num = parseFloat(salary)
+    if (isNaN(num)) return ''
+    
+    if (num >= 10000000) { // 1 crore
+      return `${(num / 10000000).toFixed(1)} Cr`
+    } else if (num >= 100000) { // 1 lakh
+      return `${(num / 100000).toFixed(1)} L`
+    } else if (num >= 1000) { // 1 thousand
+      return `${(num / 1000).toFixed(1)} K`
+    } else {
+      return `${num.toFixed(0)}`
     }
   }
 
@@ -925,6 +981,40 @@ export default function EmployeesPage() {
 
         {/* Employees DataGrid */}
         <Card>
+          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6" component="h2">
+                Employees List
+              </Typography>
+              <ToggleButtonGroup
+                value={statusToggle}
+                exclusive
+                onChange={(e, newValue) => {
+                  if (newValue !== null) {
+                    setStatusToggle(newValue)
+                    // Clear status filter from filters section when toggle is used
+                    if (newValue !== 'all') {
+                      setStatusFilter('all')
+                      setAppliedStatusFilter(undefined)
+                    }
+                    setPaginationModel(prev => ({ ...prev, page: 0 }))
+                  }
+                }}
+                aria-label="employee status filter"
+                size="small"
+              >
+                <ToggleButton value="all" aria-label="all employees">
+                  All
+                </ToggleButton>
+                <ToggleButton value="active" aria-label="active employees">
+                  Active
+                </ToggleButton>
+                <ToggleButton value="inactive" aria-label="inactive employees">
+                  Inactive
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+          </Box>
           <Box sx={{ height: 600, width: '100%' }}>
             {/* Status context menu removed: open modal directly on click */}
             {isEmployeesLoading ? (
@@ -1065,7 +1155,24 @@ export default function EmployeesPage() {
                     <TextField label="Email" type="email" value={editForm.email} onChange={(e) => setEditForm(p => ({...p, email: e.target.value}))} error={!!editErrors.email} helperText={editErrors.email} required fullWidth disabled={isViewMode} />
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <TextField label="Phone" value={editForm.phone} onChange={(e) => setEditForm(p => ({...p, phone: e.target.value}))} error={!!editErrors.phone} helperText={editErrors.phone} required fullWidth disabled={isViewMode} />
+                    <TextField 
+                      label="Phone" 
+                      value={editForm.phone} 
+                      onChange={(e) => handlePhoneChange(e.target.value, 'phone')} 
+                      error={!!editErrors.phone} 
+                      helperText={editErrors.phone || ''} 
+                      required 
+                      fullWidth 
+                      disabled={isViewMode}
+                      inputProps={{ maxLength: 10 }}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Phone size={20} />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
                   </Grid>
                   <Grid item xs={12}>
                     <TextField label="Address" value={editForm.address} onChange={(e) => setEditForm(p => ({...p, address: e.target.value}))} fullWidth multiline minRows={2} disabled={isViewMode} />
@@ -1084,7 +1191,16 @@ export default function EmployeesPage() {
                     <TextField label="Date of Birth" type="date" value={editForm.dateOfBirth} onChange={(e) => setEditForm(p => ({...p, dateOfBirth: e.target.value}))} InputLabelProps={{ shrink: true }} fullWidth disabled={isViewMode} />
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <TextField label="Aadhar Card Number" value={editForm.aadharCardNumber} onChange={(e) => setEditForm(p => ({...p, aadharCardNumber: e.target.value}))} fullWidth disabled={isViewMode} />
+                    <TextField 
+                      label="Aadhar Card Number" 
+                      value={editForm.aadharCardNumber} 
+                      onChange={(e) => handleAadharChange(e.target.value)} 
+                      fullWidth 
+                      disabled={isViewMode}
+                      error={!!editErrors.aadharCardNumber}
+                      helperText={editErrors.aadharCardNumber || ''}
+                      inputProps={{ maxLength: 12 }}
+                    />
                   </Grid>
                 </Grid>
 
@@ -1148,7 +1264,45 @@ export default function EmployeesPage() {
                     </Grid>
                   )}
                   <Grid item xs={12} sm={6}>
-                    <TextField label="Salary" value={editForm.salary} onChange={(e) => setEditForm(p => ({...p, salary: e.target.value}))} fullWidth disabled={isViewMode} />
+                    <TextField 
+                      label="Salary" 
+                      type="text"
+                      value={editForm.salary} 
+                      onChange={(e) => handleEditSalaryChange(e.target.value)} 
+                      error={!!editErrors.salary}
+                      helperText={editErrors.salary || ''}
+                      fullWidth 
+                      disabled={isViewMode}
+                      placeholder="50000"
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <span style={{ fontSize: '16px', fontWeight: 'bold' }}>₹</span>
+                          </InputAdornment>
+                        ),
+                        endAdornment: editForm.salary && (
+                          <InputAdornment position="end">
+                            <Box
+                              sx={{
+                                bgcolor: 'primary.100',
+                                color: 'primary.main',
+                                px: 1,
+                                py: 0.5,
+                                borderRadius: 1,
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                minWidth: '40px',
+                                textAlign: 'center',
+                                border: '1px solid',
+                                borderColor: 'primary.300'
+                              }}
+                            >
+                              {getEditSalaryUnit(editForm.salary)}
+                            </Box>
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <TextField label="Department" value={editForm.department} onChange={(e) => setEditForm(p => ({...p, department: e.target.value}))} error={!!editErrors.department} helperText={editErrors.department} required fullWidth disabled={isViewMode} />
@@ -1168,7 +1322,23 @@ export default function EmployeesPage() {
                     <TextField label="Contact Name" value={editForm.emergencyContactName} onChange={(e) => setEditForm(p => ({...p, emergencyContactName: e.target.value}))} fullWidth disabled={isViewMode} />
                   </Grid>
                   <Grid item xs={12} sm={4}>
-                    <TextField label="Contact Phone" value={editForm.emergencyContactPhone} onChange={(e) => setEditForm(p => ({...p, emergencyContactPhone: e.target.value}))} fullWidth disabled={isViewMode} />
+                    <TextField 
+                      label="Contact Phone" 
+                      value={editForm.emergencyContactPhone} 
+                      onChange={(e) => handlePhoneChange(e.target.value, 'emergencyContactPhone')} 
+                      fullWidth 
+                      disabled={isViewMode}
+                      error={!!editErrors.emergencyContactPhone}
+                      helperText={editErrors.emergencyContactPhone || ''}
+                      inputProps={{ maxLength: 10 }}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Phone size={20} />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
                   </Grid>
                   <Grid item xs={12} sm={4}>
                     <TextField label="Relation" value={editForm.emergencyContactRelation} onChange={(e) => setEditForm(p => ({...p, emergencyContactRelation: e.target.value}))} fullWidth disabled={isViewMode} />
@@ -1187,9 +1357,23 @@ export default function EmployeesPage() {
                 if (!editForm.firstName.trim()) errs.firstName = 'First name is required'
                 if (!editForm.lastName.trim()) errs.lastName = 'Last name is required'
                 if (!editForm.email.trim()) errs.email = 'Email is required'
-                if (!editForm.phone.trim()) errs.phone = 'Phone is required'
+                if (!editForm.phone.trim()) {
+                  errs.phone = 'Phone is required'
+                } else if (editForm.phone.length !== 10) {
+                  errs.phone = 'Phone number must be exactly 10 digits'
+                }
                 if (!editForm.department.trim()) errs.department = 'Department is required'
                 if (!editForm.position.trim()) errs.position = 'Position is required'
+                
+                // Validate Aadhar card number if provided
+                if (editForm.aadharCardNumber && editForm.aadharCardNumber.length !== 12) {
+                  errs.aadharCardNumber = 'Aadhar card number must be exactly 12 digits'
+                }
+                
+                // Validate emergency contact phone if provided
+                if (editForm.emergencyContactPhone && editForm.emergencyContactPhone.length !== 10) {
+                  errs.emergencyContactPhone = 'Emergency contact phone must be exactly 10 digits'
+                }
                 
                 // Validate advocate license if employee type is advocate
                 if (editForm.employeeType === 'advocate') {

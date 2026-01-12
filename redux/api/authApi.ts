@@ -13,7 +13,9 @@ export interface LoginResponse {
   user: {
     id: string
     email: string
-    name: string
+    name?: string
+    firstName?: string
+    lastName?: string
     role: string
     organization: {
       _id: string

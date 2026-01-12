@@ -373,12 +373,24 @@ export default function Layout({ children }: LayoutProps) {
               <div className="flex items-center space-x-2 sm:space-x-3">
                 <div className="h-7 w-7 sm:h-8 sm:w-8 bg-yellow-500 rounded-full flex items-center justify-center">
                   <span className="text-xs sm:text-sm font-medium text-gray-900">
-                    {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
+                    {(() => {
+                      if (user?.name) return user.name.charAt(0).toUpperCase()
+                      if (user?.firstName) return user.firstName.charAt(0).toUpperCase()
+                      if (user?.lastName) return user.lastName.charAt(0).toUpperCase()
+                      if (user?.email) return user.email.charAt(0).toUpperCase()
+                      return 'A'
+                    })()}
                   </span>
                 </div>
                 <div className="hidden sm:block">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {user?.name || 'Admin User'}
+                    {(() => {
+                      if (user?.name) return user.name
+                      if (user?.firstName && user?.lastName) return `${user.firstName} ${user.lastName}`
+                      if (user?.firstName) return user.firstName
+                      if (user?.lastName) return user.lastName
+                      return 'Admin User'
+                    })()}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     {user?.email || 'admin@example.com'}

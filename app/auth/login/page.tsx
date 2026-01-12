@@ -72,10 +72,18 @@ export default function LoginPage() {
         localStorage.setItem('token', result.token) // Keep both for compatibility
         
         // Store user data in the format expected by AuthContext
+        // Construct name from firstName and lastName if name is not available
+        const userName = result.user.name || 
+          (result.user.firstName && result.user.lastName 
+            ? `${result.user.firstName} ${result.user.lastName}`.trim()
+            : result.user.firstName || result.user.lastName || result.user.email.split('@')[0])
+        
         const userData = {
           id: result.user.id,
           email: result.user.email,
-          name: result.user.name,
+          name: userName,
+          firstName: result.user.firstName,
+          lastName: result.user.lastName,
           role: result.user.role,
           organizationId: result.user.organization?._id,
           organizationName: result.user.organization?.companyName
