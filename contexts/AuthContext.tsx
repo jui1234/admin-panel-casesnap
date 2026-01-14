@@ -3,13 +3,26 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 
+interface Role {
+  id: string
+  name: string
+  priority: number
+  permissions: Array<{
+    module: string
+    actions: string[]
+  }>
+  isSystemRole: boolean
+  description: string
+}
+
 interface User {
   id: string
   email: string
   name?: string
   firstName?: string
   lastName?: string
-  role: string
+  role: string | Role  // Can be string (legacy) or Role object (new)
+  subscriptionPlan?: string  // Valid values: "free", "base", "popular"
   organizationId?: string
   organizationName?: string
 }

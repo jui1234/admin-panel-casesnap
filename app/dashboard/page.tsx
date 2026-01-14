@@ -55,7 +55,20 @@ export default function DashboardPage() {
   ]
 
   const recentActivity = [
-    { id: 1, user: user?.name || 'Admin User', action: 'Logged in', time: 'Just now', role: user?.role || 'Admin' },
+    { 
+      id: 1, 
+      user: user?.name || (user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : 'Admin User'), 
+      action: 'Logged in', 
+      time: 'Just now', 
+      role: (() => {
+        if (!user?.role) return 'Admin'
+        const roleName = typeof user.role === 'string' ? user.role : user.role.name
+        if (roleName === 'SUPER_ADMIN' || roleName === 'super-admin') return 'Super Admin'
+        if (roleName === 'ADMIN' || roleName === 'admin') return 'Admin'
+        if (roleName === 'EMPLOYEE' || roleName === 'employee') return 'Employee'
+        return roleName
+      })()
+    },
     { id: 2, user: 'Jane Smith', action: 'Updated profile', time: '5 minutes ago', role: 'Admin' },
     { id: 3, user: 'Mike Johnson', action: 'Created new user', time: '10 minutes ago', role: 'Admin' },
     { id: 4, user: 'Sarah Wilson', action: 'Changed permissions', time: '15 minutes ago', role: 'Employee' },
@@ -89,7 +102,17 @@ export default function DashboardPage() {
               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
                 <div className="flex items-center">
                   <UserCheck className="h-4 w-4 mr-2 text-yellow-600" />
-                  <span>Role: <span className="font-medium capitalize">{user?.role || 'Admin'}</span></span>
+                  <span>Role: <span className="font-medium capitalize">
+                    {(() => {
+                      if (!user?.role) return 'Admin'
+                      const roleName = typeof user.role === 'string' ? user.role : user.role.name
+                      // Convert backend role names to display format
+                      if (roleName === 'SUPER_ADMIN' || roleName === 'super-admin') return 'Super Admin'
+                      if (roleName === 'ADMIN' || roleName === 'admin') return 'Admin'
+                      if (roleName === 'EMPLOYEE' || roleName === 'employee') return 'Employee'
+                      return roleName
+                    })()}
+                  </span></span>
                 </div>
                 {organizationData && (
                   <>

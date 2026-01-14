@@ -84,8 +84,9 @@ export default function LoginPage() {
           name: userName,
           firstName: result.user.firstName,
           lastName: result.user.lastName,
-          role: result.user.role,
-          organizationId: result.user.organization?._id,
+          role: result.user.role, // Can be string or Role object
+          subscriptionPlan: result.user.subscriptionPlan, // Store subscription plan
+          organizationId: result.user.organizationId || result.user.organization?._id,
           organizationName: result.user.organization?.companyName
         }
         localStorage.setItem('userData', JSON.stringify(userData))
@@ -322,17 +323,8 @@ export default function LoginPage() {
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-300 dark:border-gray-600" />
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">Or continue with</span>
-              </div>
+             
             </div>
-          </div>
-
-          {/* Demo Credentials */}
-          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <p className="text-xs text-gray-600 dark:text-gray-300 mb-2 font-medium">Demo Credentials:</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Email: admin@example.com</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Password: password123</p>
           </div>
         </div>
 

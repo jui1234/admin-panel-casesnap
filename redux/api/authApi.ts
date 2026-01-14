@@ -16,8 +16,9 @@ export interface LoginResponse {
     name?: string
     firstName?: string
     lastName?: string
-    role: string
-    organization: {
+    role: string | Role  // Can be string (legacy) or Role object (new)
+    subscriptionPlan?: string  // Valid values: "free", "base", "popular"
+    organization?: {
       _id: string
       companyName: string
       companyEmail: string
@@ -35,6 +36,7 @@ export interface LoginResponse {
       __v: number
       superAdmin: string
     }
+    organizationId?: string
   }
 }
 
@@ -50,6 +52,7 @@ export interface OrganizationData {
   companyWebsite: string
   industry: string
   practiceAreas: string[]
+  subscriptionPlan?: string  // Valid values: "free" (default), "base", "popular"
 }
 
 export interface SuperAdminData {
@@ -66,11 +69,32 @@ export interface SetupRequest {
   superAdmin: SuperAdminData
 }
 
+export interface RolePermission {
+  module: string
+  actions: string[]
+}
+
+export interface Role {
+  id: string
+  name: string
+  priority: number
+  permissions: RolePermission[]
+  isSystemRole: boolean
+  description: string
+}
+
 export interface SetupResponse {
   success: boolean
   message: string
-  organization?: any
-  superAdmin?: any
+  token: string
+  user: {
+    id: string
+    firstName: string
+    lastName: string
+    email: string
+    role: Role
+    organizationId: string
+  }
 }
 
 // Create the API slice

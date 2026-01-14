@@ -13,12 +13,13 @@ import {
   Check,
   Shield,
   Eye,
-  EyeOff
+  EyeOff,
+  Info
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
-import { useSetupOrganizationMutation } from '@/redux/api/authApi'
+import { useSetupOrganizationMutation, useLoginMutation } from '@/redux/api/authApi'
 import toast from 'react-hot-toast'
 import * as yup from 'yup'
 
@@ -43,6 +44,15 @@ interface SuperAdminData {
   phone: string
   password: string
   confirmPassword: string
+}
+
+interface SubscriptionPlan {
+  id: string
+  name: string
+  price: number
+  period: 'monthly' | 'yearly'
+  features: string[]
+  popular?: boolean
 }
 
 // Yup validation schemas
@@ -78,8 +88,9 @@ export default function SetupPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   
-  // RTK Query mutation
+  // RTK Query mutations
   const [setupOrganization, { isLoading, error: setupError }] = useSetupOrganizationMutation()
+  const [loginMutation] = useLoginMutation()
 
   const [organizationData, setOrganizationData] = useState<OrganizationData>({
     companyName: '',
@@ -196,15 +207,25 @@ export default function SetupPage() {
     if (currentStep === 1) {
       const isValid = await validateOrganizationData()
       if (isValid) {
-      setCurrentStep(2)
+        setCurrentStep(2)
         toast.success('Organization details validated successfully!')
+      }
+    } else if (currentStep === 2) {
+      const isValid = await validateSuperAdminData()
+      if (isValid) {
+        setCurrentStep(3)
+        toast.success('Super admin details validated successfully!')
       }
     }
   }
 
   const handlePrevious = () => {
     setError('')
-    setCurrentStep(1)
+    if (currentStep === 2) {
+      setCurrentStep(1)
+    } else if (currentStep === 3) {
+      setCurrentStep(2)
+    }
   }
 
   const fillTestData = () => {
@@ -238,12 +259,32 @@ export default function SetupPage() {
     setError('')
     setSuccess('')
     
+    // Only submit on step 3 (subscription plan step)
+    if (currentStep !== 3) {
+      handleNext()
+      return
+    }
+    
     const isValid = await validateSuperAdminData()
     if (!isValid) return
+    
+    if (!selectedPlan) {
+      setError('Please select a subscription plan')
+      toast.error('Please select a subscription plan')
+      return
+    }
 
     const loadingToast = toast.loading('Setting up your organization...')
     
     try {
+      // Map plan ID to API value
+      const planMapping: Record<string, string> = {
+        'free-trial': 'free',
+        'basic': 'base',
+        'professional': 'popular'
+      }
+      const subscriptionPlanValue = planMapping[selectedPlan] || 'free'
+
       // Prepare the API payload
       const payload = {
         organization: {
@@ -257,7 +298,8 @@ export default function SetupPage() {
           country: organizationData.country,
           companyWebsite: organizationData.companyWebsite,
           industry: organizationData.industry,
-          practiceAreas: organizationData.practiceAreas
+          practiceAreas: organizationData.practiceAreas,
+          subscriptionPlan: subscriptionPlanValue
         },
         superAdmin: {
           firstName: superAdminData.firstName,
@@ -288,17 +330,62 @@ export default function SetupPage() {
         console.log('localStorage not available, continuing without storing')
       }
 
-      // Create super admin account and login
-      const loginSuccess = await login(superAdminData.email, superAdminData.password)
+      // Now call login API with the same email and password
+      try {
+        toast.loading('Logging you in...', { id: 'login-toast' })
+        
+        const loginResult = await loginMutation({
+          email: superAdminData.email,
+          password: superAdminData.password
+        }).unwrap()
 
-      if (loginSuccess) {
-        toast.success('🚀 Setup completed! Redirecting to dashboard...')
-        setSuccess('Setup completed successfully! Redirecting to dashboard...')
-        setTimeout(() => {
-          router.push('/dashboard')
-        }, 2000)
-      } else {
-        toast.error('Account created but login failed. Please try logging in manually.')
+        if (loginResult.success) {
+          // Store token from login response
+          localStorage.setItem('authToken', loginResult.token)
+          localStorage.setItem('token', loginResult.token)
+
+          // Store user data from login response
+          const userName = loginResult.user.name || 
+            (loginResult.user.firstName && loginResult.user.lastName 
+              ? `${loginResult.user.firstName} ${loginResult.user.lastName}`.trim()
+              : loginResult.user.firstName || loginResult.user.lastName || loginResult.user.email.split('@')[0])
+          
+          const userData = {
+            id: loginResult.user.id,
+            email: loginResult.user.email,
+            name: userName,
+            firstName: loginResult.user.firstName,
+            lastName: loginResult.user.lastName,
+            role: loginResult.user.role, // Can be string or Role object
+            organizationId: loginResult.user.organizationId || loginResult.user.organization?._id,
+            organizationName: loginResult.user.organization?.companyName
+          }
+          localStorage.setItem('userData', JSON.stringify(userData))
+
+          // Store organization data from login response if available
+          if (loginResult.user?.organization) {
+            localStorage.setItem('organizationData', JSON.stringify(loginResult.user.organization))
+          }
+
+          // Update AuthContext by calling login function
+          const loginSuccess = await login(superAdminData.email, superAdminData.password)
+
+          toast.dismiss('login-toast')
+          toast.success('🚀 Setup completed! Redirecting to dashboard...')
+          setSuccess('Setup completed successfully! Redirecting to dashboard...')
+          
+          setTimeout(() => {
+            router.push('/dashboard')
+          }, 1000)
+        } else {
+          toast.dismiss('login-toast')
+          toast.error('Account created but login failed. Please try logging in manually.')
+          setError('Account created successfully, but login failed. Please try logging in manually.')
+        }
+      } catch (loginError: any) {
+        toast.dismiss('login-toast')
+        const errorMessage = loginError?.data?.error || loginError?.message || 'Login failed. Please try logging in manually.'
+        toast.error(errorMessage)
         setError('Account created successfully, but login failed. Please try logging in manually.')
       }
     } catch (err: any) {
@@ -338,8 +425,69 @@ export default function SetupPage() {
 
   const steps = [
     { number: 1, title: 'Organization Details', icon: Building2 },
-    { number: 2, title: 'Super Admin Setup', icon: User }
+    { number: 2, title: 'Super Admin Setup', icon: User },
+    { number: 3, title: 'Subscription Plan', icon: Shield }
   ]
+
+  // Subscription plans
+  const subscriptionPlans: SubscriptionPlan[] = [
+    {
+      id: 'free-trial',
+      name: '14 Days Free Trial',
+      price: 0,
+      period: 'monthly',
+      features: [
+        '14 days full access',
+        'All features unlocked',
+        'Unlimited employees',
+        'Unlimited clients',
+        'Full case management suite',
+        'Advanced reporting & analytics',
+        'Priority support',
+        'Unlimited storage',
+        'No credit card required'
+      ]
+    },
+    {
+      id: 'basic',
+      name: 'Basic',
+      price: 999,
+      period: 'monthly',
+      features: [
+        'Up to 10 employees',
+        'Up to 100 clients',
+        'Basic case management',
+        'Standard reporting',
+        'Email support',
+        '10GB storage',
+        'Basic document management',
+        'Mobile app access'
+      ]
+    },
+    {
+      id: 'professional',
+      name: 'Professional',
+      price: 2499,
+      period: 'monthly',
+      popular: true,
+      features: [
+        'Unlimited employees',
+        'Unlimited clients',
+        'Advanced case management',
+        'Advanced analytics & reporting',
+        'Priority 24/7 support',
+        'Unlimited storage',
+        'Advanced document management',
+        'Mobile app access',
+        'API access & integrations',
+        'Custom workflows',
+        'Advanced security features',
+        'Dedicated account manager'
+      ]
+    }
+  ]
+
+  const [selectedPlan, setSelectedPlan] = useState<string>('basic')
 
   const practiceAreas = [
     'Criminal Law',
@@ -732,6 +880,21 @@ export default function SetupPage() {
                 Super Admin Account
               </h3>
 
+              {/* Highlighted Note */}
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 dark:border-yellow-400 p-4 rounded-r-lg mb-4 sm:mb-6">
+                <div className="flex items-start">
+                  <Info className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 mr-3 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm sm:text-base font-medium text-yellow-800 dark:text-yellow-300 mb-1">
+                      Important Note
+                    </p>
+                    <p className="text-xs sm:text-sm text-yellow-700 dark:text-yellow-400">
+                      The person creating this organization will automatically become the <strong>Super Admin</strong> with full system access and administrative privileges.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -854,6 +1017,159 @@ export default function SetupPage() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-0 pt-4 sm:pt-6">
+                <button
+                  onClick={handlePrevious}
+                  className="border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold transition-all duration-300 flex items-center justify-center space-x-2 hover:scale-105 hover:shadow-lg cursor-pointer text-sm sm:text-base"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Previous</span>
+                </button>
+
+                <button
+                  onClick={handleNext}
+                  className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold transition-all duration-300 flex items-center justify-center space-x-2 hover:scale-105 hover:shadow-lg cursor-pointer text-sm sm:text-base"
+                >
+                  <span>Next</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {currentStep === 3 && (
+            <div className="space-y-4 sm:space-y-5">
+              {/* Free Trial Banner - At Top */}
+              <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 dark:from-yellow-600 dark:to-yellow-500 rounded-lg p-3 sm:p-4 border border-yellow-300 dark:border-yellow-400">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-gray-900 dark:text-gray-900" />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-900">
+                        14 Days Free Trial
+                      </p>
+                      <p className="text-xs text-gray-800 dark:text-gray-800">
+                        Full access. No credit card required.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border-2 border-gray-900 dark:border-white">
+                    <span className="text-xs font-bold text-gray-900 dark:text-white">
+                      FREE
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Header Section */}
+              <div className="text-center">
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  Choose Your Subscription Plan
+                </h3>
+              </div>
+
+              {/* Plans Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 max-w-6xl mx-auto">
+                {subscriptionPlans.map((plan) => (
+                  <div
+                    key={plan.id}
+                    onClick={() => setSelectedPlan(plan.id)}
+                    className={`relative cursor-pointer rounded-xl border-2 transition-all duration-300 ${
+                      selectedPlan === plan.id
+                        ? plan.id === 'free-trial'
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20 shadow-lg ring-2 ring-green-200 dark:ring-green-800'
+                          : 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 shadow-lg ring-2 ring-yellow-200 dark:ring-yellow-800'
+                        : plan.popular
+                        ? 'border-l-4 border-l-orange-500 border-r-2 border-t-2 border-b-2 border-r-gray-200 border-t-gray-200 border-b-gray-200 dark:border-r-gray-700 dark:border-t-gray-700 dark:border-b-gray-700 bg-white dark:bg-gray-800 hover:shadow-md'
+                        : plan.id === 'free-trial'
+                        ? 'border-green-400 dark:border-green-600 bg-white dark:bg-gray-800 hover:border-green-500 dark:hover:border-green-500 hover:shadow-md'
+                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-yellow-400 dark:hover:border-yellow-500 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="p-4 sm:p-5">
+                      {/* Plan Header */}
+                      <div className="text-center mb-3">
+                        <h4 className={`text-base sm:text-lg font-bold mb-2 ${
+                          selectedPlan === plan.id
+                            ? 'text-gray-900 dark:text-white'
+                            : 'text-gray-800 dark:text-gray-200'
+                        }`}>
+                          {plan.name}
+                        </h4>
+                        {plan.price === 0 ? (
+                          <div className="mb-1">
+                            <div className="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400 mb-1">
+                              Free
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              14 days trial period
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-baseline justify-center mb-1">
+                              <span className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mr-1">₹</span>
+                              <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                                {plan.price.toLocaleString()}
+                              </span>
+                              <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 ml-1">/mo</span>
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              After 14-day free trial
+                            </p>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Features List */}
+                      <div className="mb-3">
+                        <ul className="space-y-1.5">
+                          {plan.features.map((feature, index) => (
+                            <li key={index} className="flex items-start">
+                              <Check className={`w-3.5 h-3.5 mt-0.5 mr-2 flex-shrink-0 ${
+                                selectedPlan === plan.id
+                                  ? plan.id === 'free-trial'
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-yellow-600 dark:text-yellow-400'
+                                  : 'text-gray-400 dark:text-gray-500'
+                              }`} />
+                              <span className={`text-xs leading-snug ${
+                                selectedPlan === plan.id
+                                  ? 'text-gray-700 dark:text-gray-300'
+                                  : 'text-gray-600 dark:text-gray-400'
+                              }`}>
+                                {feature}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* CTA Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedPlan(plan.id)
+                        }}
+                        className={`w-full py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all ${
+                          selectedPlan === plan.id
+                            ? plan.id === 'free-trial'
+                              ? 'bg-green-500 text-white shadow-md'
+                              : 'bg-yellow-500 text-gray-900 shadow-md'
+                            : plan.popular
+                            ? 'bg-yellow-500 text-gray-900 hover:bg-yellow-600'
+                            : plan.id === 'free-trial'
+                            ? 'bg-green-500 text-white hover:bg-green-600'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        }`}
+                      >
+                        {selectedPlan === plan.id ? 'Selected' : 'Select Plan'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-0 pt-4 sm:pt-6">

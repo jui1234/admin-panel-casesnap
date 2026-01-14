@@ -69,7 +69,13 @@ interface InviteEmployeeData {
 export default function EmployeesPage() {
   const router = useRouter()
   const { user, isLoading: isAuthLoading } = useAuth()
-  const isAdmin = user?.role === 'admin' || user?.role === 'super-admin'
+  // Helper to check if role is admin or super-admin
+  const isAdminRole = (role: string | { name: string } | undefined): boolean => {
+    if (!role) return false
+    const roleName = typeof role === 'string' ? role : role.name
+    return roleName === 'admin' || roleName === 'super-admin' || roleName === 'ADMIN' || roleName === 'SUPER_ADMIN'
+  }
+  const isAdmin = isAdminRole(user?.role)
   if (!isAdmin) return null
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')

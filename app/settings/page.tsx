@@ -1,10 +1,45 @@
 'use client'
 
-import { Settings, Save, User, Shield, Bell, Globe, Database, Key } from 'lucide-react'
+import { Settings, Save, User, Shield, Bell, Globe, Database, Key, Check, ArrowUp } from 'lucide-react'
 import Layout from '@/components/Layout'
 import Head from 'next/head'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function SettingsPage() {
+  const { user } = useAuth()
+
+  // Map subscription plan values to display names
+  const getPlanDisplayName = (plan?: string): string => {
+    switch (plan) {
+      case 'free':
+        return '14 Days Free Trial'
+      case 'base':
+        return 'Basic'
+      case 'popular':
+        return 'Professional'
+      default:
+        return 'Free Trial'
+    }
+  }
+
+  // Get plan pricing
+  const getPlanPrice = (plan?: string): string => {
+    switch (plan) {
+      case 'free':
+        return 'Free'
+      case 'base':
+        return '₹999/month'
+      case 'popular':
+        return '₹2,499/month'
+      default:
+        return 'Free'
+    }
+  }
+
+  const currentPlan = user?.subscriptionPlan || 'free'
+  const planDisplayName = getPlanDisplayName(currentPlan)
+  const planPrice = getPlanPrice(currentPlan)
+  const isFreeTrial = currentPlan === 'free'
   return (
     <>
       <Head>
@@ -256,6 +291,77 @@ export default function SettingsPage() {
                     <Database className="h-4 w-4 mr-2 text-gray-400 dark:text-gray-500" />
                     <span className="text-sm">Create Legal Case Backup Now</span>
                   </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Subscription Plan */}
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="px-3 sm:px-4 py-4 sm:py-5 lg:p-6">
+                <div className="flex items-center mb-3 sm:mb-4">
+                  <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500 mr-2" />
+                  <h3 className="text-base sm:text-lg leading-6 font-medium text-gray-900 dark:text-white">Subscription Plan</h3>
+                </div>
+                <div className="space-y-4">
+                  {/* Free Trial Banner - Only show if on free trial */}
+                  {isFreeTrial && (
+                    <div className="bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-400 dark:from-yellow-600 dark:via-yellow-500 dark:to-yellow-600 rounded-lg p-4 border-2 border-yellow-300 dark:border-yellow-400">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">
+                            🎉 14 Days Free Trial Active
+                          </p>
+                          <p className="text-xs text-gray-800 dark:text-gray-200">
+                            Your trial period ends on Jan 28, 2025
+                          </p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-900 px-3 py-1 rounded-lg border-2 border-gray-900 dark:border-white">
+                          <span className="text-xs font-bold text-gray-900 dark:text-white">
+                            Free Trial
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">Current Plan</span>
+                      <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                        isFreeTrial 
+                          ? 'bg-green-500 text-white' 
+                          : currentPlan === 'popular'
+                          ? 'bg-yellow-500 text-gray-900'
+                          : 'bg-gray-500 text-white'
+                      }`}>
+                        {planDisplayName}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                      {isFreeTrial 
+                        ? 'Full access for 14 days. No credit card required.'
+                        : `${planPrice} - ${currentPlan === 'popular' ? 'All features included' : 'Limited features'}`
+                      }
+                    </p>
+                    <button className="w-full flex items-center justify-center px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 rounded-lg font-medium transition-colors duration-200 text-sm shadow-md hover:shadow-lg">
+                      <ArrowUp className="h-4 w-4 mr-2" />
+                      {isFreeTrial ? 'Choose Plan' : 'Change Plan'}
+                    </button>
+                  </div>
+                  
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      {isFreeTrial 
+                        ? 'Switch between Basic (₹999/mo) and Professional (₹2,499/mo) plans anytime. Basic plan has limited features while Professional includes all features.'
+                        : currentPlan === 'base'
+                        ? 'Upgrade to Professional (₹2,499/mo) to unlock all features including unlimited employees, clients, storage, and advanced analytics.'
+                        : 'Switch to Basic (₹999/mo) for limited features or stay on Professional for full access to all features.'
+                      }
+                    </p>
+                    <button className="w-full flex items-center justify-center px-4 py-2 border-2 border-yellow-500 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg font-medium transition-colors duration-200 text-sm">
+                      View All Plans
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

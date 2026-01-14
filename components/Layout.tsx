@@ -20,7 +20,8 @@ import {
   CheckCircle,
   AlertCircle,
   Info,
-  Clock
+  Clock,
+  UserCog
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -36,6 +37,7 @@ const navigation = [
   { name: 'Users', href: '/users', icon: Users },
   { name: 'Client List', href: '/clients', icon: Building },
   { name: 'Employee List', href: '/employees', icon: UserPlus },
+  { name: 'Roles', href: '/roles', icon: UserCog },
   { name: 'Permissions', href: '/permissions', icon: UserCheck },
   { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
@@ -51,10 +53,16 @@ export default function Layout({ children }: LayoutProps) {
   const pathname = usePathname()
   const { theme } = useTheme()
   const { logout, user } = useAuth()
-  const isAdmin = user?.role === 'admin' || user?.role === 'super-admin'
-  // Global route guard for employee listing: only admins can access
+  // Helper to check if role is admin or super-admin
+  const isAdminRole = (role: string | { name: string } | undefined): boolean => {
+    if (!role) return false
+    const roleName = typeof role === 'string' ? role : role.name
+    return roleName === 'admin' || roleName === 'super-admin' || roleName === 'ADMIN' || roleName === 'SUPER_ADMIN'
+  }
+  const isAdmin = isAdminRole(user?.role)
+  // Global route guard for employee listing and roles: only admins can access
   useEffect(() => {
-    if (pathname === '/employees' && !isAdmin) {
+    if ((pathname === '/employees' || pathname === '/roles') && !isAdmin) {
       router.replace('/dashboard')
     }
   }, [pathname, isAdmin, router])
@@ -213,8 +221,8 @@ export default function Layout({ children }: LayoutProps) {
         <nav className="mt-4 sm:mt-6 px-2 sm:px-3 flex-1">
           <div className="space-y-1">
             {(navigation.filter(item => {
-              // Hide Employee List for non-admin users
-              if (item.href === '/employees' && !isAdmin) return false
+              // Hide Employee List and Roles for non-admin users
+              if ((item.href === '/employees' || item.href === '/roles') && !isAdmin) return false
               return true
             })).map((item) => {
               const Icon = item.icon
