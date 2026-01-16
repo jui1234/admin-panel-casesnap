@@ -109,7 +109,7 @@ export const rolesApi = createApi({
       return headers
     },
   }),
-  tagTypes: ['Roles'],
+  tagTypes: ['Roles', 'SuggestedPriority'],
   endpoints: (builder) => ({
     // Get suggested priority
     getSuggestedPriority: builder.query<SuggestedPriorityResponse, void>({
@@ -117,6 +117,7 @@ export const rolesApi = createApi({
         url: 'api/roles/suggest-priority',
         method: 'GET',
       }),
+      providesTags: ['SuggestedPriority'],
     }),
 
     // Get all modules
@@ -152,7 +153,7 @@ export const rolesApi = createApi({
         method: 'POST',
         body: roleData,
       }),
-      invalidatesTags: ['Roles'],
+      invalidatesTags: ['Roles','SuggestedPriority'],
     }),
 
     // Update a role
@@ -171,7 +172,7 @@ export const rolesApi = createApi({
         url: `api/roles/${roleId}`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['Roles'],
+      invalidatesTags: ['Roles', 'SuggestedPriority'], // Also invalidate suggested priority to refetch
     }),
   }),
 })

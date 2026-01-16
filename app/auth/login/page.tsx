@@ -19,11 +19,18 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { theme } = useTheme()
-  const { login } = useAuth()
+  const { login, isAuthenticated, isLoading: authLoading } = useAuth()
   const isDark = theme === 'dark'
   
   // RTK Query mutation
   const [loginMutation, { isLoading, error: loginError }] = useLoginMutation()
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace('/dashboard')
+    }
+  }, [isAuthenticated, authLoading, router])
 
   useEffect(() => {
     // Check if organization data exists
@@ -55,6 +62,9 @@ export default function LoginPage() {
       } else if (messageParam === 'account_active') {
         toast.success('Your account is active! Please sign in with your credentials.')
         setError('Your account is active. Please sign in with your password.')
+      } else if (messageParam === 'registration_completed_pending') {
+        toast.success('Registration completed! Your status is pending.')
+        setError('Your registration has been completed. Your status is pending.')
       }
     }
   }, [searchParams])
@@ -117,11 +127,33 @@ export default function LoginPage() {
         }
       }
     } catch (err: any) {
-      const errorMessage = err?.data?.error || err?.message || 'Login failed. Please try again.'
+      let errorMessage = err?.data?.error || err?.message || 'Login failed. Please try again.'
+      
+      // Format pending approval messages to remove "admin" reference
+      if (errorMessage.toLowerCase().includes('pending approval') || errorMessage.toLowerCase().includes('admin approval')) {
+        errorMessage = 'Your status is pending. Please wait before logging in.'
+      }
+      
       setError(errorMessage)
       toast.error(errorMessage)
       setIsRedirecting(false)
     }
+  }
+
+  // Don't render login form if already authenticated (will redirect)
+  if (authLoading) {
+    return (
+      <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'} flex items-center justify-center`}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-300">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isAuthenticated) {
+    return null // Will redirect to dashboard
   }
 
   return (

@@ -11,7 +11,8 @@ import {
   UserCheck,
   ArrowLeft,
   Eye,
-  EyeOff
+  EyeOff,
+  Shield
 } from 'lucide-react'
 import { 
   Box, 
@@ -33,10 +34,11 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import ThemeToggle from '@/components/ThemeToggle'
-import { useRegisterEmployeeMutation, RegisterEmployeeRequest, RegisterEmployeeRequestWithToken } from '@/redux/api/employeesApi'
+import { useCompleteUserRegistrationMutation, useGetUserByTokenQuery } from '@/redux/api/userApi'
+import { useGetRoleByIdQuery } from '@/redux/api/rolesApi'
 import toast from 'react-hot-toast'
 
-interface EmployeeRegistrationData {
+interface UserRegistrationData {
   firstName: string
   lastName: string
   email: string
@@ -62,15 +64,18 @@ interface EmployeeRegistrationData {
 
 interface URLParams {
   token: string
-  employeeName: string
+  userName: string
   organizationName: string
   adminName: string
-  employeeEmail: string
-  salary: string
+  adminId: string
+  userEmail: string
+  roleId: string
+  userType?: string
+  salary?: string
 }
 
-export default function EmployeeRegisterPage() {
-  const [formData, setFormData] = useState<EmployeeRegistrationData>({
+export default function UserRegisterPage() {
+  const [formData, setFormData] = useState<UserRegistrationData>({
     firstName: '',
     lastName: '',
     email: '',
@@ -94,52 +99,120 @@ export default function EmployeeRegisterPage() {
     confirmPassword: ''
   })
   
-  const [errors, setErrors] = useState<Partial<EmployeeRegistrationData>>({})
+  const [userType, setUserType] = useState<'advocate' | 'intern' | 'non' | ''>('')
+  const [roleName, setRoleName] = useState<string>('')
+  
+  const [errors, setErrors] = useState<Partial<UserRegistrationData>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [success, setSuccess] = useState(false)
   const [urlParams, setUrlParams] = useState<URLParams | null>(null)
-  const [registerEmployee, { isLoading: isRegisterLoading }] = useRegisterEmployeeMutation()
+  const [completeRegistration, { isLoading: isRegisterLoading }] = useCompleteUserRegistrationMutation()
   const [registrationError, setRegistrationError] = useState<string>('')
   const [isAccountActive, setIsAccountActive] = useState(false)
 
   
   const router = useRouter()
   const searchParams = useSearchParams()
+  const token = searchParams.get('token')
   const { theme } = useTheme()
-  const isDark = theme === 'dark' 
+  const isDark = theme === 'dark'
+
+  // Fetch user data by token (optional - for displaying user info)
+  const { 
+    data: userData, 
+    isLoading: isLoadingUser 
+  } = useGetUserByTokenQuery(
+    { token: token || '' }, 
+    { skip: !token }
+  )
+  
+  // Fetch role details by roleId from URL params
+  const { 
+    data: roleData 
+  } = useGetRoleByIdQuery(
+    { roleId: urlParams?.roleId || '' }, 
+    { skip: !urlParams?.roleId }
+  )
 
   // Extract URL parameters on component mount
   useEffect(() => {
-    const token = searchParams.get('token')
-    const employeeName = searchParams.get('employeeName')
+    const tokenParam = searchParams.get('token')
+    const userName = searchParams.get('userName')
     const organizationName = searchParams.get('organizationName')
     const adminName = searchParams.get('adminName')
-    const employeeEmail = searchParams.get('employeeEmail')
-    const salary = searchParams.get('salary')
+    const adminId = searchParams.get('adminId')
+    const userEmail = searchParams.get('userEmail')
+    const roleId = searchParams.get('roleId')
+    const userTypeParam = searchParams.get('userType')
+    const salaryParam = searchParams.get('salary')
 
-    if (token && employeeName && organizationName && adminName && employeeEmail) {
+    if (tokenParam && userName && organizationName && adminName && userEmail) {
       setUrlParams({
-        token,
-        employeeName: decodeURIComponent(employeeName),
+        token: tokenParam,
+        userName: decodeURIComponent(userName),
         organizationName: decodeURIComponent(organizationName),
         adminName: decodeURIComponent(adminName),
-        employeeEmail: decodeURIComponent(employeeEmail),
-        salary: salary ? decodeURIComponent(salary) : ''
+        adminId: adminId ? decodeURIComponent(adminId) : '',
+        userEmail: decodeURIComponent(userEmail),
+        roleId: roleId ? decodeURIComponent(roleId) : '',
+        userType: userTypeParam ? decodeURIComponent(userTypeParam) : undefined,
+        salary: salaryParam ? decodeURIComponent(salaryParam) : undefined
       })
 
+      // Set userType from URL params
+      if (userTypeParam) {
+        const decodedUserType = decodeURIComponent(userTypeParam)
+        if (decodedUserType === 'advocate' || decodedUserType === 'intern' || decodedUserType === 'non') {
+          setUserType(decodedUserType)
+          setFormData(prev => ({ ...prev, employeeType: decodedUserType }))
+        }
+      }
+
       // Pre-fill form data from URL parameters
-      const nameParts = decodeURIComponent(employeeName).split(' ')
+      const nameParts = decodeURIComponent(userName).split(' ')
       setFormData(prev => ({
         ...prev,
         firstName: nameParts[0] || '',
         lastName: nameParts.slice(1).join(' ') || '',
-        email: decodeURIComponent(employeeEmail),
-        salary: salary ? decodeURIComponent(salary) : ''
+        email: decodeURIComponent(userEmail),
+        salary: salaryParam ? decodeURIComponent(salaryParam) : prev.salary
       }))
     }
   }, [searchParams])
+
+  // Also pre-fill from API response if available - prioritize API data
+  useEffect(() => {
+    if (userData?.data?.user) {
+      const user = userData.data.user
+      setFormData(prev => ({
+        ...prev,
+        firstName: user.firstName || prev.firstName,
+        lastName: user.lastName || prev.lastName,
+        email: user.email || prev.email,
+        phone: user.phone || prev.phone
+      }))
+      
+      // Set roleName from API response (priority)
+      if (user.role?.name) {
+        setRoleName(user.role.name)
+      }
+      
+      // Set userType from API response (priority over URL params)
+      if (user.userType && (user.userType === 'advocate' || user.userType === 'intern' || user.userType === 'non')) {
+        setUserType(user.userType)
+        setFormData(prev => ({ ...prev, employeeType: user.userType || '' }))
+      }
+    }
+  }, [userData])
+  
+  // Fallback: Set role name from role API if not available from userData
+  useEffect(() => {
+    if (!roleName && roleData?.data?.role?.name) {
+      setRoleName(roleData.data.role.name)
+    }
+  }, [roleData, roleName])
 
   // Calculate age when date of birth changes
   useEffect(() => {
@@ -149,7 +222,7 @@ export default function EmployeeRegisterPage() {
     }
   }, [formData.dateOfBirth])
 
-  const handleInputChange = (field: keyof EmployeeRegistrationData, value: string) => {
+  const handleInputChange = (field: keyof UserRegistrationData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     // Clear error when user starts typing
     if (errors[field]) {
@@ -291,45 +364,19 @@ export default function EmployeeRegisterPage() {
     const num = parseFloat(salary)
     if (isNaN(num)) return ''
     
-    // Helper function to format number with max 3 digits total
-    const formatWithMaxDigits = (value: number, unit: string): string => {
-      // If value >= 1000, round to fit in 3 digits (e.g., 78789 -> 788)
-      if (value >= 1000) {
-        // Round to nearest value that fits in 3 digits
-        return `${Math.round(value)} ${unit}`
-      } else if (value >= 100) {
-        // 100-999: show as whole number (3 digits max)
-        return `${Math.round(value)} ${unit}`
-      } else if (value >= 10) {
-        // 10-99: show with 1 decimal (e.g., "78.9") = 4 chars total but only 3 significant digits
-        // Or show as whole if it's close to whole number
-        const rounded = Math.round(value)
-        if (Math.abs(value - rounded) < 0.1) {
-          return `${rounded} ${unit}`
-        }
-        return `${value.toFixed(1)} ${unit}`
-      } else {
-        // 1-9: show with 1 decimal (e.g., "7.8")
-        return `${value.toFixed(1)} ${unit}`
-      }
-    }
-    
     if (num >= 10000000) { // 1 crore
-      const cr = num / 10000000
-      return formatWithMaxDigits(cr, 'Cr')
+      return `${(num / 10000000).toFixed(1)} Cr`
     } else if (num >= 100000) { // 1 lakh
-      const lakh = num / 100000
-      return formatWithMaxDigits(lakh, 'L')
+      return `${(num / 100000).toFixed(1)} L`
     } else if (num >= 1000) { // 1 thousand
-      const k = num / 1000
-      return formatWithMaxDigits(k, 'K')
+      return `${(num / 1000).toFixed(1)} K`
     } else {
       return `${num.toFixed(0)}`
     }
   }
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<EmployeeRegistrationData> = {}
+    const newErrors: Partial<UserRegistrationData> = {}
     
     // Required fields validation
     if (!formData.firstName.trim()) newErrors.firstName = 'First name is required'
@@ -352,8 +399,9 @@ export default function EmployeeRegisterPage() {
     } else if (!/^\d{12}$/.test(formData.aadharCard.replace(/\s/g, ''))) {
       newErrors.aadharCard = 'Aadhar Card Number must be exactly 12 digits'
     }
-    if (!formData.employeeType) newErrors.employeeType = 'Employee type is required'
-    if (formData.employeeType === 'advocate') {
+    
+    // Validate userType based fields (only if userType is set from URL params)
+    if (userType === 'advocate') {
       if (!formData.advocateLicense.trim()) {
         newErrors.advocateLicense = 'Advocate License Number is required'
       } else {
@@ -395,14 +443,17 @@ export default function EmployeeRegisterPage() {
         }
       }
     }
-    if (formData.employeeType === 'intern') {
+    if (userType === 'intern') {
       if (!formData.internYear.trim()) {
         newErrors.internYear = 'Intern year is required'
       }
     }
     if (!formData.department.trim()) newErrors.department = 'Department is required'
     if (!formData.position.trim()) newErrors.position = 'Position is required'
-    if (!formData.salary.trim()) newErrors.salary = 'Salary is required'
+    // Only validate salary if it's not provided from URL params
+    if (!urlParams?.salary && !formData.salary.trim()) {
+      newErrors.salary = 'Salary is required'
+    }
     if (!formData.startDate) newErrors.startDate = 'Start date is required'
     if (!formData.emergencyContactName.trim()) newErrors.emergencyContactName = 'Emergency contact name is required'
     if (!formData.emergencyContactPhone.trim()) {
@@ -449,112 +500,96 @@ export default function EmployeeRegisterPage() {
       return
     }
     
+    if (!token) {
+      toast.error('Invalid invitation token')
+      return
+    }
+    
+    // Clear all authentication data from localStorage BEFORE making the API call
+    // This ensures no existing session data interferes with the registration
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('token')
+      localStorage.removeItem('userData')
+      localStorage.removeItem('organizationData')
+      // Clear any other potential auth-related keys
+      localStorage.removeItem('user')
+      localStorage.removeItem('organization')
+      localStorage.removeItem('role')
+      localStorage.removeItem('permissions')
+    }
+    
     setIsSubmitting(true)
     setSuccess(false)
     setRegistrationError('')
     setIsAccountActive(false)
     
     try {
-      // Prepare API payload - ensure all fields are included
-      const payload: RegisterEmployeeRequest = {
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        email: formData.email.trim(),
-        phone: formData.phone.trim(),
-        address: formData.address.trim(),
-        gender: formData.gender,
-        dateOfBirth: formData.dateOfBirth,
-        age: parseInt(formData.age) || 0,
-        aadharCardNumber: formData.aadharCard.replace(/\s/g, ''), // Remove spaces before sending to backend
-        employeeType: formData.employeeType,
-        salary: parseFloat(formData.salary) || 0,
-        department: formData.department.trim(),
-        position: formData.position.trim(),
-        startDate: formData.startDate,
-        emergencyContactName: formData.emergencyContactName.trim(),
-        emergencyContactPhone: formData.emergencyContactPhone.trim(),
-        emergencyContactRelation: formData.emergencyContactRelation.trim(),
-        password: formData.password,
-        confirmPassword: formData.confirmPassword
-      }
-      
-      // Add conditional fields
-      if (formData.employeeType === 'advocate' && formData.advocateLicense.trim()) {
-        payload.advocateLicenseNumber = formData.advocateLicense.trim()
-      }
-      
-      if (formData.employeeType === 'intern' && formData.internYear) {
-        payload.internYear = parseInt(formData.internYear) || 0
-      }
-      
-      // Validate that all required fields are present
-      const requiredFields = [
-        'firstName', 'lastName', 'email', 'phone', 'address', 'gender',
-        'dateOfBirth', 'aadharCardNumber', 'employeeType', 'salary',
-        'department', 'position', 'startDate', 'emergencyContactName',
-        'emergencyContactPhone', 'emergencyContactRelation', 'password', 'confirmPassword'
-      ]
-      
-      const missingFields = requiredFields.filter(field => !payload[field as keyof RegisterEmployeeRequest])
-      
-      if (missingFields.length > 0) {
-        console.error('Missing required fields:', missingFields)
-        toast.error(`Missing required fields: ${missingFields.join(', ')}`)
-        setIsSubmitting(false)
-        return
-      }
-      
-      console.log('Registering employee - Full payload:', JSON.stringify(payload, null, 2))
-      console.log('Payload keys:', Object.keys(payload))
-      console.log('Payload field count:', Object.keys(payload).length)
-      
-      // Prepare the API call with token in Authorization header
-      const apiPayload: RegisterEmployeeRequestWithToken = {
-        data: payload,
-        token: urlParams?.token || ''
-      }
-      
-      console.log('API Payload structure:', JSON.stringify(apiPayload, null, 2))
-      console.log('Data object keys:', Object.keys(apiPayload.data))
-      
-      const response = await registerEmployee(apiPayload).unwrap()
+      // User registration API only accepts password and confirmPassword
+      const response = await completeRegistration({
+        token,
+        password: formData.password.trim(),
+        confirmPassword: formData.confirmPassword.trim(),
+      }).unwrap()
       
       console.log('Registration response:', response)
       
       setSuccess(true)
       
+      const userEmail = urlParams?.userEmail || formData.email
+      const encodedEmail = userEmail ? encodeURIComponent(userEmail) : ''
+      
+      toast.success(response.message || 'Registration completed successfully! Your account is pending approval. You will be notified once approved.')
+      
+      // Clear all authentication data from localStorage again after successful registration
+      if (typeof window !== 'undefined') {
+        localStorage.clear() // Clear all localStorage
+        // Also explicitly remove common keys
+        localStorage.removeItem('authToken')
+        localStorage.removeItem('token')
+        localStorage.removeItem('userData')
+        localStorage.removeItem('organizationData')
+        localStorage.removeItem('user')
+        localStorage.removeItem('organization')
+        localStorage.removeItem('role')
+        localStorage.removeItem('permissions')
+      }
+      
       // Reset form after success
+      setFormData({
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        dateOfBirth: '',
+        gender: '',
+        address: '',
+        aadharCard: '',
+        employeeType: '',
+        advocateLicense: '',
+        internYear: '',
+        age: '',
+        department: '',
+        position: '',
+        salary: '',
+        startDate: '',
+        emergencyContactName: '',
+        emergencyContactPhone: '',
+        emergencyContactRelation: '',
+        password: '',
+        confirmPassword: ''
+      })
+      setErrors({})
+      setSuccess(false)
+      
+      // Do a hard refresh and redirect to login page after a short delay
       setTimeout(() => {
-        setFormData({
-          firstName: '',
-          lastName: '',
-          email: '',
-          phone: '',
-          dateOfBirth: '',
-          gender: '',
-          address: '',
-          aadharCard: '',
-          employeeType: '',
-          advocateLicense: '',
-          internYear: '',
-          age: '',
-          department: '',
-          position: '',
-          salary: '',
-          startDate: '',
-          emergencyContactName: '',
-          emergencyContactPhone: '',
-          emergencyContactRelation: '',
-          password: '',
-          confirmPassword: ''
-        })
-        setErrors({})
-        setSuccess(false)
-        router.push('/auth/login')
-      }, 2000)
+        // Use window.location.href for a full page reload (hard refresh) to login page
+        window.location.href = `/auth/login?email=${encodedEmail}&message=registration_completed_pending`
+      }, 1500)
       
     } catch (error: any) {
-      console.error('Error registering employee:', error)
+      console.error('Error registering user:', error)
       
       // Handle API errors
       let errorMessage = 'Registration failed. Please try again.'
@@ -599,6 +634,20 @@ export default function EmployeeRegisterPage() {
     '& .MuiButton-startIcon svg': { display: 'block' }
   } as const
 
+  // Show loading state
+  if (isLoadingUser) {
+    return (
+      <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'} flex items-center justify-center p-4`}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+            Loading invitation details...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'} flex items-center justify-center p-2 sm:p-4`}>
       {/* Theme Toggle */}
@@ -613,7 +662,7 @@ export default function EmployeeRegisterPage() {
             <UserCheck className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-400 dark:text-gray-900" />
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Employee Registration
+            User Registration
           </h2>
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 px-4 mb-4">
             Join our team and get started with your new role
@@ -624,7 +673,7 @@ export default function EmployeeRegisterPage() {
         {success && (
           <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
             <p className="text-xs sm:text-sm text-green-600 dark:text-green-400">
-              Employee registered successfully! Redirecting to login...
+              User registered successfully! Redirecting to login...
             </p>
           </div>
         )}
@@ -677,7 +726,7 @@ export default function EmployeeRegisterPage() {
               <div className="mt-3 flex justify-center">
                 <button
                   onClick={() => {
-                    const email = formData.email
+                    const email = formData.email || urlParams?.userEmail || ''
                     const encodedEmail = encodeURIComponent(email)
                     router.push(`/auth/login?email=${encodedEmail}&message=account_active`)
                   }}
@@ -862,26 +911,45 @@ export default function EmployeeRegisterPage() {
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth error={!!errors.employeeType} disabled={isSubmitting} required>
-                    <InputLabel>Employee Type</InputLabel>
-                    <Select
-                      value={formData.employeeType}
-                      label="Employee Type"
-                      onChange={(e) => handleInputChange('employeeType', e.target.value)}
-                    >
-                      <MenuItem value="advocate">Advocate</MenuItem>
-                      <MenuItem value="intern">Intern</MenuItem>
-                    </Select>
-                    {errors.employeeType && (
-                      <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
-                        {errors.employeeType}
-                      </Typography>
-                    )}
-                  </FormControl>
-                </Grid>
+                {/* User Type Display (from URL params) */}
+                {userType && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="User Type"
+                      value={userType.charAt(0).toUpperCase() + userType.slice(1)}
+                      disabled
+                      helperText="User type from invitation"
+                      InputProps={{
+                        readOnly: true,
+                      }}
+                    />
+                  </Grid>
+                )}
+                
+                {/* Role Name Display */}
+                {roleName && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Role"
+                      value={roleName}
+                      disabled
+                      helperText="Your assigned role"
+                      InputProps={{
+                        readOnly: true,
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Shield size={20} />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                  </Grid>
+                )}
 
-                {formData.employeeType === 'advocate' && (
+                {/* Advocate License - Show only if userType is 'advocate' */}
+                {userType === 'advocate' && (
                   <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
@@ -898,7 +966,8 @@ export default function EmployeeRegisterPage() {
                   </Grid>
                 )}
 
-                {formData.employeeType === 'intern' && (
+                {/* Intern Year - Show only if userType is 'intern' */}
+                {userType === 'intern' && (
                   <Grid item xs={12} sm={6}>
                     <FormControl fullWidth error={!!errors.internYear} disabled={isSubmitting} required>
                       <InputLabel>Intern Year</InputLabel>

@@ -21,10 +21,14 @@ import {
   AlertCircle,
   Info,
   Clock,
-  UserCog
+  UserCog,
+  Package,
+  KeyRound,
+  FolderOpen
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { APP_BACKEND_URL } from '@/config/env'
 import ThemeToggle from './ThemeToggle'
 import LogoutModal from './LogoutModal'
 
@@ -32,15 +36,41 @@ interface LayoutProps {
   children: React.ReactNode
 }
 
-const navigation = [
+interface Module {
+  _id: string
+  name: string
+  displayName: string
+  description: string
+}
+
+interface ModulesResponse {
+  data: Module[]
+}
+
+// Map module names to routes and icons (using lowercase module names from backend)
+const moduleRouteMap: Record<string, { href: string; icon: any }> = {
+  'auth': { href: '/auth/login', icon: KeyRound },
+  'user': { href: '/users', icon: Users },
+  'users': { href: '/users', icon: Users },
+  'employee': { href: '/employees', icon: UserPlus },
+  'employees': { href: '/employees', icon: UserPlus },
+  'role': { href: '/roles', icon: UserCog },
+  'roles': { href: '/roles', icon: UserCog },
+  'client': { href: '/clients', icon: Building },
+  'clients': { href: '/clients', icon: Building },
+  'case': { href: '/cases', icon: FolderOpen },
+  'cases': { href: '/cases', icon: FolderOpen },
+  'report': { href: '/reports', icon: FileText },
+  'reports': { href: '/reports', icon: FileText },
+  'analytics': { href: '/analytics', icon: BarChart3 },
+}
+
+// Static navigation items (always shown)
+const staticTopNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Users', href: '/users', icon: Users },
-  { name: 'Client List', href: '/clients', icon: Building },
-  { name: 'Employee List', href: '/employees', icon: UserPlus },
-  { name: 'Roles', href: '/roles', icon: UserCog },
-  { name: 'Permissions', href: '/permissions', icon: UserCheck },
-  { name: 'Reports', href: '/reports', icon: FileText },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+]
+
+const staticBottomNavigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -48,11 +78,14 @@ export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [modules, setModules] = useState<Module[]>([])
+  const [modulesLoading, setModulesLoading] = useState(true)
   const notificationRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const pathname = usePathname()
   const { theme } = useTheme()
   const { logout, user } = useAuth()
+  
   // Helper to check if role is admin or super-admin
   const isAdminRole = (role: string | { name: string } | undefined): boolean => {
     if (!role) return false
@@ -60,12 +93,94 @@ export default function Layout({ children }: LayoutProps) {
     return roleName === 'admin' || roleName === 'super-admin' || roleName === 'ADMIN' || roleName === 'SUPER_ADMIN'
   }
   const isAdmin = isAdminRole(user?.role)
-  // Global route guard for employee listing and roles: only admins can access
+  
+  // Fetch modules from API
   useEffect(() => {
-    if ((pathname === '/employees' || pathname === '/roles') && !isAdmin) {
-      router.replace('/dashboard')
+    const fetchModules = async () => {
+      try {
+        setModulesLoading(true)
+        // Remove trailing slash if present
+        const backendUrl = APP_BACKEND_URL.replace(/\/$/, '')
+        const response = await fetch(`${backendUrl}/api/modules`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+        if (response.ok) {
+          const responseData: ModulesResponse = await response.json()
+          // Get modules from data array
+          const modulesData = responseData.data || []
+          setModules(modulesData)
+        } else {
+          console.error('Failed to fetch modules:', response.statusText)
+        }
+      } catch (error) {
+        console.error('Failed to fetch modules:', error)
+      } finally {
+        setModulesLoading(false)
+      }
     }
-  }, [pathname, isAdmin, router])
+    
+    fetchModules()
+  }, [])
+  
+  // Note: We don't block routes here - let API calls determine permissions
+  // Navigation items are hidden based on permissions, but users can still
+  // navigate to pages. API will return 403 if they don't have access.
+  
+  // Helper function to check if user has read permission for a module
+  const hasModuleReadPermission = (moduleName: string): boolean => {
+    if (!user || !user.role) return false
+    
+    // If role is just a string, only admins have access (legacy behavior)
+    if (typeof user.role === 'string') {
+      return isAdmin
+    }
+    
+    // Check if user's role has read permission for this module
+    const rolePermissions = user.role.permissions || []
+    const moduleKey = moduleName.toLowerCase()
+    
+    // Find permission for this module
+    const modulePermission = rolePermissions.find(p => p.module.toLowerCase() === moduleKey)
+    
+    // User needs at least 'read' action to see the module in navigation
+    return modulePermission?.actions.includes('read') || false
+  }
+
+  // Build dynamic navigation from modules
+  const dynamicNavigation = modules
+    .filter(module => {
+      // Use lowercase name to match moduleRouteMap keys
+      const moduleKey = module.name.toLowerCase()
+      const routeInfo = moduleRouteMap[moduleKey]
+      if (!routeInfo) return false
+      
+      // Check if user has read permission for this module
+      if (!hasModuleReadPermission(module.name)) {
+        return false
+      }
+      
+      return true
+    })
+    .map(module => {
+      // Use lowercase name to match moduleRouteMap keys
+      const moduleKey = module.name.toLowerCase()
+      const routeInfo = moduleRouteMap[moduleKey] || { href: `/modules/${module.name}`, icon: Package }
+      return {
+        name: module.displayName, // Use displayName for sidebar
+        href: routeInfo.href,
+        icon: routeInfo.icon,
+        moduleId: module._id
+      }
+    })
+  
+  // Separate navigation: top items (Dashboard) and dynamic modules
+  const topNavigation = [
+    ...staticTopNavigation,
+    ...dynamicNavigation
+  ]
 
   const isDark = theme === 'dark'
 
@@ -218,13 +333,53 @@ export default function Layout({ children }: LayoutProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="mt-4 sm:mt-6 px-2 sm:px-3 flex-1">
-          <div className="space-y-1">
-            {(navigation.filter(item => {
-              // Hide Employee List and Roles for non-admin users
-              if ((item.href === '/employees' || item.href === '/roles') && !isAdmin) return false
-              return true
-            })).map((item) => {
+        <nav className="mt-4 sm:mt-6 px-2 sm:px-3 flex-1 overflow-y-auto flex flex-col">
+          {/* Top Navigation: Dashboard and Dynamic Modules */}
+          <div className="space-y-1 flex-shrink-0">
+            {modulesLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-yellow-500"></div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Loading modules...</p>
+                </div>
+              </div>
+            ) : topNavigation.length > 0 ? (
+              topNavigation.map((item) => {
+                const Icon = item.icon
+                return (
+                  <a
+                    key={item.name}
+                    href={item.href}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      router.push(item.href)
+                      setSidebarOpen(false)
+                    }}
+                    className={`group flex items-center px-2 sm:px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                      isActive(item.href)
+                        ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border-r-2 border-yellow-500'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Icon className={`mr-2 sm:mr-3 h-4 w-4 sm:h-5 sm:w-5 ${
+                      isActive(item.href) ? 'text-yellow-500' : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400'
+                    }`} />
+                    <span className="truncate">{item.name}</span>
+                  </a>
+                )
+              })
+            ) : (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                  No modules available
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Navigation: Settings (pushed to bottom, no border) */}
+          <div className="mt-auto pt-4 space-y-1 flex-shrink-0">
+            {staticBottomNavigation.map((item) => {
               const Icon = item.icon
               return (
                 <a

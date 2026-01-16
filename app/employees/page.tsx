@@ -418,16 +418,42 @@ export default function EmployeesPage() {
 
   const getEditSalaryUnit = (salary: string) => {
     if (!salary || salary === '') return ''
-    
+
     const num = parseFloat(salary)
     if (isNaN(num)) return ''
-    
+
+    // Helper function to format number with max 3 digits total
+    const formatWithMaxDigits = (value: number, unit: string): string => {
+      // If value >= 1000, round to fit in 3 digits (e.g., 78789 -> 788)
+      if (value >= 1000) {
+        // Round to nearest value that fits in 3 digits
+        return `${Math.round(value)} ${unit}`
+      } else if (value >= 100) {
+        // 100-999: show as whole number (3 digits max)
+        return `${Math.round(value)} ${unit}`
+      } else if (value >= 10) {
+        // 10-99: show with 1 decimal (e.g., "78.9") = 4 chars total but only 3 significant digits
+        // Or show as whole if it's close to whole number
+        const rounded = Math.round(value)
+        if (Math.abs(value - rounded) < 0.1) {
+          return `${rounded} ${unit}`
+        }
+        return `${value.toFixed(1)} ${unit}`
+      } else {
+        // 1-9: show with 1 decimal (e.g., "7.8")
+        return `${value.toFixed(1)} ${unit}`
+      }
+    }
+
     if (num >= 10000000) { // 1 crore
-      return `${(num / 10000000).toFixed(1)} Cr`
+      const cr = num / 10000000
+      return formatWithMaxDigits(cr, 'Cr')
     } else if (num >= 100000) { // 1 lakh
-      return `${(num / 100000).toFixed(1)} L`
+      const lakh = num / 100000
+      return formatWithMaxDigits(lakh, 'L')
     } else if (num >= 1000) { // 1 thousand
-      return `${(num / 1000).toFixed(1)} K`
+      const k = num / 1000
+      return formatWithMaxDigits(k, 'K')
     } else {
       return `${num.toFixed(0)}`
     }
@@ -564,12 +590,38 @@ export default function EmployeesPage() {
     const num = parseFloat(salary)
     if (isNaN(num)) return ''
     
+    // Helper function to format number with max 3 digits total
+    const formatWithMaxDigits = (value: number, unit: string): string => {
+      // If value >= 1000, round to fit in 3 digits (e.g., 78789 -> 788)
+      if (value >= 1000) {
+        // Round to nearest value that fits in 3 digits
+        return `${Math.round(value)} ${unit}`
+      } else if (value >= 100) {
+        // 100-999: show as whole number (3 digits max)
+        return `${Math.round(value)} ${unit}`
+      } else if (value >= 10) {
+        // 10-99: show with 1 decimal (e.g., "78.9") = 4 chars total but only 3 significant digits
+        // Or show as whole if it's close to whole number
+        const rounded = Math.round(value)
+        if (Math.abs(value - rounded) < 0.1) {
+          return `${rounded} ${unit}`
+        }
+        return `${value.toFixed(1)} ${unit}`
+      } else {
+        // 1-9: show with 1 decimal (e.g., "7.8")
+        return `${value.toFixed(1)} ${unit}`
+      }
+    }
+    
     if (num >= 10000000) { // 1 crore
-      return `${(num / 10000000).toFixed(1)} Cr`
+      const cr = num / 10000000
+      return formatWithMaxDigits(cr, 'Cr')
     } else if (num >= 100000) { // 1 lakh
-      return `${(num / 100000).toFixed(1)} L`
+      const lakh = num / 100000
+      return formatWithMaxDigits(lakh, 'L')
     } else if (num >= 1000) { // 1 thousand
-      return `${(num / 1000).toFixed(1)} K`
+      const k = num / 1000
+      return formatWithMaxDigits(k, 'K')
     } else {
       return `${num.toFixed(0)}`
     }

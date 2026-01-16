@@ -46,33 +46,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check for existing auth token on mount
     const checkAuth = () => {
       try {
-        const token = localStorage.getItem('authToken')
+        const token = localStorage.getItem('authToken') || localStorage.getItem('token')
         const userData = localStorage.getItem('userData')
-        const organizationData = localStorage.getItem('organizationData')
         
-        if (token && userData && organizationData) {
+        // Only require token and userData - organizationData is optional
+        if (token && userData) {
           try {
             const parsedUser = JSON.parse(userData)
-            setUser(parsedUser)
+            
+            // Validate token format (basic check)
+            // In production, you might want to decode and check expiration
+            if (token && token.length > 0) {
+              setUser(parsedUser)
+            } else {
+              // Invalid token, clear everything
+              localStorage.removeItem('authToken')
+              localStorage.removeItem('token')
+              localStorage.removeItem('userData')
+              localStorage.removeItem('organizationData')
+              setUser(null)
+            }
           } catch (error) {
             // Invalid user data, clear it
+            console.error('Error parsing user data:', error)
             localStorage.removeItem('authToken')
+            localStorage.removeItem('token')
             localStorage.removeItem('userData')
             localStorage.removeItem('organizationData')
+            setUser(null)
           }
+        } else {
+          // No valid auth data found
+          setUser(null)
         }
       } catch (error) {
         // localStorage not available (SSR or disabled)
-        console.log('localStorage not available')
+        console.log('localStorage not available:', error)
+        setUser(null)
       } finally {
         setIsLoading(false)
       }
     }
 
-    // Add a small delay to ensure proper hydration
-    const timeout = setTimeout(checkAuth, 100)
-    
-    return () => clearTimeout(timeout)
+    // Run immediately - don't delay as it causes redirect issues
+    checkAuth()
   }, [])
 
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -158,7 +175,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('localStorage not available during logout')
     }
     setUser(null)
-    router.push('/auth/login')
+    // Only redirect if not already on login page
+    if (window.location.pathname !== '/auth/login') {
+      router.push('/auth/login')
+    }
   }
 
   const value = {

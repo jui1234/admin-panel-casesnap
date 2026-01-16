@@ -21,6 +21,7 @@ export default function SetupGuard({ children }: SetupGuardProps) {
       const publicPaths = [ 
         '/', // Home page
         '/employees/register', // Employee registration
+        '/users/register', // User registration (invitation-based)
         '/auth/login', // Login page
         '/get-started', // Get started page
         '/setup', // Setup page
@@ -42,9 +43,9 @@ export default function SetupGuard({ children }: SetupGuardProps) {
       const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
       const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path))
       
-      // Special handling for employee registration - always allow access
-      if (pathname.startsWith('/employees/register')) {
-        return // Allow access to employee registration without any redirects
+      // Special handling for registration pages - always allow access (they use invitation tokens)
+      if (pathname.startsWith('/employees/register') || pathname.startsWith('/users/register')) {
+        return // Allow access to registration pages without any redirects
       }
       
       // Only redirect if user is not authenticated and trying to access a protected path

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { 
   Plus, 
   Search, 
@@ -95,12 +96,42 @@ export default function RolesPage() {
 
   const roles = rolesData?.data || []
   const suggestedPriority = suggestedPriorityData?.data?.suggestedPriority || 2
-  // Filter out "role" and "user" modules from display
-  const allModules = modulesData?.data || []
-  const modules = allModules.filter(module => {
-    const moduleName = module.name.toLowerCase()
-    return moduleName !== 'role' && moduleName !== 'user'
-  })
+  // Show all modules including "role" and "user"
+  const modules = modulesData?.data || []
+
+  // Get current user's role priority
+  const getCurrentUserPriority = (): number | null => {
+    if (!user || !user.role) return null
+    
+    // If role is a string (legacy), try to find it in roles list
+    if (typeof user.role === 'string') {
+      const foundRole = roles.find(r => r._id === user.role || r.id === user.role || r.name === user.role)
+      return foundRole?.priority || null
+    }
+    
+    // If role is an object, use its priority
+    return user.role.priority || null
+  }
+
+  const currentUserPriority = getCurrentUserPriority()
+
+  // Check if user can edit a role (can only edit roles with lower priority)
+  const canEditRole = (role: Role): boolean => {
+    if (!currentUserPriority) return false
+    // User can only edit roles with priority greater than their own (lower priority number = higher authority)
+    // So if user has priority 3, they can edit roles with priority 4, 5, etc. (higher numbers)
+    // They cannot edit roles with priority 1, 2, or 3 (equal or higher authority)
+    return role.priority > currentUserPriority
+  }
+
+  // Check if user can delete a role (can only delete roles with lower priority)
+  const canDeleteRole = (role: Role): boolean => {
+    if (!currentUserPriority) return false
+    // User can only delete roles with priority greater than their own (lower priority number = higher authority)
+    // So if user has priority 3, they can delete roles with priority 4, 5, etc. (higher numbers)
+    // They cannot delete roles with priority 1, 2, or 3 (equal or higher authority)
+    return role.priority > currentUserPriority
+  }
 
   // Initialize form permissions when modules are loaded
   useEffect(() => {
@@ -121,6 +152,23 @@ export default function RolesPage() {
     console.log('Roles page mounted, calling API...')
     refetch()
   }, [refetch])
+
+  const router = useRouter()
+
+  // Handle 403 errors - redirect to access denied page ONLY after API call completes
+  useEffect(() => {
+    // Only check for 403 errors after loading is complete (API call finished)
+    if (!isLoadingRoles && rolesError && 'status' in rolesError) {
+      const status = rolesError.status
+      const errorMessage = (rolesError as any)?.data?.error || (rolesError as any)?.data?.message || ''
+      
+      // Check for 403 Forbidden error - only redirect if API actually returned 403
+      if (status === 403 || errorMessage.toLowerCase().includes('permission') || errorMessage.toLowerCase().includes('access denied')) {
+        router.push('/403')
+        return
+      }
+    }
+  }, [rolesError, isLoadingRoles, router])
 
   // Debug: Log API response
   useEffect(() => {
@@ -174,6 +222,12 @@ export default function RolesPage() {
   }
 
   const handleOpenEditDialog = (role: Role) => {
+    // Check if user can edit this role before opening dialog
+    if (!canEditRole(role)) {
+      toast.error("You don't have permission to edit this role")
+      return
+    }
+    
     setSelectedRole(role)
     setFormData({
       name: role.name,
@@ -193,6 +247,12 @@ export default function RolesPage() {
   }
 
   const handleOpenDeleteDialog = (role: Role) => {
+    // Check if user can delete this role before opening dialog
+    if (!canDeleteRole(role)) {
+      toast.error("You don't have permission to delete this role")
+      return
+    }
+    
     setSelectedRole(role)
     setOpenDeleteDialog(true)
   }
@@ -260,12 +320,36 @@ export default function RolesPage() {
       resetForm()
       refetch()
     } catch (error: any) {
-      toast.error(error?.data?.error || error?.message || 'Failed to create role')
+      const status = error?.status
+      const errorMessage = error?.data?.error || error?.data?.message || error?.message || 'Failed to create role'
+      
+      // For 403 errors, show toast (button-level action)
+      if (status === 403 || errorMessage.toLowerCase().includes('permission')) {
+        toast.error('You do not have permission to perform this action')
+      } else {
+        toast.error(errorMessage)
+      }
+    }
+  }
+
+  const handleRoleNameChange = (value: string) => {
+    // Capitalize first letter
+    if (value.length > 0) {
+      const capitalized = value.charAt(0).toUpperCase() + value.slice(1)
+      setFormData({ ...formData, name: capitalized })
+    } else {
+      setFormData({ ...formData, name: value })
     }
   }
 
   const handleUpdateRole = async () => {
     if (!selectedRole) return
+
+    // Check if user can edit this role
+    if (!canEditRole(selectedRole)) {
+      toast.error("You don't have permission to edit this role")
+      return
+    }
 
     if (!formData.name.trim()) {
       toast.error('Role name is required')
@@ -274,6 +358,12 @@ export default function RolesPage() {
 
     if (formData.priority < 1) {
       toast.error('Priority must be a positive number')
+      return
+    }
+
+    // Prevent changing priority to a value that user can't edit
+    if (formData.priority <= (currentUserPriority || 0)) {
+      toast.error("You can't set a priority level equal to or higher than your own role")
       return
     }
 
@@ -291,12 +381,26 @@ export default function RolesPage() {
       setSelectedRole(null)
       refetch()
     } catch (error: any) {
-      toast.error(error?.data?.error || error?.message || 'Failed to update role')
+      const status = error?.status
+      const errorMessage = error?.data?.error || error?.data?.message || error?.message || 'Failed to update role'
+      
+      // For 403 errors, show toast (button-level action)
+      if (status === 403 || errorMessage.toLowerCase().includes('permission')) {
+        toast.error('You do not have permission to perform this action')
+      } else {
+        toast.error(errorMessage)
+      }
     }
   }
 
   const handleDeleteRole = async () => {
     if (!selectedRole) return
+
+    // Check if user can delete this role
+    if (!canDeleteRole(selectedRole)) {
+      toast.error("You don't have permission to delete this role")
+      return
+    }
 
     try {
       await deleteRole({ roleId: selectedRole._id }).unwrap()
@@ -305,7 +409,15 @@ export default function RolesPage() {
       setSelectedRole(null)
       refetch()
     } catch (error: any) {
-      toast.error(error?.data?.error || error?.message || 'Failed to delete role')
+      const status = error?.status
+      const errorMessage = error?.data?.error || error?.data?.message || error?.message || 'Failed to delete role'
+      
+      // For 403 errors, show toast (button-level action)
+      if (status === 403 || errorMessage.toLowerCase().includes('permission')) {
+        toast.error('You do not have permission to perform this action')
+      } else {
+        toast.error(errorMessage)
+      }
     }
   }
 
@@ -508,24 +620,53 @@ export default function RolesPage() {
                     </Box>
                     {!role.isSystemRole && (
                       <Box>
-                        <Tooltip title="Edit Role">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleOpenEditDialog(role)}
-                            sx={{ mr: 0.5 }}
-                          >
-                            <EditIcon size={18} />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete Role">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => handleOpenDeleteDialog(role)}
-                          >
-                            <DeleteIcon size={18} />
-                          </IconButton>
-                        </Tooltip>
+                        {canEditRole(role) ? (
+                          <Tooltip title="Edit Role">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleOpenEditDialog(role)}
+                              sx={{ mr: 0.5 }}
+                            >
+                              <EditIcon size={18} />
+                            </IconButton>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title="You don't have permission to edit this role">
+                            <span>
+                              <IconButton
+                                size="small"
+                                disabled
+                                sx={{ mr: 0.5, opacity: 0.5 }}
+                              >
+                                <EditIcon size={18} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        )}
+                        {canDeleteRole(role) ? (
+                          <Tooltip title="Delete Role">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleOpenDeleteDialog(role)}
+                            >
+                              <DeleteIcon size={18} />
+                            </IconButton>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title="You don't have permission to delete this role">
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                disabled
+                                sx={{ opacity: 0.5 }}
+                              >
+                                <DeleteIcon size={18} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        )}
                       </Box>
                     )}
                   </Box>
@@ -605,7 +746,7 @@ export default function RolesPage() {
                 fullWidth
                 label="Role Name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => handleRoleNameChange(e.target.value)}
                 required
                 sx={{ mb: 2 }}
               />
@@ -650,7 +791,11 @@ export default function RolesPage() {
                 </Box>
               </Box>
 
-              <FormControl component="fieldset" fullWidth>
+              <FormControl 
+                component="fieldset" 
+                fullWidth
+                disabled={selectedRole ? !canEditRole(selectedRole) : false}
+              >
                 <FormLabel component="legend">Permissions</FormLabel>
                 <FormGroup>
                   {formData.permissions.map((permission) => (
@@ -727,12 +872,19 @@ export default function RolesPage() {
           </DialogTitle>
           <DialogContent>
             <Box sx={{ pt: 2 }}>
+              {selectedRole && !canEditRole(selectedRole) && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  You don't have permission to edit this role. This role has higher authority than yours.
+                </Alert>
+              )}
+
               <TextField
                 fullWidth
                 label="Role Name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => handleRoleNameChange(e.target.value)}
                 required
+                disabled={selectedRole ? !canEditRole(selectedRole) : false}
                 sx={{ mb: 2 }}
               />
 
@@ -743,6 +895,7 @@ export default function RolesPage() {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 multiline
                 rows={3}
+                disabled={selectedRole ? !canEditRole(selectedRole) : false}
                 sx={{ mb: 2 }}
               />
 
@@ -751,12 +904,21 @@ export default function RolesPage() {
                 type="number"
                 value={formData.priority}
                 onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 1 })}
-                inputProps={{ min: 1 }}
+                inputProps={{ 
+                  min: currentUserPriority ? currentUserPriority + 1 : 1,
+                  max: 999
+                }}
+                disabled={selectedRole ? !canEditRole(selectedRole) : false}
+                helperText={currentUserPriority ? `Must be a lower authority level than ${currentUserPriority}` : undefined}
                 sx={{ width: 150, mb: 2 }}
                 required
               />
 
-              <FormControl component="fieldset" fullWidth>
+              <FormControl 
+                component="fieldset" 
+                fullWidth
+                disabled={selectedRole ? !canEditRole(selectedRole) : false}
+              >
                 <FormLabel component="legend">Permissions</FormLabel>
                 <FormGroup>
                   {isLoadingModules ? (
@@ -777,6 +939,7 @@ export default function RolesPage() {
                               <Checkbox
                                 checked={permission.selected}
                                 onChange={() => handleModuleToggle(permission.module)}
+                                disabled={selectedRole ? !canEditRole(selectedRole) : false}
                               />
                             }
                             label={
@@ -801,6 +964,7 @@ export default function RolesPage() {
                                     <Checkbox
                                       checked={permission.actions.includes(action)}
                                       onChange={() => handleActionToggle(permission.module, action)}
+                                      disabled={selectedRole ? !canEditRole(selectedRole) : false}
                                     />
                                   }
                                   label={action.charAt(0).toUpperCase() + action.slice(1)}
@@ -821,7 +985,7 @@ export default function RolesPage() {
             <Button
               variant="contained"
               onClick={handleUpdateRole}
-              disabled={isUpdating}
+              disabled={isUpdating || (selectedRole ? !canEditRole(selectedRole) : false)}
               startIcon={isUpdating ? <CircularProgress size={16} /> : <Save />}
               sx={{
                 bgcolor: '#fbbf24',
