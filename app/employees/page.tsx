@@ -22,6 +22,7 @@ import {
 import Layout from '@/components/Layout'
 import ActionMenu from '@/components/ActionMenu'
 import { useAuth } from '@/contexts/AuthContext'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 import { ROLES, getRoleById } from '@/utils/roles'
 import { 
   DataGrid, 
@@ -69,14 +70,7 @@ interface InviteEmployeeData {
 export default function EmployeesPage() {
   const router = useRouter()
   const { user, isLoading: isAuthLoading } = useAuth()
-  // Helper to check if role is admin or super-admin
-  const isAdminRole = (role: string | { name: string } | undefined): boolean => {
-    if (!role) return false
-    const roleName = typeof role === 'string' ? role : role.name
-    return roleName === 'admin' || roleName === 'super-admin' || roleName === 'ADMIN' || roleName === 'SUPER_ADMIN'
-  }
-  const isAdmin = isAdminRole(user?.role)
-  if (!isAdmin) return null
+  const { canRead, canCreate, canUpdate, canDelete } = useModulePermissions('employee')
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   
@@ -460,6 +454,10 @@ export default function EmployeesPage() {
   }
 
   const performDelete = async (id: string) => {
+    if (!canDelete) {
+      toast.error("You don't have permission to delete employees")
+      return
+    }
     if (deletingId) return
     try {
       setDeletingId(id)
@@ -505,6 +503,10 @@ export default function EmployeesPage() {
   }
 
   const handleInviteEmployee = async () => {
+    if (!canCreate) {
+      toast.error("You don't have permission to invite employees")
+      return
+    }
     if (!validateInviteData()) {
       return
     }
@@ -746,8 +748,8 @@ export default function EmployeesPage() {
             color={getStatusColor(params.row.status) as any}
             size="small"
             variant="outlined"
-            onClick={() => openStatusModal(params.row)}
-            sx={{ cursor: 'pointer' }}
+            onClick={canUpdate ? () => openStatusModal(params.row) : undefined}
+            sx={{ cursor: canUpdate ? 'pointer' : 'default' }}
           />
         </Box>
       ),
@@ -795,42 +797,28 @@ export default function EmployeesPage() {
         </Typography>
       ),
     },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 80,
-      sortable: false,
-      filterable: false,
-      renderCell: (params) => {
-        const employeeId = params.row._id || params.row.id
-        if (!employeeId) return null
-        
-        return (
-          <ActionMenu
-            items={[
-              {
-                label: 'View',
-                icon: <Eye size={18} />,
-                onClick: () => handleView(employeeId),
-                color: 'primary'
-              },
-              {
-                label: 'Edit',
-                icon: <EditIcon size={18} />,
-                onClick: () => handleEdit(employeeId),
-                color: 'primary'
-              },
-              {
-                label: 'Delete',
-                icon: <DeleteIcon size={18} />,
-                onClick: () => handleDeleteClick(params.row),
-                color: 'error'
-              }
-            ]}
-          />
-        )
-      },
-    },
+    ...(canRead || canUpdate || canDelete
+      ? [
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 80,
+            sortable: false,
+            filterable: false,
+            renderCell: (params) => {
+              const employeeId = params.row._id || params.row.id
+              if (!employeeId) return null
+              const menuItems = [
+                ...(canRead ? [{ label: 'View' as const, icon: <Eye size={18} />, onClick: () => handleView(employeeId), color: 'primary' as const }] : []),
+                ...(canUpdate ? [{ label: 'Edit' as const, icon: <EditIcon size={18} />, onClick: () => handleEdit(employeeId), color: 'primary' as const }] : []),
+                ...(canDelete ? [{ label: 'Delete' as const, icon: <DeleteIcon size={18} />, onClick: () => handleDeleteClick(params.row), color: 'error' as const }] : [])
+              ]
+              if (menuItems.length === 0) return null
+              return <ActionMenu items={menuItems} />
+            },
+          },
+        ]
+      : []),
   ]
 
   const metrics = [
@@ -865,17 +853,19 @@ export default function EmployeesPage() {
               Manage employee information and roles
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<UserPlusIcon size={20} />}
-            onClick={() => setIsInviteModalOpen(true)}
-            sx={{ 
-              minWidth: { xs: '100%', sm: 'auto' },
-              ...buttonBoxSx
-            }}
-          >
-            Invite Employee
-          </Button>
+          {canCreate && (
+            <Button
+              variant="contained"
+              startIcon={<UserPlusIcon size={20} />}
+              onClick={() => setIsInviteModalOpen(true)}
+              sx={{ 
+                minWidth: { xs: '100%', sm: 'auto' },
+                ...buttonBoxSx
+              }}
+            >
+              Invite Employee
+            </Button>
+          )}
         </Box>
 
         {/* Search and Filters */}
@@ -1410,6 +1400,10 @@ export default function EmployeesPage() {
             <Button
               variant="contained"
               onClick={async () => {
+                if (!canUpdate) {
+                  toast.error("You don't have permission to update employees")
+                  return
+                }
                 // basic validation
                 const errs: Record<string, string> = {}
                 if (!editForm.firstName.trim()) errs.firstName = 'First name is required'

@@ -15,6 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import Layout from '@/components/Layout'
+import ProtectedRoute from '@/components/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
 import { 
   Box, 
@@ -51,6 +52,7 @@ import {
   type RolePermission,
   type Module
 } from '@/redux/api/rolesApi'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 import toast from 'react-hot-toast'
 
 const ACTIONS = ['create', 'read', 'update', 'delete'] as const
@@ -70,6 +72,7 @@ interface RoleFormData {
 
 export default function RolesPage() {
   const { user, isLoading: isAuthLoading } = useAuth()
+  const { canCreate, canUpdate, canDelete } = useModulePermissions('role')
   const [searchTerm, setSearchTerm] = useState('')
   const [openCreateDialog, setOpenCreateDialog] = useState(false)
   const [openEditDialog, setOpenEditDialog] = useState(false)
@@ -217,12 +220,19 @@ export default function RolesPage() {
   }
 
   const handleOpenCreateDialog = () => {
+    if (!canCreate) {
+      toast.error("You don't have permission to create roles")
+      return
+    }
     resetForm()
     setOpenCreateDialog(true)
   }
 
   const handleOpenEditDialog = (role: Role) => {
-    // Check if user can edit this role before opening dialog
+    if (!canUpdate) {
+      toast.error("You don't have permission to edit roles")
+      return
+    }
     if (!canEditRole(role)) {
       toast.error("You don't have permission to edit this role")
       return
@@ -247,7 +257,10 @@ export default function RolesPage() {
   }
 
   const handleOpenDeleteDialog = (role: Role) => {
-    // Check if user can delete this role before opening dialog
+    if (!canDelete) {
+      toast.error("You don't have permission to delete roles")
+      return
+    }
     if (!canDeleteRole(role)) {
       toast.error("You don't have permission to delete this role")
       return
@@ -296,11 +309,14 @@ export default function RolesPage() {
   }
 
   const handleCreateRole = async () => {
+    if (!canCreate) {
+      toast.error("You don't have permission to create roles")
+      return
+    }
     if (!formData.name.trim()) {
       toast.error('Role name is required')
       return
     }
-
     if (formData.priority < 1) {
       toast.error('Priority must be a positive number')
       return
@@ -344,8 +360,10 @@ export default function RolesPage() {
 
   const handleUpdateRole = async () => {
     if (!selectedRole) return
-
-    // Check if user can edit this role
+    if (!canUpdate) {
+      toast.error("You don't have permission to edit roles")
+      return
+    }
     if (!canEditRole(selectedRole)) {
       toast.error("You don't have permission to edit this role")
       return
@@ -395,8 +413,10 @@ export default function RolesPage() {
 
   const handleDeleteRole = async () => {
     if (!selectedRole) return
-
-    // Check if user can delete this role
+    if (!canDelete) {
+      toast.error("You don't have permission to delete roles")
+      return
+    }
     if (!canDeleteRole(selectedRole)) {
       toast.error("You don't have permission to delete this role")
       return
@@ -443,15 +463,18 @@ export default function RolesPage() {
 
   if (isAuthLoading) {
     return (
-      <Layout>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-          <CircularProgress />
-        </Box>
-      </Layout>
+      <ProtectedRoute>
+        <Layout>
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+            <CircularProgress />
+          </Box>
+        </Layout>
+      </ProtectedRoute>
     )
   }
 
   return (
+    <ProtectedRoute>
     <Layout>
       <Box sx={{ p: 3 }}>
         {/* Header */}
@@ -481,20 +504,22 @@ export default function RolesPage() {
             >
               {isLoadingRoles ? <CircularProgress size={20} /> : 'Refresh'}
             </Button>
-            <Button
-              variant="contained"
-              startIcon={<Plus />}
-              onClick={handleOpenCreateDialog}
-              sx={{
-                bgcolor: '#fbbf24',
-                color: '#1f2937',
-                '&:hover': {
-                  bgcolor: '#f59e0b'
-                }
-              }}
-            >
-              Create Role
-            </Button>
+            {canCreate && (
+              <Button
+                variant="contained"
+                startIcon={<Plus />}
+                onClick={handleOpenCreateDialog}
+                sx={{
+                  bgcolor: '#fbbf24',
+                  color: '#1f2937',
+                  '&:hover': {
+                    bgcolor: '#f59e0b'
+                  }
+                }}
+              >
+                Create Role
+              </Button>
+            )}
           </Box>
         </Box>
 
@@ -567,7 +592,7 @@ export default function RolesPage() {
                     Total roles: {rolesData.count}
                   </Typography>
                 )}
-                {!searchTerm && (
+                {!searchTerm && canCreate && (
                   <Button
                     variant="contained"
                     startIcon={<Plus />}
@@ -618,54 +643,58 @@ export default function RolesPage() {
                         sx={{ ml: role.isSystemRole ? 1 : 0 }}
                       />
                     </Box>
-                    {!role.isSystemRole && (
+                    {!role.isSystemRole && (canUpdate || canDelete) && (
                       <Box>
-                        {canEditRole(role) ? (
-                          <Tooltip title="Edit Role">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleOpenEditDialog(role)}
-                              sx={{ mr: 0.5 }}
-                            >
-                              <EditIcon size={18} />
-                            </IconButton>
-                          </Tooltip>
-                        ) : (
-                          <Tooltip title="You don't have permission to edit this role">
-                            <span>
+                        {canUpdate && (
+                          canEditRole(role) ? (
+                            <Tooltip title="Edit Role">
                               <IconButton
                                 size="small"
-                                disabled
-                                sx={{ mr: 0.5, opacity: 0.5 }}
+                                onClick={() => handleOpenEditDialog(role)}
+                                sx={{ mr: 0.5 }}
                               >
                                 <EditIcon size={18} />
                               </IconButton>
-                            </span>
-                          </Tooltip>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip title="You don't have permission to edit this role">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled
+                                  sx={{ mr: 0.5, opacity: 0.5 }}
+                                >
+                                  <EditIcon size={18} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )
                         )}
-                        {canDeleteRole(role) ? (
-                          <Tooltip title="Delete Role">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleOpenDeleteDialog(role)}
-                            >
-                              <DeleteIcon size={18} />
-                            </IconButton>
-                          </Tooltip>
-                        ) : (
-                          <Tooltip title="You don't have permission to delete this role">
-                            <span>
+                        {canDelete && (
+                          canDeleteRole(role) ? (
+                            <Tooltip title="Delete Role">
                               <IconButton
                                 size="small"
                                 color="error"
-                                disabled
-                                sx={{ opacity: 0.5 }}
+                                onClick={() => handleOpenDeleteDialog(role)}
                               >
                                 <DeleteIcon size={18} />
                               </IconButton>
-                            </span>
-                          </Tooltip>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip title="You don't have permission to delete this role">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  disabled
+                                  sx={{ opacity: 0.5 }}
+                                >
+                                  <DeleteIcon size={18} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )
                         )}
                       </Box>
                     )}
@@ -1036,5 +1065,6 @@ export default function RolesPage() {
         </Dialog>
       </Box>
     </Layout>
+    </ProtectedRoute>
   )
 }

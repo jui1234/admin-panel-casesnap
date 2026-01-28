@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
+import { APP_BACKEND_URL } from '@/config/env'
 
 interface Role {
   id: string
@@ -32,7 +33,7 @@ interface AuthContextType {
   isAuthenticated: boolean
   isLoading: boolean
   login: (email: string, password: string) => Promise<boolean>
-  logout: () => void
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -164,20 +165,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
+    const token = typeof window !== 'undefined'
+      ? localStorage.getItem('authToken') || localStorage.getItem('token')
+      : null
+
+    if (token) {
+      try {
+        const base = APP_BACKEND_URL.replace(/\/$/, '')
+        await fetch(`${base}/api/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        })
+      } catch (e) {
+        console.warn('Logout API call failed:', e)
+      }
+    }
+
     try {
       localStorage.removeItem('authToken')
+      localStorage.removeItem('token')
       localStorage.removeItem('userData')
       localStorage.removeItem('organizationData')
-      localStorage.removeItem('token') // Also remove the 'token' key for compatibility
+      localStorage.removeItem('user')
+      localStorage.removeItem('organization')
+      localStorage.removeItem('role')
+      localStorage.removeItem('permissions')
     } catch (error) {
-      // localStorage not available
-      console.log('localStorage not available during logout')
+      console.warn('localStorage not available during logout', error)
     }
     setUser(null)
-    // Only redirect if not already on login page
-    if (window.location.pathname !== '/auth/login') {
-      router.push('/auth/login')
+
+    if (typeof window !== 'undefined' && window.location.pathname !== '/auth/login') {
+      router.replace('/auth/login')
     }
   }
 

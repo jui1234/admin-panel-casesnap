@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, type ReactElement } from 'react'
 import { 
   Building, 
   Plus, 
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 import { 
   DataGrid, 
   GridColDef, 
@@ -51,6 +52,7 @@ interface Client {
 }
 
 export default function ClientsPage() {
+  const { canRead, canCreate, canUpdate, canDelete } = useModulePermissions('client')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [industryFilter, setIndustryFilter] = useState('all')
@@ -171,32 +173,53 @@ export default function ClientsPage() {
         </Typography>
       ),
     },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      type: 'actions',
-      width: 120,
-      getActions: (params) => [
-        <GridActionsCellItem
-          icon={<Eye />}
-          label="View"
-          onClick={() => handleView(params.id as number)}
-          color="primary"
-        />,
-        <GridActionsCellItem
-          icon={<EditIcon />}
-          label="Edit"
-          onClick={() => handleEdit(params.id as number)}
-          color="primary"
-        />,
-        <GridActionsCellItem
-          icon={<DeleteIcon />}
-          label="Delete"
-          onClick={() => handleDelete(params.id as number)}
-          color="error"
-        />,
-      ],
-    },
+    ...(canRead || canUpdate || canDelete
+      ? [
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            type: 'actions' as const,
+            width: 120,
+            getActions: (params: { id: unknown }) => {
+              const actions: ReactElement[] = []
+              if (canRead) {
+                actions.push(
+                  <GridActionsCellItem
+                    key="view"
+                    icon={<Eye />}
+                    label="View"
+                    onClick={() => handleView(params.id as number)}
+                    color="primary"
+                  />
+                )
+              }
+              if (canUpdate) {
+                actions.push(
+                  <GridActionsCellItem
+                    key="edit"
+                    icon={<EditIcon />}
+                    label="Edit"
+                    onClick={() => handleEdit(params.id as number)}
+                    color="primary"
+                  />
+                )
+              }
+              if (canDelete) {
+                actions.push(
+                  <GridActionsCellItem
+                    key="delete"
+                    icon={<DeleteIcon />}
+                    label="Delete"
+                    onClick={() => handleDelete(params.id as number)}
+                    color="error"
+                  />
+                )
+              }
+              return actions
+            },
+          },
+        ]
+      : []),
   ]
 
   const metrics = [
@@ -220,13 +243,15 @@ export default function ClientsPage() {
               Manage client relationships and information
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<Plus />}
-            sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
-          >
-            Add Client
-          </Button>
+          {canCreate && (
+            <Button
+              variant="contained"
+              startIcon={<Plus />}
+              sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
+            >
+              Add Client
+            </Button>
+          )}
         </Box>
 
         {/* Search and Filters */}

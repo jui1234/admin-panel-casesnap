@@ -67,6 +67,7 @@ import {
   type UpdateUserRequest
 } from '@/redux/api/userApi'
 import { useGetRolesQuery } from '@/redux/api/rolesApi'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 import toast from 'react-hot-toast'
 
 interface InviteUserData {
@@ -81,6 +82,7 @@ interface InviteUserData {
 
 export default function UsersPage() {
   const { user } = useAuth()
+  const { canRead, canCreate, canUpdate, canDelete } = useModulePermissions('user')
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
@@ -172,7 +174,7 @@ export default function UsersPage() {
     
     // If role is a string (legacy), try to find it in roles list
     if (typeof user.role === 'string') {
-      const foundRole = allRoles.find(r => r._id === user.role || r.id === user.role || r.name === user.role)
+      const foundRole = allRoles.find(r => r._id === user.role || r.name === user.role)
       return foundRole?.priority || null
     }
     
@@ -507,6 +509,9 @@ export default function UsersPage() {
     }
   }
 
+  const capitalizeFirstLetter = (value: string) =>
+    value.length > 0 ? value.charAt(0).toUpperCase() + value.slice(1) : value
+
   const handlePhoneChange = (value: string) => {
     // Only allow digits, max 10 digits
     const digitsOnly = value.replace(/[^0-9]/g, '').slice(0, 10)
@@ -665,24 +670,28 @@ export default function UsersPage() {
         </Typography>
       ),
     },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 80,
-      sortable: false,
-      renderCell: (params) => {
-        const user = params.row as UserType
-        return (
-          <IconButton
-            size="small"
-            onClick={(e) => handleMenuOpen(e, user)}
-            sx={{ ml: 1 }}
-          >
-            <MoreVertical size={18} />
-          </IconButton>
-        )
-      },
-    },
+    ...(canRead || canUpdate || canDelete
+      ? [
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 80,
+            sortable: false,
+            renderCell: (params) => {
+              const rowUser = params.row as UserType
+              return (
+                <IconButton
+                  size="small"
+                  onClick={(e) => handleMenuOpen(e, rowUser)}
+                  sx={{ ml: 1 }}
+                >
+                  <MoreVertical size={18} />
+                </IconButton>
+              )
+            },
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -699,14 +708,16 @@ export default function UsersPage() {
               Manage user accounts and permissions
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<UserPlus />}
-            onClick={() => setIsInviteModalOpen(true)}
-            sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
-          >
-            Invite User
-          </Button>
+          {canCreate && (
+            <Button
+              variant="contained"
+              startIcon={<UserPlus />}
+              onClick={() => setIsInviteModalOpen(true)}
+              sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
+            >
+              Invite User
+            </Button>
+          )}
         </Box>
 
         {/* Search and Filters */}
@@ -946,7 +957,7 @@ export default function UsersPage() {
                 fullWidth
                 label="First Name"
                 value={inviteData.firstName}
-                onChange={(e) => handleInviteDataChange('firstName', e.target.value)}
+                onChange={(e) => handleInviteDataChange('firstName', capitalizeFirstLetter(e.target.value))}
                 error={!!inviteErrors.firstName}
                 helperText={inviteErrors.firstName}
                 disabled={isInviting}
@@ -956,7 +967,7 @@ export default function UsersPage() {
                 fullWidth
                 label="Last Name"
                 value={inviteData.lastName}
-                onChange={(e) => handleInviteDataChange('lastName', e.target.value)}
+                onChange={(e) => handleInviteDataChange('lastName', capitalizeFirstLetter(e.target.value))}
                 error={!!inviteErrors.lastName}
                 helperText={inviteErrors.lastName}
                 disabled={isInviting}
@@ -1389,19 +1400,23 @@ export default function UsersPage() {
             horizontal: 'right',
           }}
         >
-          <MenuItem onClick={() => handleMenuAction('view')}>
-            <ListItemIcon>
-              <Eye size={18} />
-            </ListItemIcon>
-            <ListItemText>View</ListItemText>
-          </MenuItem>
-          <MenuItem onClick={() => handleMenuAction('edit')}>
-            <ListItemIcon>
-              <EditIcon size={18} />
-            </ListItemIcon>
-            <ListItemText>Edit</ListItemText>
-          </MenuItem>
-          {selectedUserForMenu?.status?.toLowerCase() === 'pending' && (
+          {canRead && (
+            <MenuItem onClick={() => handleMenuAction('view')}>
+              <ListItemIcon>
+                <Eye size={18} />
+              </ListItemIcon>
+              <ListItemText>View</ListItemText>
+            </MenuItem>
+          )}
+          {canUpdate && (
+            <MenuItem onClick={() => handleMenuAction('edit')}>
+              <ListItemIcon>
+                <EditIcon size={18} />
+              </ListItemIcon>
+              <ListItemText>Edit</ListItemText>
+            </MenuItem>
+          )}
+          {canUpdate && selectedUserForMenu?.status?.toLowerCase() === 'pending' && (
             <MenuItem onClick={() => handleMenuAction('approve')}>
               <ListItemIcon>
                 <Check size={18} />
@@ -1409,16 +1424,18 @@ export default function UsersPage() {
               <ListItemText>Approve</ListItemText>
             </MenuItem>
           )}
-          <MenuItem 
-            onClick={() => handleMenuAction('delete')}
-            disabled={selectedUserForMenu?.status?.toLowerCase() === 'terminated'}
-            sx={{ color: 'error.main' }}
-          >
-            <ListItemIcon>
-              <DeleteIcon size={18} />
-            </ListItemIcon>
-            <ListItemText>Delete</ListItemText>
-          </MenuItem>
+          {canDelete && (
+            <MenuItem 
+              onClick={() => handleMenuAction('delete')}
+              disabled={selectedUserForMenu?.status?.toLowerCase() === 'terminated'}
+              sx={{ color: 'error.main' }}
+            >
+              <ListItemIcon>
+                <DeleteIcon size={18} />
+              </ListItemIcon>
+              <ListItemText>Delete</ListItemText>
+            </MenuItem>
+          )}
         </Menu>
       </Box>
       </Layout>

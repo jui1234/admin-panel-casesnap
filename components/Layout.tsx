@@ -77,6 +77,7 @@ const staticBottomNavigation = [
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [modules, setModules] = useState<Module[]>([])
   const [modulesLoading, setModulesLoading] = useState(true)
@@ -93,6 +94,14 @@ export default function Layout({ children }: LayoutProps) {
     return roleName === 'admin' || roleName === 'super-admin' || roleName === 'ADMIN' || roleName === 'SUPER_ADMIN'
   }
   const isAdmin = isAdminRole(user?.role)
+
+  // Super Admin has full access — show all modules, hide nothing
+  const isSuperAdmin = (role: string | { name: string } | undefined): boolean => {
+    if (!role) return false
+    const roleName = typeof role === 'string' ? role : role.name
+    return roleName === 'super-admin' || roleName === 'SUPER_ADMIN'
+  }
+  const isSuperAdminUser = isSuperAdmin(user?.role)
   
   // Fetch modules from API
   useEffect(() => {
@@ -132,19 +141,22 @@ export default function Layout({ children }: LayoutProps) {
   // Helper function to check if user has read permission for a module
   const hasModuleReadPermission = (moduleName: string): boolean => {
     if (!user || !user.role) return false
-    
+
+    // Super Admin: show all modules, never hide anything — full access
+    if (isSuperAdminUser) return true
+
     // If role is just a string, only admins have access (legacy behavior)
     if (typeof user.role === 'string') {
       return isAdmin
     }
-    
+
     // Check if user's role has read permission for this module
     const rolePermissions = user.role.permissions || []
     const moduleKey = moduleName.toLowerCase()
-    
+
     // Find permission for this module
     const modulePermission = rolePermissions.find(p => p.module.toLowerCase() === moduleKey)
-    
+
     // User needs at least 'read' action to see the module in navigation
     return modulePermission?.actions.includes('read') || false
   }
@@ -242,9 +254,14 @@ export default function Layout({ children }: LayoutProps) {
     setShowLogoutModal(true)
   }
 
-  const confirmLogout = () => {
-    logout()
-    setShowLogoutModal(false)
+  const confirmLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await logout()
+    } finally {
+      setIsLoggingOut(false)
+      setShowLogoutModal(false)
+    }
   }
 
   const cancelLogout = () => {
@@ -577,6 +594,7 @@ export default function Layout({ children }: LayoutProps) {
         isOpen={showLogoutModal}
         onClose={cancelLogout}
         onConfirm={confirmLogout}
+        isLoggingOut={isLoggingOut}
       />
       </div>
     </>
