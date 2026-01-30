@@ -69,6 +69,17 @@ export interface GetUsersResponse {
   data: User[]
 }
 
+export interface GetAssignableUsersRequest {
+  search?: string
+  limit?: number
+}
+
+export interface GetAssignableUsersResponse {
+  success: boolean
+  count?: number
+  data: User[]
+}
+
 export interface UpdateUserRequest {
   firstName?: string
   lastName?: string
@@ -152,6 +163,22 @@ export const userApi = createApi({
         }
       },
       providesTags: ['Users'],
+    }),
+
+    // Get assignable users (for Assign To dropdown) – only when user has assignee permission
+    getAssignableUsers: builder.query<GetAssignableUsersResponse, GetAssignableUsersRequest | void>({
+      query: (params) => {
+        const q: Record<string, string | number> = {}
+        if (params) {
+          if (params.search) q.search = params.search
+          if (params.limit != null) q.limit = params.limit
+        }
+        return {
+          url: 'api/users/assignable',
+          method: 'GET',
+          params: Object.keys(q).length > 0 ? q : undefined,
+        }
+      },
     }),
 
     // Get single user by ID
@@ -263,6 +290,8 @@ export const {
   useInviteUserMutation,
   useGetUsersQuery,
   useLazyGetUsersQuery,
+  useGetAssignableUsersQuery,
+  useLazyGetAssignableUsersQuery,
   useGetUserByIdQuery,
   useLazyGetUserByIdQuery,
   useUpdateUserMutation,

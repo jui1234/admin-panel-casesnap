@@ -357,6 +357,8 @@ export default function SetupPage() {
             firstName: loginResult.user.firstName,
             lastName: loginResult.user.lastName,
             role: loginResult.user.role, // Can be string or Role object
+            subscriptionPlan: (loginResult.user as { subscriptionPlan?: string }).subscriptionPlan,
+            assigneePermissions: (loginResult.user as { assigneePermissions?: { canAssignClient?: boolean; canAssignCase?: boolean } }).assigneePermissions,
             organizationId: loginResult.user.organizationId || loginResult.user.organization?._id,
             organizationName: loginResult.user.organization?.companyName
           }

@@ -1,10 +1,10 @@
 /**
  * Module-level permission helpers.
- * Uses user.role.permissions[] from auth (module + actions: read, create, update, delete).
+ * Uses user.role.permissions[] from auth (module + actions: read, create, update, delete, assignee).
  * Super Admin: full access. Legacy string role (admin): full access.
  */
 
-export type ModuleAction = 'read' | 'create' | 'update' | 'delete'
+export type ModuleAction = 'read' | 'create' | 'update' | 'delete' | 'assignee'
 
 export interface RolePermission {
   module: string
@@ -52,14 +52,19 @@ export function canDelete(userRole: UserRole, moduleName: string): boolean {
   return hasAction(userRole, moduleName, 'delete')
 }
 
+export function canAssignee(userRole: UserRole, moduleName: string): boolean {
+  return hasAction(userRole, moduleName, 'assignee')
+}
+
 export function getModulePermissions(
   userRole: UserRole,
   moduleName: string
-): { canRead: boolean; canCreate: boolean; canUpdate: boolean; canDelete: boolean } {
+): { canRead: boolean; canCreate: boolean; canUpdate: boolean; canDelete: boolean; canAssignee: boolean } {
   return {
     canRead: canRead(userRole, moduleName),
     canCreate: canCreate(userRole, moduleName),
     canUpdate: canUpdate(userRole, moduleName),
     canDelete: canDelete(userRole, moduleName),
+    canAssignee: canAssignee(userRole, moduleName),
   }
 }

@@ -31,6 +31,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { APP_BACKEND_URL } from '@/config/env'
 import ThemeToggle from './ThemeToggle'
 import LogoutModal from './LogoutModal'
+import { useLazyGetNotificationsQuery } from '@/redux/api/notificationsApi'
+import type { Notification as ApiNotification } from '@/redux/api/notificationsApi'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -74,6 +76,43 @@ const staticBottomNavigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
+const NOTIFICATION_TYPE_ICON: Record<string, typeof CheckCircle> = {
+  success: CheckCircle,
+  info: Info,
+  warning: AlertCircle,
+  error: AlertCircle,
+  client: Building,
+  case: FolderOpen,
+}
+
+function formatNotificationTime(createdAt: string): string {
+  if (!createdAt) return ''
+  try {
+    const date = new Date(createdAt)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins} min ago`
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
+    return date.toLocaleDateString()
+  } catch {
+    return createdAt
+  }
+}
+
+/** Build link from relatedEntityType and relatedEntityId (e.g. /clients/client_abc) */
+function getNotificationLink(relatedEntityType?: string, relatedEntityId?: string): string | null {
+  if (!relatedEntityId || !relatedEntityType) return null
+  const type = relatedEntityType.toLowerCase()
+  if (type === 'client') return `/clients/${relatedEntityId}`
+  if (type === 'case') return `/cases/${relatedEntityId}`
+  return null
+}
+
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
@@ -102,6 +141,20 @@ export default function Layout({ children }: LayoutProps) {
     return roleName === 'super-admin' || roleName === 'SUPER_ADMIN'
   }
   const isSuperAdminUser = isSuperAdmin(user?.role)
+
+  const getSubscriptionPlanDisplayName = (plan?: string): string => {
+    switch (plan) {
+      case 'free':
+        return '14 Days Free Trial'
+      case 'base':
+        return 'Basic'
+      case 'popular':
+        return 'Professional'
+      default:
+        return plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : 'Free Trial'
+    }
+  }
+  const subscriptionPlanDisplay = getSubscriptionPlanDisplayName(user?.subscriptionPlan)
   
   // Fetch modules from API
   useEffect(() => {
@@ -196,45 +249,26 @@ export default function Layout({ children }: LayoutProps) {
 
   const isDark = theme === 'dark'
 
-  // Sample notifications
-  const [notifications] = useState([
-    {
-      id: 1,
-      type: 'success',
-      title: 'Login Successful',
-      message: `Welcome back, ${user?.name || 'Admin'}!`,
-      time: 'Just now',
-      icon: CheckCircle,
-      read: false
-    },
-    {
-      id: 2,
-      type: 'info',
-      title: 'System Update',
-      message: 'CaseSnap has been updated to version 2.1.0',
-      time: '2 hours ago',
-      icon: Info,
-      read: false
-    },
-    {
-      id: 3,
-      type: 'warning',
-      title: 'Backup Reminder',
-      message: 'Scheduled backup will run tonight at 2:00 AM',
-      time: '4 hours ago',
-      icon: AlertCircle,
-      read: true
-    },
-    {
-      id: 4,
-      type: 'info',
-      title: 'New User Added',
-      message: 'Sarah Wilson has been added to your organization',
-      time: '1 day ago',
-      icon: UserPlus,
-      read: true
-    }
-  ])
+  const [fetchNotifications, { data: notificationsData, isLoading: notificationsLoading }] =
+    useLazyGetNotificationsQuery()
+
+  useEffect(() => {
+    if (user) fetchNotifications({ limit: 30 })
+  }, [user])
+
+  const apiNotifications: ApiNotification[] = notificationsData?.data ?? []
+  const notifications = apiNotifications.map((n) => ({
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    message: n.message,
+    time: formatNotificationTime(n.createdAt),
+    icon: NOTIFICATION_TYPE_ICON[n.type] ?? Info,
+    read: n.read,
+    relatedEntityId: n.relatedEntityId,
+    relatedEntityType: n.relatedEntityType,
+  }))
+  const unreadCount = notificationsData?.unreadCount ?? notifications.filter((n) => !n.read).length
 
   // Close notifications when clicking outside
   useEffect(() => {
@@ -298,7 +332,13 @@ export default function Layout({ children }: LayoutProps) {
     }
   }
 
-  const unreadCount = notifications.filter(n => !n.read).length
+  const handleNotificationClick = (notification: typeof notifications[0]) => {
+    const href = getNotificationLink(notification.relatedEntityType, notification.relatedEntityId)
+    if (href) {
+      setShowNotifications(false)
+      router.push(href)
+    }
+  }
 
   return (
     <>
@@ -471,7 +511,11 @@ export default function Layout({ children }: LayoutProps) {
               {/* Notifications */}
               <div className="relative" ref={notificationRef}>
                 <button 
-                  onClick={() => setShowNotifications(!showNotifications)}
+                  onClick={() => {
+                    const next = !showNotifications
+                    setShowNotifications(next)
+                    if (next && user) fetchNotifications({ limit: 30 })
+                  }}
                   className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-200 relative"
                 >
                   <Bell className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -495,7 +539,11 @@ export default function Layout({ children }: LayoutProps) {
                     </div>
                     
                     <div className="max-h-80 overflow-y-auto notification-scroll">
-                      {notifications.length === 0 ? (
+                      {notificationsLoading ? (
+                        <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                          <p>Loading...</p>
+                        </div>
+                      ) : notifications.length === 0 ? (
                         <div className="p-4 text-center text-gray-500 dark:text-gray-400">
                           <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
                           <p>No notifications</p>
@@ -503,12 +551,17 @@ export default function Layout({ children }: LayoutProps) {
                       ) : (
                         notifications.map((notification) => {
                           const Icon = notification.icon
+                          const link = getNotificationLink(notification.relatedEntityType, notification.relatedEntityId)
+                          const isClickable = !!link
+                          const Wrapper = isClickable ? 'button' : 'div'
                           return (
-                            <div
+                            <Wrapper
                               key={notification.id}
-                              className={`p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${
+                              type={isClickable ? 'button' : undefined}
+                              onClick={isClickable ? () => handleNotificationClick(notification) : undefined}
+                              className={`w-full text-left p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${
                                 !notification.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
-                              }`}
+                              } ${isClickable ? 'cursor-pointer' : ''}`}
                             >
                               <div className="flex items-start space-x-3">
                                 <div className={`flex-shrink-0 p-1 rounded-full ${getNotificationBg(notification.type)}`}>
@@ -530,9 +583,14 @@ export default function Layout({ children }: LayoutProps) {
                                     <Clock className="h-3 w-3 mr-1" />
                                     {notification.time}
                                   </div>
+                                  {link && (
+                                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                                      View {notification.relatedEntityType === 'client' ? 'client' : notification.relatedEntityType} →
+                                    </p>
+                                  )}
                                 </div>
                               </div>
-                            </div>
+                            </Wrapper>
                           )
                         })
                       )}
@@ -575,6 +633,11 @@ export default function Layout({ children }: LayoutProps) {
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     {user?.email || 'admin@example.com'}
                   </p>
+                  {user && (
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-0.5 font-medium" title="Subscription plan">
+                      Plan: {subscriptionPlanDisplay}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

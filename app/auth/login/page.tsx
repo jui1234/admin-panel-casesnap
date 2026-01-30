@@ -96,6 +96,7 @@ export default function LoginPage() {
           lastName: result.user.lastName,
           role: result.user.role, // Can be string or Role object
           subscriptionPlan: result.user.subscriptionPlan, // Store subscription plan
+          assigneePermissions: result.user.assigneePermissions ?? undefined, // Store from login; used for Assigned To (client/cases)
           organizationId: result.user.organizationId || result.user.organization?._id,
           organizationName: result.user.organization?.companyName
         }

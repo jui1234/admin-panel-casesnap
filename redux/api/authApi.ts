@@ -7,6 +7,11 @@ export interface LoginRequest {
   password: string
 }
 
+export interface AssigneePermissions {
+  canAssignClient?: boolean
+  canAssignCase?: boolean
+}
+
 export interface LoginResponse {
   success: boolean
   token: string
@@ -18,6 +23,7 @@ export interface LoginResponse {
     lastName?: string
     role: string | Role  // Can be string (legacy) or Role object (new)
     subscriptionPlan?: string  // Valid values: "free", "base", "popular"
+    assigneePermissions?: AssigneePermissions
     organization?: {
       _id: string
       companyName: string

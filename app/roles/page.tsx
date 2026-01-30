@@ -55,12 +55,12 @@ import {
 import { useModulePermissions } from '@/hooks/useModulePermissions'
 import toast from 'react-hot-toast'
 
-const ACTIONS = ['create', 'read', 'update', 'delete'] as const
+const DEFAULT_ACTIONS = ['create', 'read', 'update', 'delete'] as const
 
 interface PermissionState {
   module: string
   selected: boolean
-  actions: typeof ACTIONS[number][]
+  actions: string[]
 }
 
 interface RoleFormData {
@@ -281,7 +281,7 @@ export default function RolesPage() {
     }))
   }
 
-  const handleActionToggle = (moduleName: string, action: typeof ACTIONS[number]) => {
+  const handleActionToggle = (moduleName: string, action: string) => {
     setFormData(prev => ({
       ...prev,
       permissions: prev.permissions.map(p => {
@@ -844,7 +844,7 @@ export default function RolesPage() {
                       />
                       {permission.selected && (
                         <Box ml={4} mt={1}>
-                          {ACTIONS.map((action) => (
+                          {(modules.find(m => m.name === permission.module)?.actions ?? [...DEFAULT_ACTIONS]).map((action) => (
                             <FormControlLabel
                               key={action}
                               control={
@@ -986,7 +986,7 @@ export default function RolesPage() {
                           />
                           {permission.selected && (
                             <Box ml={4} mt={1}>
-                              {ACTIONS.map((action) => (
+                              {(moduleInfo?.actions ?? [...DEFAULT_ACTIONS]).map((action) => (
                                 <FormControlLabel
                                   key={action}
                                   control={

@@ -88,6 +88,7 @@ export interface Module {
   name: string
   displayName: string
   description: string
+  actions?: string[]
 }
 
 export interface GetModulesResponse {
