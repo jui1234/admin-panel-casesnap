@@ -19,6 +19,7 @@ import {
   Archive,
   ArchiveRestore,
   Upload,
+  Download,
 } from 'lucide-react'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -71,6 +72,7 @@ import toast from 'react-hot-toast'
 
 const CLIENT_STATUSES: ClientStatus[] = ['active', 'inactive', 'prospect', 'archived']
 const AADHAR_IMAGE_MAX_BYTES = 1048576 // 1 MB
+const UPLOAD_API_URL = process.env.NEXT_PUBLIC_UPLOAD_API_URL || 'http://localhost:5004/api/upload'
 
 function getFeesUnit(fees: number | undefined): string {
   if (fees == null || fees === 0) return ''
@@ -242,6 +244,8 @@ export default function ClientsPage() {
   const [editForm, setEditForm] = useState<UpdateClientRequest>({})
   const [aadharEditFile, setAadharEditFile] = useState<File | null>(null)
   const [aadharEditFileError, setAadharEditFileError] = useState<string>('')
+  const [aadharPreviewUrl, setAadharPreviewUrl] = useState<string | null>(null)
+  const [aadharEditPreviewUrl, setAadharEditPreviewUrl] = useState<string | null>(null)
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
 
   const resetCreateForm = () => {
@@ -265,6 +269,26 @@ export default function ClientsPage() {
     setAadharFile(null)
     setAadharFileError('')
   }
+
+  useEffect(() => {
+    if (!aadharFile) {
+      setAadharPreviewUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(aadharFile)
+    setAadharPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [aadharFile])
+
+  useEffect(() => {
+    if (!aadharEditFile) {
+      setAadharEditPreviewUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(aadharEditFile)
+    setAadharEditPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [aadharEditFile])
 
   const handleAadharFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
     const file = e.target.files?.[0]
@@ -336,18 +360,25 @@ export default function ClientsPage() {
         await new Promise((r) => setTimeout(r, 100))
         const formData = new FormData()
         formData.append('file', aadharFile)
-        const base = (process.env.NEXT_PUBLIC_APP_BACKEND_URL || '').replace(/\/$/, '')
-        const uploadRes = await fetch(`${base}/api/upload`, {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || localStorage.getItem('token') : ''
+        const uploadRes = await fetch(UPLOAD_API_URL, {
           method: 'POST',
-          headers: { authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || localStorage.getItem('token') : ''}` },
+          headers: { Authorization: `Bearer ${token}` },
           body: formData,
         })
-        if (uploadRes.ok) {
-          const json = await uploadRes.json()
-          payload.aadharImageUrl = json.url ?? json.data?.url ?? json.data?.fileUrl
+        if (!uploadRes.ok) {
+          const errBody = await uploadRes.json().catch(() => ({}))
+          const errMsg = errBody?.error ?? errBody?.message ?? `Upload failed (${uploadRes.status})`
+          toast.error(errMsg)
+          setAadharUploading(false)
+          return
         }
-      } catch {
-        // Optional: URL not set if upload fails; size still sent
+        const json = await uploadRes.json()
+        payload.aadharImageUrl = json.url ?? json.data?.url ?? json.data?.fileUrl
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Aadhar image upload failed')
+        setAadharUploading(false)
+        return
       } finally {
         setAadharUploading(false)
       }
@@ -386,18 +417,25 @@ export default function ClientsPage() {
         await new Promise((r) => setTimeout(r, 100))
         const formData = new FormData()
         formData.append('file', aadharEditFile)
-        const base = (process.env.NEXT_PUBLIC_APP_BACKEND_URL || '').replace(/\/$/, '')
-        const uploadRes = await fetch(`${base}/api/upload`, {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || localStorage.getItem('token') : ''
+        const uploadRes = await fetch(UPLOAD_API_URL, {
           method: 'POST',
-          headers: { authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('authToken') || localStorage.getItem('token') : ''}` },
+          headers: { Authorization: `Bearer ${token}` },
           body: formData,
         })
-        if (uploadRes.ok) {
-          const json = await uploadRes.json()
-          payload.aadharImageUrl = json.url ?? json.data?.url ?? json.data?.fileUrl
+        if (!uploadRes.ok) {
+          const errBody = await uploadRes.json().catch(() => ({}))
+          const errMsg = errBody?.error ?? errBody?.message ?? `Upload failed (${uploadRes.status})`
+          toast.error(errMsg)
+          setAadharUploading(false)
+          return
         }
-      } catch {
-        // Optional
+        const json = await uploadRes.json()
+        payload.aadharImageUrl = json.url ?? json.data?.url ?? json.data?.fileUrl
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Aadhar image upload failed')
+        setAadharUploading(false)
+        return
       } finally {
         setAadharUploading(false)
       }
@@ -1041,12 +1079,21 @@ export default function ClientsPage() {
                         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>PNG, JPG up to 1 MB</Typography>
                       </>
                     ) : (
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Typography variant="body2" fontWeight={500} color="text.primary">{aadharFile.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">({(aadharFile.size / 1024).toFixed(1)} KB)</Typography>
-                        <IconButton size="small" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAadharFile(null); setAadharFileError(''); }} color="error" title="Remove" sx={{ ml: 0.5 }}>
-                          <X size={18} />
-                        </IconButton>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, position: 'relative' }}>
+                        {aadharPreviewUrl && (
+                          <Box
+                            component="img"
+                            src={aadharPreviewUrl}
+                            alt="Aadhar preview"
+                            sx={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 1 }}
+                          />
+                        )}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Typography variant="caption" color="text.secondary">Click or drop to replace</Typography>
+                          <IconButton size="small" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAadharFile(null); setAadharFileError(''); }} color="error" title="Remove" sx={{ ml: 0.5 }}>
+                            <X size={18} />
+                          </IconButton>
+                        </Box>
                       </Box>
                     )}
                   </Box>
@@ -1081,11 +1128,27 @@ export default function ClientsPage() {
                   <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Email</Typography><Typography variant="body1">{singleClient.email}</Typography></Grid>
                   <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Phone</Typography><Typography variant="body1">{singleClient.phone || '—'}</Typography></Grid>
                   <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Fees</Typography><Typography variant="body1">{singleClient.fees != null ? `₹${singleClient.fees.toLocaleString()}` : '—'}</Typography></Grid>
-                  <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Status</Typography><Chip label={singleClient.status} size="small" color={getStatusColor(singleClient.status) as any} variant="outlined" /></Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" color="text.secondary" display="block">Status</Typography>
+                    <Chip label={singleClient.status} size="small" color={getStatusColor(singleClient.status) as any} variant="outlined" sx={{ mt: 0.5 }} />
+                  </Grid>
                   {(canRead || canShowAssignedTo) && (
                     <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Assigned To</Typography><Typography variant="body1">{getAssignedToName(singleClient.assignedTo)}</Typography></Grid>
                   )}
                   {singleClient.streetAddress && <Grid item xs={12}><Typography variant="caption" color="text.secondary">Address</Typography><Typography variant="body1">{[singleClient.streetAddress, singleClient.city, singleClient.province, singleClient.postalCode, singleClient.country].filter(Boolean).join(', ')}</Typography></Grid>}
+                  {singleClient.aadharCardNumber && <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Aadhar Card Number</Typography><Typography variant="body1">{singleClient.aadharCardNumber}</Typography></Grid>}
+                  {singleClient.aadharImageUrl && (
+                    <Grid item xs={12}>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>Aadhar Card Image</Typography>
+                      <Box
+                        component="img"
+                        src={singleClient.aadharImageUrl}
+                        alt="Aadhar card"
+                        sx={{ maxWidth: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: 1, border: '1px solid', borderColor: 'divider', display: 'block' }}
+                      />
+                      <Button size="small" startIcon={<Download size={18} />} href={singleClient.aadharImageUrl} download target="_blank" rel="noopener noreferrer" sx={{ mt: 1 }}>Download Aadhar Image</Button>
+                    </Grid>
+                  )}
                   {singleClient.notes && <Grid item xs={12}><Typography variant="caption" color="text.secondary">Notes</Typography><Typography variant="body1">{singleClient.notes}</Typography></Grid>}
                 </Grid>
               </Box>
@@ -1212,7 +1275,9 @@ export default function ClientsPage() {
                     <TextField fullWidth label="Notes" multiline rows={2} value={editForm.notes ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))} />
                   </Grid>
                   <Grid item xs={12}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Aadhar Card Image (max 1 MB)</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      {singleClient.aadharImageUrl ? 'Aadhar Card Image — click or drop to replace (max 1 MB)' : 'Aadhar Card Image (max 1 MB)'}
+                    </Typography>
                     <input
                       accept="image/*"
                       type="file"
@@ -1260,20 +1325,40 @@ export default function ClientsPage() {
                           <Typography variant="body2" color="primary.main" fontWeight={500}>Uploading image...</Typography>
                         </Box>
                       )}
-                      {!aadharEditFile ? (
+                      {aadharEditFile ? (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                          {aadharEditPreviewUrl && (
+                            <Box
+                              component="img"
+                              src={aadharEditPreviewUrl}
+                              alt="Aadhar preview"
+                              sx={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 1 }}
+                            />
+                          )}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">Click or drop to replace</Typography>
+                            <IconButton size="small" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAadharEditFile(null); setAadharEditFileError(''); }} color="error" title="Remove" sx={{ ml: 0.5 }}>
+                              <X size={18} />
+                            </IconButton>
+                          </Box>
+                        </Box>
+                      ) : singleClient.aadharImageUrl ? (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                          <Box
+                            component="img"
+                            src={singleClient.aadharImageUrl}
+                            alt="Current Aadhar card"
+                            sx={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 1 }}
+                          />
+                          <Typography variant="body2" color="text.secondary">Click or drop new image to replace</Typography>
+                          <Typography variant="caption" color="text.secondary">PNG, JPG up to 1 MB</Typography>
+                        </Box>
+                      ) : (
                         <>
                           <Upload size={32} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
                           <Typography variant="body2" color="text.secondary">Drop image here or click to upload</Typography>
                           <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>PNG, JPG up to 1 MB</Typography>
                         </>
-                      ) : (
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-                          <Typography variant="body2" fontWeight={500} color="text.primary">{aadharEditFile.name}</Typography>
-                          <Typography variant="caption" color="text.secondary">({(aadharEditFile.size / 1024).toFixed(1)} KB)</Typography>
-                          <IconButton size="small" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAadharEditFile(null); setAadharEditFileError(''); }} color="error" title="Remove" sx={{ ml: 0.5 }}>
-                            <X size={18} />
-                          </IconButton>
-                        </Box>
                       )}
                     </Box>
                     {aadharEditFileError && <Typography variant="caption" color="error" display="block" sx={{ mt: 0.5 }}>{aadharEditFileError}</Typography>}
