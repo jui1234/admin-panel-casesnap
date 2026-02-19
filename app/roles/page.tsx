@@ -85,6 +85,8 @@ export default function RolesPage() {
     permissions: []
   })
   const [useSuggestedPriority, setUseSuggestedPriority] = useState(true)
+  const [createRoleError, setCreateRoleError] = useState<string | null>(null)
+  const [editRoleError, setEditRoleError] = useState<string | null>(null)
 
   // API hooks - Force refetch on mount
   const { data: rolesData, isLoading: isLoadingRoles, error: rolesError, refetch } = useGetRolesQuery(undefined, {
@@ -108,7 +110,7 @@ export default function RolesPage() {
     
     // If role is a string (legacy), try to find it in roles list
     if (typeof user.role === 'string') {
-      const foundRole = roles.find(r => r._id === user.role || r.id === user.role || r.name === user.role)
+      const foundRole = roles.find(r => r._id === user.role || (r as Role & { id?: string }).id === user.role || r.name === user.role)
       return foundRole?.priority || null
     }
     
@@ -224,6 +226,7 @@ export default function RolesPage() {
       toast.error("You don't have permission to create roles")
       return
     }
+    setCreateRoleError(null)
     resetForm()
     setOpenCreateDialog(true)
   }
@@ -237,7 +240,7 @@ export default function RolesPage() {
       toast.error("You don't have permission to edit this role")
       return
     }
-    
+    setEditRoleError(null)
     setSelectedRole(role)
     setFormData({
       name: role.name,
@@ -303,8 +306,8 @@ export default function RolesPage() {
     return formData.permissions
       .filter(p => p.selected && p.actions.length > 0)
       .map(p => ({
-        module: p.module,
-        actions: p.actions
+        module: p.module as RolePermission['module'],
+        actions: p.actions as RolePermission['actions']
       }))
   }
 
@@ -323,6 +326,7 @@ export default function RolesPage() {
     }
 
     try {
+      setCreateRoleError(null)
       const payload = {
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
@@ -333,18 +337,13 @@ export default function RolesPage() {
       await createRole(payload).unwrap()
       toast.success('Role created successfully!')
       setOpenCreateDialog(false)
+      setCreateRoleError(null)
       resetForm()
       refetch()
     } catch (error: any) {
-      const status = error?.status
       const errorMessage = error?.data?.error || error?.data?.message || error?.message || 'Failed to create role'
-      
-      // For 403 errors, show toast (button-level action)
-      if (status === 403 || errorMessage.toLowerCase().includes('permission')) {
-        toast.error('You do not have permission to perform this action')
-      } else {
-        toast.error(errorMessage)
-      }
+      setCreateRoleError(errorMessage)
+      toast.error(errorMessage)
     }
   }
 
@@ -386,6 +385,7 @@ export default function RolesPage() {
     }
 
     try {
+      setEditRoleError(null)
       const payload = {
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
@@ -397,17 +397,12 @@ export default function RolesPage() {
       toast.success('Role updated successfully!')
       setOpenEditDialog(false)
       setSelectedRole(null)
+      setEditRoleError(null)
       refetch()
     } catch (error: any) {
-      const status = error?.status
       const errorMessage = error?.data?.error || error?.data?.message || error?.message || 'Failed to update role'
-      
-      // For 403 errors, show toast (button-level action)
-      if (status === 403 || errorMessage.toLowerCase().includes('permission')) {
-        toast.error('You do not have permission to perform this action')
-      } else {
-        toast.error(errorMessage)
-      }
+      setEditRoleError(errorMessage)
+      toast.error(errorMessage)
     }
   }
 
@@ -757,20 +752,25 @@ export default function RolesPage() {
         {/* Create Role Dialog */}
         <Dialog
           open={openCreateDialog}
-          onClose={() => setOpenCreateDialog(false)}
+          onClose={() => { setOpenCreateDialog(false); setCreateRoleError(null) }}
           maxWidth="md"
           fullWidth
         >
           <DialogTitle>
             <Box display="flex" justifyContent="space-between" alignItems="center">
               <Typography variant="h6">Create New Role</Typography>
-              <IconButton onClick={() => setOpenCreateDialog(false)} size="small">
+              <IconButton onClick={() => { setOpenCreateDialog(false); setCreateRoleError(null) }} size="small">
                 <X />
               </IconButton>
             </Box>
           </DialogTitle>
           <DialogContent>
             <Box sx={{ pt: 2 }}>
+              {createRoleError && (
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setCreateRoleError(null)}>
+                  {createRoleError}
+                </Alert>
+              )}
               <TextField
                 fullWidth
                 label="Role Name"
@@ -887,20 +887,25 @@ export default function RolesPage() {
         {/* Edit Role Dialog */}
         <Dialog
           open={openEditDialog}
-          onClose={() => setOpenEditDialog(false)}
+          onClose={() => { setOpenEditDialog(false); setEditRoleError(null) }}
           maxWidth="md"
           fullWidth
         >
           <DialogTitle>
             <Box display="flex" justifyContent="space-between" alignItems="center">
               <Typography variant="h6">Edit Role</Typography>
-              <IconButton onClick={() => setOpenEditDialog(false)} size="small">
+              <IconButton onClick={() => { setOpenEditDialog(false); setEditRoleError(null) }} size="small">
                 <X />
               </IconButton>
             </Box>
           </DialogTitle>
           <DialogContent>
             <Box sx={{ pt: 2 }}>
+              {editRoleError && (
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setEditRoleError(null)}>
+                  {editRoleError}
+                </Alert>
+              )}
               {selectedRole && !canEditRole(selectedRole) && (
                 <Alert severity="warning" sx={{ mb: 2 }}>
                   You don't have permission to edit this role. This role has higher authority than yours.

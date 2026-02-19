@@ -9,6 +9,7 @@ export interface RolePermission {
 
 export interface Role {
   _id: string
+  id?: string
   name: string
   description?: string | null
   priority: number

@@ -146,6 +146,32 @@ export default function ClientsPage() {
     if (openCreate || editId) setAssignableSearchInput('')
   }, [openCreate, editId])
 
+  const clientsParams = {
+    page: paginationModel.page + 1,
+    limit: paginationModel.pageSize,
+    search: debouncedSearch || undefined,
+    status: statusFilter === 'all' ? undefined : (statusFilter as ClientStatus),
+    sortBy: 'createdAt',
+    sortOrder: 'desc' as const,
+    includeDeleted: includeDeleted || undefined,
+  }
+
+  const {
+    data: clientsRes,
+    isLoading: clientsLoading,
+    error: clientsError,
+    refetch: refetchClients,
+  } = useGetClientsQuery(clientsParams)
+
+  const clients = clientsRes?.data ?? []
+  const totalClients = clientsRes?.total ?? 0
+
+  const { data: singleRes, isLoading: singleLoading } = useGetClientByIdQuery(
+    { clientId: viewId || editId || '' },
+    { skip: !viewId && !editId }
+  )
+  const singleClient = singleRes?.data
+
   const assignableOptions = useMemo((): AssignableOption[] => {
     if (!canShowAssignedTo) return []
     const list: AssignableOption[] = []
@@ -172,36 +198,28 @@ export default function ClientsPage() {
         list.push(u as AssignableOption)
       }
     })
+    if (editId && singleClient?.assignedTo && typeof singleClient.assignedTo === 'object') {
+      const a = singleClient.assignedTo
+      const id = a.id || (a as { _id?: string })._id
+      if (id && !seen.has(id)) {
+        seen.add(id)
+        list.push({
+          id,
+          _id: id,
+          firstName: a.firstName ?? '',
+          lastName: a.lastName ?? '',
+          email: a.email ?? '',
+          role: '',
+          status: 'approved',
+          createdAt: '',
+          updatedAt: '',
+        } as AssignableOption)
+      }
+    }
     return list
-  }, [canShowAssignedTo, currentUser, assignableData?.data])
+  }, [canShowAssignedTo, currentUser, assignableData?.data, editId, singleClient?.assignedTo])
 
   const assignedToOptions = assignableOptions
-
-  const clientsParams = {
-    page: paginationModel.page + 1,
-    limit: paginationModel.pageSize,
-    search: debouncedSearch || undefined,
-    status: statusFilter === 'all' ? undefined : (statusFilter as ClientStatus),
-    sortBy: 'createdAt',
-    sortOrder: 'desc' as const,
-    includeDeleted: includeDeleted || undefined,
-  }
-
-  const {
-    data: clientsRes,
-    isLoading: clientsLoading,
-    error: clientsError,
-    refetch: refetchClients,
-  } = useGetClientsQuery(clientsParams)
-
-  const clients = clientsRes?.data ?? []
-  const totalClients = clientsRes?.total ?? 0
-
-  const { data: singleRes, isLoading: singleLoading } = useGetClientByIdQuery(
-    { clientId: viewId || editId || '' },
-    { skip: !viewId && !editId }
-  )
-  const singleClient = singleRes?.data
 
   const [createClient, { isLoading: creating }] = useCreateClientMutation()
   const [updateClient, { isLoading: updating }] = useUpdateClientMutation()
@@ -246,6 +264,7 @@ export default function ClientsPage() {
   const [aadharEditFileError, setAadharEditFileError] = useState<string>('')
   const [aadharPreviewUrl, setAadharPreviewUrl] = useState<string | null>(null)
   const [aadharEditPreviewUrl, setAadharEditPreviewUrl] = useState<string | null>(null)
+  const [viewAadharImageLoaded, setViewAadharImageLoaded] = useState(false)
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
 
   const resetCreateForm = () => {
@@ -289,6 +308,10 @@ export default function ClientsPage() {
     setAadharEditPreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [aadharEditFile])
+
+  useEffect(() => {
+    if (singleClient?.aadharImageUrl) setViewAadharImageLoaded(false)
+  }, [singleClient?.aadharImageUrl])
 
   const handleAadharFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
     const file = e.target.files?.[0]
@@ -557,6 +580,9 @@ export default function ClientsPage() {
 
   useEffect(() => {
     if (!singleClient || !editId) return
+    const assignedId = typeof singleClient.assignedTo === 'string'
+      ? singleClient.assignedTo
+      : (singleClient.assignedTo?.id || (singleClient.assignedTo as { _id?: string })?._id)
     setEditForm({
       firstName: singleClient.firstName,
       lastName: singleClient.lastName,
@@ -570,10 +596,16 @@ export default function ClientsPage() {
       country: singleClient.country,
       aadharCardNumber: singleClient.aadharCardNumber,
       status: singleClient.status,
-      assignedTo: typeof singleClient.assignedTo === 'string' ? singleClient.assignedTo : singleClient.assignedTo?.id,
+      assignedTo: assignedId || undefined,
       notes: singleClient.notes,
     })
-  }, [singleClient, editId])
+    if (assignedId && canShowAssignedTo) {
+      const opt = { id: assignedId, _id: assignedId, firstName: (singleClient.assignedTo as { firstName?: string })?.firstName ?? '', lastName: (singleClient.assignedTo as { lastName?: string })?.lastName ?? '', email: (singleClient.assignedTo as { email?: string })?.email ?? '' }
+      setAssignableSearchInput(getAssignableOptionLabel(opt as AssignableOption, currentUser?.id))
+    } else {
+      setAssignableSearchInput('')
+    }
+  }, [singleClient, editId, canShowAssignedTo, currentUser?.id])
 
   const getStatusColor = (s: string) => {
     switch (s?.toLowerCase()) {
@@ -969,7 +1001,10 @@ export default function ClientsPage() {
                       options={assignableOptions}
                       getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
                       value={assignableOptions.find((o) => (o.id || o._id) === createForm.assignedTo) ?? null}
-                      onChange={(_, value) => setCreateForm((p) => ({ ...p, assignedTo: value ? (value.id || (value as { _id?: string })._id) || '' : '' }))}
+                      onChange={(_, value) => {
+                        setCreateForm((p) => ({ ...p, assignedTo: value ? (value.id || (value as { _id?: string })._id) || '' : '' }))
+                        setAssignableSearchInput(value ? getAssignableOptionLabel(value, currentUser?.id) : '')
+                      }}
                       inputValue={assignableSearchInput}
                       onInputChange={(_, value) => setAssignableSearchInput(value)}
                       loading={assignableLoading}
@@ -1140,12 +1175,26 @@ export default function ClientsPage() {
                   {singleClient.aadharImageUrl && (
                     <Grid item xs={12}>
                       <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>Aadhar Card Image</Typography>
-                      <Box
-                        component="img"
-                        src={singleClient.aadharImageUrl}
-                        alt="Aadhar card"
-                        sx={{ maxWidth: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: 1, border: '1px solid', borderColor: 'divider', display: 'block' }}
-                      />
+                      <Box sx={{ minHeight: 180, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                        {!viewAadharImageLoaded && (
+                          <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover', borderRadius: 1 }}>
+                            <CircularProgress size={32} />
+                          </Box>
+                        )}
+                        <Box
+                          component="img"
+                          src={singleClient.aadharImageUrl}
+                          alt="Aadhar card"
+                          onLoad={() => setViewAadharImageLoaded(true)}
+                          sx={{
+                            maxWidth: '100%',
+                            maxHeight: 280,
+                            objectFit: 'contain',
+                            borderRadius: 1,
+                            display: viewAadharImageLoaded ? 'block' : 'none',
+                          }}
+                        />
+                      </Box>
                       <Button size="small" startIcon={<Download size={18} />} href={singleClient.aadharImageUrl} download target="_blank" rel="noopener noreferrer" sx={{ mt: 1 }}>Download Aadhar Image</Button>
                     </Grid>
                   )}
@@ -1238,7 +1287,10 @@ export default function ClientsPage() {
                         options={assignableOptions}
                         getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
                         value={assignableOptions.find((o) => (o.id || o._id) === editForm.assignedTo) ?? null}
-                        onChange={(_, value) => setEditForm((p) => ({ ...p, assignedTo: value ? (value.id || (value as { _id?: string })._id) || '' : '' }))}
+                        onChange={(_, value) => {
+                          setEditForm((p) => ({ ...p, assignedTo: value ? (value.id || (value as { _id?: string })._id) || '' : '' }))
+                          setAssignableSearchInput(value ? getAssignableOptionLabel(value, currentUser?.id) : '')
+                        }}
                         inputValue={assignableSearchInput}
                         onInputChange={(_, value) => setAssignableSearchInput(value)}
                         loading={assignableLoading}
