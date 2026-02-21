@@ -4,6 +4,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { useRouter } from 'next/navigation'
 import { APP_BACKEND_URL } from '@/config/env'
 
+const MODULES_CACHE_KEY_PREFIX = 'sidebarModulesCache:'
+
 interface Role {
   id: string
   name: string
@@ -98,6 +100,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Run immediately - don't delay as it causes redirect issues
     checkAuth()
   }, [])
+
+  const clearSidebarModulesCache = () => {
+    try {
+      for (let index = localStorage.length - 1; index >= 0; index--) {
+        const key = localStorage.key(index)
+        if (key?.startsWith(MODULES_CACHE_KEY_PREFIX)) {
+          localStorage.removeItem(key)
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to clear sidebar modules cache', error)
+    }
+  }
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
@@ -201,6 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('organization')
       localStorage.removeItem('role')
       localStorage.removeItem('permissions')
+      clearSidebarModulesCache()
     } catch (error) {
       console.warn('localStorage not available during logout', error)
     }

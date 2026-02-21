@@ -12,7 +12,6 @@ import {
   Download as DownloadIcon,
   Delete as DeleteIcon
 } from 'lucide-react'
-import Layout from '@/components/Layout'
 import { 
   DataGrid, 
   GridColDef, 
@@ -170,8 +169,7 @@ export default function ReportsPage() {
   ]
 
   return (
-    <Layout>
-      <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3 }}>
         {/* Page Header */}
         <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: 2 }}>
           <Box>
@@ -329,6 +327,5 @@ export default function ReportsPage() {
           </Grid>
         </Grid>
       </Box>
-    </Layout>
   )
 } 

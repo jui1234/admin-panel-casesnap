@@ -14,7 +14,6 @@ import {
   Trash2,
   AlertCircle
 } from 'lucide-react'
-import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
 import { 
@@ -459,18 +458,15 @@ export default function RolesPage() {
   if (isAuthLoading) {
     return (
       <ProtectedRoute>
-        <Layout>
-          <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-            <CircularProgress />
-          </Box>
-        </Layout>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+        </Box>
       </ProtectedRoute>
     )
   }
 
   return (
     <ProtectedRoute>
-    <Layout>
       <Box sx={{ p: 3 }}>
         {/* Header */}
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -1069,7 +1065,6 @@ export default function RolesPage() {
           </DialogActions>
         </Dialog>
       </Box>
-    </Layout>
     </ProtectedRoute>
   )
 }

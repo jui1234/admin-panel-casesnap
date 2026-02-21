@@ -7,7 +7,21 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
 import { useLoginMutation } from '@/redux/api/authApi'
+import { APP_BACKEND_URL } from '@/config/env'
 import toast from 'react-hot-toast'
+
+interface SidebarModule {
+  _id: string
+  name: string
+  displayName: string
+  description: string
+}
+
+interface SidebarModulesResponse {
+  data: SidebarModule[]
+}
+
+const MODULES_CACHE_KEY_PREFIX = 'sidebarModulesCache'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -24,6 +38,30 @@ export default function LoginPage() {
   
   // RTK Query mutation
   const [loginMutation, { isLoading, error: loginError }] = useLoginMutation()
+
+  const warmSidebarModulesCache = async (cacheScope: string) => {
+    try {
+      const backendUrl = APP_BACKEND_URL.replace(/\/$/, '')
+      const response = await fetch(`${backendUrl}/api/modules`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) return
+
+      const modulesResponse: SidebarModulesResponse = await response.json()
+      const modulesData = Array.isArray(modulesResponse?.data) ? modulesResponse.data : []
+      const cacheKey = `${MODULES_CACHE_KEY_PREFIX}:${cacheScope}`
+      localStorage.setItem(cacheKey, JSON.stringify({
+        data: modulesData,
+        cachedAt: Date.now(),
+      }))
+    } catch (error) {
+      console.warn('Failed to warm sidebar modules cache:', error)
+    }
+  }
 
   // Redirect to dashboard if already authenticated
   useEffect(() => {
@@ -101,6 +139,8 @@ export default function LoginPage() {
           organizationName: result.user.organization?.companyName
         }
         localStorage.setItem('userData', JSON.stringify(userData))
+        const cacheScope = userData.organizationId || userData.id || 'default'
+        void warmSidebarModulesCache(cacheScope)
         
         // Store organization data
         if (result.user?.organization) {
@@ -117,14 +157,10 @@ export default function LoginPage() {
         const loginSuccess = await login(email, password)
         
         if (loginSuccess) {
-          setTimeout(() => {
-            router.push('/dashboard')
-          }, 800)
+          router.replace('/dashboard')
         } else {
           // Fallback: redirect anyway since we have the data
-          setTimeout(() => {
-            router.push('/dashboard')
-          }, 800)
+          router.replace('/dashboard')
         }
       }
     } catch (err: any) {

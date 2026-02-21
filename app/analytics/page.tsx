@@ -1,7 +1,6 @@
 'use client'
 
 import { BarChart3, TrendingUp, Users, Activity, Eye, Download, Calendar } from 'lucide-react'
-import Layout from '@/components/Layout'
 
 export default function AnalyticsPage() {
   const metrics = [
@@ -28,8 +27,7 @@ export default function AnalyticsPage() {
   ]
 
   return (
-    <Layout>
-      <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -223,6 +221,5 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </div>
-    </Layout>
   )
 } 

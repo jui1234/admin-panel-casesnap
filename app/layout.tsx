@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import SetupGuard from '@/components/SetupGuard'
 import MuiThemeProviderWrapper from '@/components/ThemeProvider'
 import ReduxProvider from '@/components/ReduxProvider'
+import ProtectedAppShell from '@/components/ProtectedAppShell'
 import { env } from '@/config/env'
 import { Toaster } from 'react-hot-toast'
 
@@ -226,7 +227,9 @@ export default function RootLayout({
             <AuthProvider>
               <SetupGuard>
                 <MuiThemeProviderWrapper>
-                  {children}
+                  <ProtectedAppShell>
+                    {children}
+                  </ProtectedAppShell>
                 </MuiThemeProviderWrapper>
               </SetupGuard>
             </AuthProvider>

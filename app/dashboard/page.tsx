@@ -1,7 +1,6 @@
 'use client'
 
 import { Shield, Users, Settings, TrendingUp, Activity, Clock, UserCheck, BarChart3, Building2, Mail, Phone, MapPin } from 'lucide-react'
-import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useAuth } from '@/contexts/AuthContext'
 import { ROLES } from '@/utils/roles'
@@ -82,7 +81,6 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute>
-      <Layout>
       <div className="space-y-4 sm:space-y-6">
         {/* Page Header */}
         <div>
@@ -417,7 +415,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-      </Layout>
     </ProtectedRoute>
   )
 }

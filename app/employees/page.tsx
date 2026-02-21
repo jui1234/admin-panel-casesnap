@@ -19,7 +19,6 @@ import {
   RotateCcw,
   Check
 } from 'lucide-react'
-import Layout from '@/components/Layout'
 import ActionMenu from '@/components/ActionMenu'
 import { useAuth } from '@/contexts/AuthContext'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
@@ -841,8 +840,7 @@ export default function EmployeesPage() {
   } as const
 
   return (
-    <Layout>
-      <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3 }}>
         {/* Page Header */}
         <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: 2 }}>
           <Box>
@@ -1683,8 +1681,7 @@ export default function EmployeesPage() {
           </DialogActions>
         </Dialog>
 
-        
-      </Box>
-    </Layout>
+      
+    </Box>
   )
 } 

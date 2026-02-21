@@ -1,7 +1,6 @@
 'use client'
 
 import { Settings, Save, User, Shield, Bell, Globe, Database, Key, Check, ArrowUp } from 'lucide-react'
-import Layout from '@/components/Layout'
 import Head from 'next/head'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -48,8 +47,7 @@ export default function SettingsPage() {
         <meta name="keywords" content="legal practice management settings, law firm management software configuration, advocate admin panel settings, case tracking software settings, legal billing software configuration" />
         <link rel="canonical" href="https://casesnap.com/settings" />
       </Head>
-      <Layout>
-        <div className="space-y-4 sm:space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -368,7 +366,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
-      </Layout>
     </>
   )
 } 

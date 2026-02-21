@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { UserCheck, Shield, Plus, Settings, Eye, Edit, Trash2, Users, Lock } from 'lucide-react'
-import Layout from '@/components/Layout'
 import { ROLES, PERMISSIONS, getPermissionsByCategory } from '@/utils/roles'
 
 export default function PermissionsPage() {
@@ -17,8 +16,7 @@ export default function PermissionsPage() {
   }
 
   return (
-    <Layout>
-      <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -232,6 +230,5 @@ export default function PermissionsPage() {
           </div>
         </div>
       </div>
-    </Layout>
   )
 } 

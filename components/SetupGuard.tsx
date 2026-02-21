@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import CaseSnapLoader from '@/components/CaseSnapLoader'
 
 interface SetupGuardProps {
   children: React.ReactNode
@@ -51,21 +52,13 @@ export default function SetupGuard({ children }: SetupGuardProps) {
     }
   }, [isAuthenticated, isLoading, router, pathname])
 
-  const isProtected = isProtectedPath(pathname)
+  const isRegistration = isRegistrationPath(pathname)
+  const isProtected = isProtectedPath(pathname) && !isRegistration
   const mustRedirect = isProtected && (!isLoading && !isAuthenticated)
-  const showBlock = isLoading || !hasChecked || (isProtected && !isAuthenticated)
+  const showBlock = isProtected && (isLoading || !hasChecked || !isAuthenticated)
 
   if (showBlock) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-300">
-            {mustRedirect ? 'Redirecting to login...' : 'Loading...'}
-          </p>
-        </div>
-      </div>
-    )
+    return <CaseSnapLoader fullscreen={false} message={mustRedirect ? 'Redirecting to login...' : 'Loading CaseSnap...'} />
   }
 
   return <>{children}</>

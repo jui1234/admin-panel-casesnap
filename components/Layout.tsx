@@ -31,6 +31,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { APP_BACKEND_URL } from '@/config/env'
 import ThemeToggle from './ThemeToggle'
 import LogoutModal from './LogoutModal'
+import CaseSnapLoader from './CaseSnapLoader'
 import { useLazyGetNotificationsQuery } from '@/redux/api/notificationsApi'
 import type { Notification as ApiNotification } from '@/redux/api/notificationsApi'
 
@@ -48,6 +49,14 @@ interface Module {
 interface ModulesResponse {
   data: Module[]
 }
+
+interface ModulesCache {
+  data: Module[]
+  cachedAt: number
+}
+
+const MODULES_CACHE_TTL_MS = 1000 * 60 * 60 * 12 // 12 hours
+const MODULES_CACHE_KEY_PREFIX = 'sidebarModulesCache'
 
 // Map module names to routes and icons (using lowercase module names from backend)
 const moduleRouteMap: Record<string, { href: string; icon: any }> = {
@@ -120,11 +129,13 @@ export default function Layout({ children }: LayoutProps) {
   const [showNotifications, setShowNotifications] = useState(false)
   const [modules, setModules] = useState<Module[]>([])
   const [modulesLoading, setModulesLoading] = useState(true)
+  const [isRouteLoading, setIsRouteLoading] = useState(false)
   const notificationRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const pathname = usePathname()
   const { theme } = useTheme()
   const { logout, user } = useAuth()
+  const modulesCacheKey = `${MODULES_CACHE_KEY_PREFIX}:${user?.organizationId || user?.id || 'default'}`
   
   // Helper to check if role is admin or super-admin
   const isAdminRole = (role: string | { name: string } | undefined): boolean => {
@@ -156,11 +167,56 @@ export default function Layout({ children }: LayoutProps) {
   }
   const subscriptionPlanDisplay = getSubscriptionPlanDisplayName(user?.subscriptionPlan)
   
-  // Fetch modules from API
+  // Load modules from cache first, then refresh from API
   useEffect(() => {
-    const fetchModules = async () => {
+    let isMounted = true
+
+    const loadCachedModules = (): boolean => {
+      if (typeof window === 'undefined') return false
       try {
+        const cached = localStorage.getItem(modulesCacheKey)
+        if (!cached) return false
+
+        const parsed: ModulesCache = JSON.parse(cached)
+        const isValidCache =
+          Array.isArray(parsed?.data) &&
+          typeof parsed?.cachedAt === 'number' &&
+          Date.now() - parsed.cachedAt < MODULES_CACHE_TTL_MS
+
+        if (!isValidCache) {
+          localStorage.removeItem(modulesCacheKey)
+          return false
+        }
+
+        setModules(parsed.data)
+        setModulesLoading(false)
+        return true
+      } catch (error) {
+        console.warn('Failed to read module cache:', error)
+        return false
+      }
+    }
+
+    const saveModulesToCache = (modulesData: Module[]) => {
+      if (typeof window === 'undefined') return
+      try {
+        const cachePayload: ModulesCache = {
+          data: modulesData,
+          cachedAt: Date.now(),
+        }
+        localStorage.setItem(modulesCacheKey, JSON.stringify(cachePayload))
+      } catch (error) {
+        console.warn('Failed to write module cache:', error)
+      }
+    }
+
+    const fetchModules = async () => {
+      const hasCachedModules = loadCachedModules()
+      if (!hasCachedModules) {
         setModulesLoading(true)
+      }
+
+      try {
         // Remove trailing slash if present
         const backendUrl = APP_BACKEND_URL.replace(/\/$/, '')
         const response = await fetch(`${backendUrl}/api/modules`, {
@@ -173,19 +229,27 @@ export default function Layout({ children }: LayoutProps) {
           const responseData: ModulesResponse = await response.json()
           // Get modules from data array
           const modulesData = responseData.data || []
-          setModules(modulesData)
+          if (isMounted) {
+            setModules(modulesData)
+          }
+          saveModulesToCache(modulesData)
         } else {
           console.error('Failed to fetch modules:', response.statusText)
         }
       } catch (error) {
         console.error('Failed to fetch modules:', error)
       } finally {
-        setModulesLoading(false)
+        if (isMounted) {
+          setModulesLoading(false)
+        }
       }
     }
     
     fetchModules()
-  }, [])
+    return () => {
+      isMounted = false
+    }
+  }, [modulesCacheKey])
   
   // Note: We don't block routes here - let API calls determine permissions
   // Navigation items are hidden based on permissions, but users can still
@@ -241,11 +305,13 @@ export default function Layout({ children }: LayoutProps) {
       }
     })
   
-  // Separate navigation: top items (Dashboard) and dynamic modules
+  // Build one continuous navigation list so Settings feels part of modules
   const topNavigation = [
     ...staticTopNavigation,
-    ...dynamicNavigation
+    ...dynamicNavigation,
+    ...staticBottomNavigation
   ]
+  const prefetchKey = topNavigation.map((item) => item.href).join('|')
 
   const isDark = theme === 'dark'
 
@@ -255,6 +321,17 @@ export default function Layout({ children }: LayoutProps) {
   useEffect(() => {
     if (user) fetchNotifications({ limit: 30 })
   }, [user])
+
+  useEffect(() => {
+    topNavigation.forEach((item) => {
+      router.prefetch(item.href)
+    })
+  }, [router, prefetchKey])
+
+  useEffect(() => {
+    // Hide redirect loader as soon as route changes.
+    setIsRouteLoading(false)
+  }, [pathname])
 
   const apiNotifications: ApiNotification[] = notificationsData?.data ?? []
   const notifications = apiNotifications.map((n) => ({
@@ -336,8 +413,24 @@ export default function Layout({ children }: LayoutProps) {
     const href = getNotificationLink(notification.relatedEntityType, notification.relatedEntityId)
     if (href) {
       setShowNotifications(false)
-      router.push(href)
+      navigateWithLoader(href)
     }
+  }
+
+  const navigateWithLoader = (href: string) => {
+    if (!href || href === pathname) {
+      setSidebarOpen(false)
+      return
+    }
+
+    setIsRouteLoading(true)
+    router.push(href)
+    setSidebarOpen(false)
+
+    // Fallback: avoid infinite loader if navigation gets interrupted.
+    setTimeout(() => {
+      setIsRouteLoading(false)
+    }, 12000)
   }
 
   return (
@@ -364,6 +457,9 @@ export default function Layout({ children }: LayoutProps) {
         }
       `}</style>
       <div className={`h-screen flex overflow-hidden transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
+      {isRouteLoading && (
+        <CaseSnapLoader message="Redirecting in CaseSnap..." />
+      )}
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div 
@@ -409,8 +505,7 @@ export default function Layout({ children }: LayoutProps) {
                     href={item.href}
                     onClick={(e) => {
                       e.preventDefault()
-                      router.push(item.href)
-                      setSidebarOpen(false)
+                      navigateWithLoader(item.href)
                     }}
                     className={`group flex items-center px-2 sm:px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                       isActive(item.href)
@@ -434,33 +529,6 @@ export default function Layout({ children }: LayoutProps) {
             )}
           </div>
 
-          {/* Bottom Navigation: Settings (pushed to bottom, no border) */}
-          <div className="mt-auto pt-4 space-y-1 flex-shrink-0">
-            {staticBottomNavigation.map((item) => {
-              const Icon = item.icon
-              return (
-                <a
-                  key={item.name}
-                  href={item.href}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    router.push(item.href)
-                    setSidebarOpen(false)
-                  }}
-                  className={`group flex items-center px-2 sm:px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    isActive(item.href)
-                      ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border-r-2 border-yellow-500'
-                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Icon className={`mr-2 sm:mr-3 h-4 w-4 sm:h-5 sm:w-5 ${
-                    isActive(item.href) ? 'text-yellow-500' : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400'
-                  }`} />
-                  <span className="truncate">{item.name}</span>
-                </a>
-              )
-            })}
-          </div>
         </nav>
 
         {/* Logout button */}

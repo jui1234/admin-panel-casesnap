@@ -21,7 +21,6 @@ import {
   Upload,
   Download,
 } from 'lucide-react'
-import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
@@ -708,8 +707,7 @@ export default function ClientsPage() {
 
   return (
     <ProtectedRoute>
-      <Layout>
-        <Box sx={{ p: 3 }}>
+      <Box sx={{ p: 3 }}>
           <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: 2 }}>
             <Box>
               <Typography variant="h4" component="h1" gutterBottom>
@@ -1484,7 +1482,6 @@ export default function ClientsPage() {
             </MenuItem>
           )}
         </Menu>
-      </Layout>
     </ProtectedRoute>
   )
 }
