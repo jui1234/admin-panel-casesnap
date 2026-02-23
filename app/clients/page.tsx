@@ -7,7 +7,6 @@ import {
   Building,
   Plus,
   Search,
-  Filter,
   Eye,
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -20,6 +19,8 @@ import {
   ArchiveRestore,
   Upload,
   Download,
+  Trash2,
+  Calendar,
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
@@ -51,6 +52,8 @@ import {
   ListItemIcon,
   ListItemText,
   Autocomplete,
+  Tabs,
+  Tab,
 } from '@mui/material'
 import {
   useGetClientsQuery,
@@ -112,10 +115,9 @@ export default function ClientsPage() {
     canAssignee || currentUser?.assigneePermissions?.canAssignClient === true
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [showFilters, setShowFilters] = useState(false)
-  const [includeDeleted, setIncludeDeleted] = useState(false)
+  const [viewTab, setViewTab] = useState<'active' | 'archived' | 'deleted'>('active')
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
+  const [deletedPaginationModel, setDeletedPaginationModel] = useState({ page: 0, pageSize: 10 })
 
   const [openCreate, setOpenCreate] = useState(false)
   const [viewId, setViewId] = useState<string | null>(null)
@@ -128,6 +130,10 @@ export default function ClientsPage() {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 500)
     return () => clearTimeout(t)
   }, [searchTerm])
+
+  useEffect(() => {
+    if (viewTab === 'deleted') setDeletedPaginationModel((p) => ({ ...p, page: 0 }))
+  }, [viewTab])
 
   const [assignableSearchInput, setAssignableSearchInput] = useState('')
   const [assignableSearchDebounced, setAssignableSearchDebounced] = useState('')
@@ -145,14 +151,15 @@ export default function ClientsPage() {
     if (openCreate || editId) setAssignableSearchInput('')
   }, [openCreate, editId])
 
+  const isDeletedView = viewTab === 'deleted'
   const clientsParams = {
-    page: paginationModel.page + 1,
-    limit: paginationModel.pageSize,
+    page: isDeletedView ? 1 : paginationModel.page + 1,
+    limit: isDeletedView ? 500 : paginationModel.pageSize,
     search: debouncedSearch || undefined,
-    status: statusFilter === 'all' ? undefined : (statusFilter as ClientStatus),
+    status: isDeletedView ? undefined : (viewTab === 'active' ? 'active' : viewTab === 'archived' ? 'archived' : undefined),
     sortBy: 'createdAt',
     sortOrder: 'desc' as const,
-    includeDeleted: includeDeleted || undefined,
+    includeDeleted: isDeletedView ? true : undefined,
   }
 
   const {
@@ -162,8 +169,15 @@ export default function ClientsPage() {
     refetch: refetchClients,
   } = useGetClientsQuery(clientsParams)
 
-  const clients = clientsRes?.data ?? []
-  const totalClients = clientsRes?.total ?? 0
+  const rawClients = clientsRes?.data ?? []
+  const deletedClients = rawClients.filter((c) => c.deletedAt != null)
+  const totalClients = isDeletedView ? deletedClients.length : (clientsRes?.total ?? 0)
+  const clients = isDeletedView
+    ? deletedClients.slice(
+        deletedPaginationModel.page * deletedPaginationModel.pageSize,
+        deletedPaginationModel.page * deletedPaginationModel.pageSize + deletedPaginationModel.pageSize
+      )
+    : rawClients
 
   const { data: singleRes, isLoading: singleLoading } = useGetClientByIdQuery(
     { clientId: viewId || editId || '' },
@@ -512,7 +526,7 @@ export default function ClientsPage() {
       refetchClients()
     } catch (err: unknown) {
       const et = err as { status?: number; data?: { error?: string; message?: string } }
-      toast.error(et?.status === 403 ? "You don't have permission" : (et?.data?.error ?? et?.data?.message ?? 'Restore failed'))
+      toast.error(et?.status === 403 ? "You don't have permission to restore this client" : (et?.data?.error ?? et?.data?.message ?? 'Restore failed'))
     }
   }
 
@@ -621,6 +635,15 @@ export default function ClientsPage() {
     }
   }
 
+  const formatDeletedDate = (deletedAt: string | undefined) => {
+    if (!deletedAt) return '—'
+    try {
+      return new Date(deletedAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })
+    } catch {
+      return deletedAt
+    }
+  }
+
   const columns: GridColDef[] = [
     {
       field: 'client',
@@ -634,7 +657,12 @@ export default function ClientsPage() {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Avatar sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>{initials}</Avatar>
             <Box>
-              <Typography variant="body2" fontWeight={500}>{name}</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" fontWeight={500}>{name}</Typography>
+                {isDeletedView && r.deletedAt && (
+                  <Chip label="Deleted" size="small" color="error" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />
+                )}
+              </Box>
               <Typography variant="caption" color="text.secondary">{r.email}</Typography>
             </Box>
           </Box>
@@ -669,6 +697,23 @@ export default function ClientsPage() {
         />
       ),
     },
+    ...(isDeletedView
+      ? [
+          {
+            field: 'deletedAt',
+            headerName: 'Deleted on',
+            width: 140,
+            renderCell: (params) => (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Calendar size={14} style={{ opacity: 0.7 }} />
+                <Typography variant="body2" color="text.secondary">
+                  {formatDeletedDate((params.row as Client).deletedAt)}
+                </Typography>
+              </Box>
+            ),
+          } as GridColDef,
+        ]
+      : []),
     ...(canRead || canShowAssignedTo
       ? [
           {
@@ -683,7 +728,44 @@ export default function ClientsPage() {
           },
         ]
       : []),
-    ...(canRead || canUpdate || canDelete
+    ...(isDeletedView
+      ? (canRead || canUpdate)
+        ? [
+            {
+              field: 'actions',
+              headerName: 'Actions',
+              width: 160,
+              sortable: false,
+              filterable: false,
+              renderCell: (params: { row: Client }) => {
+                const c = params.row as Client
+                const id = c.id || (c as { _id?: string })._id || ''
+                return (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    {canRead && (
+                      <Button size="small" variant="outlined" startIcon={<Eye size={16} />} onClick={() => openView(id)}>
+                        View
+                      </Button>
+                    )}
+                    {canUpdate && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="success"
+                        startIcon={<RotateCcw size={16} />}
+                        onClick={() => handleRestore(c)}
+                        disabled={restoring}
+                      >
+                        Restore
+                      </Button>
+                    )}
+                  </Box>
+                )
+              },
+            },
+          ]
+        : []
+      : canRead || canUpdate || canDelete
       ? [
           {
             field: 'actions',
@@ -701,10 +783,6 @@ export default function ClientsPage() {
       : []),
   ]
 
-  const activeCount = clients.filter((c) => c.status === 'active').length
-  const prospectCount = clients.filter((c) => c.status === 'prospect').length
-  const archivedCount = clients.filter((c) => c.status === 'archived').length
-
   return (
     <ProtectedRoute>
       <Box sx={{ p: 3 }}>
@@ -717,12 +795,18 @@ export default function ClientsPage() {
                 Manage client relationships and information
               </Typography>
             </Box>
-            {canCreate && (
+            {canCreate && viewTab === 'active' && (
               <Button variant="contained" startIcon={<Plus />} onClick={() => { setOpenCreate(true); resetCreateForm(); }} sx={{ minWidth: { xs: '100%', sm: 'auto' } }}>
                 Add Client
               </Button>
             )}
           </Box>
+
+          <Tabs value={viewTab} onChange={(_, v: 'active' | 'archived' | 'deleted') => setViewTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+            <Tab label="Active" value="active" icon={<Building size={18} />} iconPosition="start" />
+            <Tab label="Archive" value="archived" icon={<Archive size={18} />} iconPosition="start" />
+            <Tab label="Deleted" value="deleted" icon={<Trash2 size={18} />} iconPosition="start" />
+          </Tabs>
 
           <Box sx={{ mb: 3 }}>
             <Grid container spacing={2} alignItems="center">
@@ -749,103 +833,26 @@ export default function ClientsPage() {
                   }}
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={8}>
-                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Button variant="outlined" size="small" startIcon={<Filter />} onClick={() => setShowFilters(!showFilters)}>
-                    Filters
-                  </Button>
-                  {showFilters && (
-                    <>
-                      <FormControl size="small" sx={{ minWidth: 140 }}>
-                        <InputLabel>Status</InputLabel>
-                        <Select value={statusFilter} label="Status" onChange={(e) => setStatusFilter(e.target.value)}>
-                          <MenuItem value="all">All</MenuItem>
-                          {CLIENT_STATUSES.map((s) => (
-                            <MenuItem key={s} value={s}>{capitalizeFirst(s)}</MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                      <Button
-                        size="small"
-                        variant={includeDeleted ? 'contained' : 'outlined'}
-                        onClick={() => setIncludeDeleted((p) => !p)}
-                      >
-                        Include deleted
-                      </Button>
-                      {(statusFilter !== 'all' || includeDeleted) && (
-                        <Button size="small" variant="outlined" startIcon={<X />} onClick={() => { setStatusFilter('all'); setIncludeDeleted(false); }}>
-                          Clear
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </Box>
-              </Grid>
+              <Grid item xs={12} sm={6} md={8} />
             </Grid>
           </Box>
 
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Box sx={{ p: 1, bgcolor: 'primary.100', borderRadius: 1, mr: 2 }}>
-                      <Building size={24} />
-                    </Box>
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">Total</Typography>
-                      <Typography variant="h6" fontWeight={600}>{totalClients}</Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Box sx={{ p: 1, bgcolor: 'success.100', borderRadius: 1, mr: 2 }}>
-                      <Building size={24} />
-                    </Box>
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">Active</Typography>
-                      <Typography variant="h6" fontWeight={600}>{activeCount}</Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Box sx={{ p: 1, bgcolor: 'warning.100', borderRadius: 1, mr: 2 }}>
-                      <Building size={24} />
-                    </Box>
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">Prospects</Typography>
-                      <Typography variant="h6" fontWeight={600}>{prospectCount}</Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Box sx={{ p: 1, bgcolor: 'grey.200', borderRadius: 1, mr: 2 }}>
-                      <Building size={24} />
-                    </Box>
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">Archived</Typography>
-                      <Typography variant="h6" fontWeight={600}>{archivedCount}</Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
+          {(viewTab === 'active' || viewTab === 'archived') && (
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              {viewTab === 'active' && <Building size={20} style={{ opacity: 0.7 }} />}
+              {viewTab === 'archived' && <Archive size={20} style={{ opacity: 0.7 }} />}
+              <Typography variant="body2" color="text.secondary">
+                {totalClients} {viewTab === 'active' ? 'active' : 'archived'} client{totalClients !== 1 ? 's' : ''}
+              </Typography>
+            </Box>
+          )}
+
+          {isDeletedView && totalClients > 0 && (
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Trash2 size={20} style={{ opacity: 0.7 }} />
+              <Typography variant="body2" color="text.secondary">{totalClients} deleted client{totalClients !== 1 ? 's' : ''}</Typography>
+            </Box>
+          )}
 
           <Card>
             <Box sx={{ height: 600, width: '100%' }}>
@@ -858,15 +865,36 @@ export default function ClientsPage() {
                   <Alert severity="error">{(clientsError as { data?: { error?: string; message?: string } })?.data?.error ?? (clientsError as { message?: string })?.message ?? 'Failed to load clients'}</Alert>
                   <Button variant="contained" onClick={() => refetchClients()}>Retry</Button>
                 </Box>
+              ) : clients.length === 0 ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', gap: 1 }}>
+                  {isDeletedView ? (
+                    <>
+                      <Trash2 size={48} style={{ opacity: 0.4 }} />
+                      <Typography variant="body1" color="text.secondary">No deleted clients</Typography>
+                    </>
+                  ) : viewTab === 'archived' ? (
+                    <>
+                      <Archive size={48} style={{ opacity: 0.4 }} />
+                      <Typography variant="body1" color="text.secondary">No archived clients</Typography>
+                    </>
+                  ) : (
+                    <>
+                      <Building size={48} style={{ opacity: 0.4 }} />
+                      <Typography variant="body1" color="text.secondary">
+                        {canShowAssignedTo ? 'No active clients or no clients assigned to you' : 'No active clients'}
+                      </Typography>
+                    </>
+                  )}
+                </Box>
               ) : (
                 <DataGrid
                   rows={clients}
                   columns={columns}
                   getRowId={(r) => (r as Client).id || (r as Client)._id || ''}
-                  rowCount={totalClients}
-                  paginationMode="server"
-                  paginationModel={paginationModel}
-                  onPaginationModelChange={setPaginationModel}
+                  rowCount={isDeletedView ? totalClients : totalClients}
+                  paginationMode={isDeletedView ? 'client' : 'server'}
+                  paginationModel={isDeletedView ? deletedPaginationModel : paginationModel}
+                  onPaginationModelChange={isDeletedView ? setDeletedPaginationModel : setPaginationModel}
                   pageSizeOptions={[5, 10, 25, 50]}
                   disableRowSelectionOnClick
                   sx={{ '& .MuiDataGrid-cell:focus': { outline: 'none' } }}
@@ -1147,7 +1175,12 @@ export default function ClientsPage() {
         <Dialog open={!!viewId} onClose={() => setViewId(null)} maxWidth="sm" fullWidth>
           <DialogTitle>
             <Box display="flex" justifyContent="space-between" alignItems="center">
-              <Typography variant="h6">Client Details</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h6">Client Details</Typography>
+                {singleClient?.deletedAt && (
+                  <Chip label={`Deleted on ${formatDeletedDate(singleClient.deletedAt)}`} size="small" color="error" variant="outlined" />
+                )}
+              </Box>
               <IconButton onClick={() => setViewId(null)} size="small"><X /></IconButton>
             </Box>
           </DialogTitle>
@@ -1201,7 +1234,31 @@ export default function ClientsPage() {
               </Box>
             )}
           </DialogContent>
-          <DialogActions><Button onClick={() => setViewId(null)}>Close</Button></DialogActions>
+          <DialogActions>
+            {singleClient?.deletedAt && canUpdate && (
+              <Button
+                variant="contained"
+                color="success"
+                startIcon={<RotateCcw size={16} />}
+                onClick={async () => {
+                  if (!singleClient) return
+                  try {
+                    await restoreClientFn({ clientId: singleClient.id || (singleClient as { _id?: string })._id || '' }).unwrap()
+                    toast.success('Client restored')
+                    setViewId(null)
+                    refetchClients()
+                  } catch (err: unknown) {
+                    const et = err as { status?: number; data?: { error?: string; message?: string } }
+                    toast.error(et?.status === 403 ? "You don't have permission to restore this client" : (et?.data?.error ?? et?.data?.message ?? 'Restore failed'))
+                  }
+                }}
+                disabled={restoring}
+              >
+                Restore
+              </Button>
+            )}
+            <Button onClick={() => setViewId(null)}>Close</Button>
+          </DialogActions>
         </Dialog>
 
         {/* Edit Modal */}
@@ -1443,7 +1500,7 @@ export default function ClientsPage() {
           </DialogActions>
         </Dialog>
 
-        {/* Actions Menu */}
+        {/* Actions Menu - Active: View, Edit, Archive, Delete | Archive: View, Unarchive, Delete */}
         <Menu anchorEl={anchorEl} open={!!anchorEl} onClose={closeMenu} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
           {canRead && menuClient && (
             <MenuItem onClick={() => openView(menuClient.id || (menuClient as { _id?: string })._id || '')}>
@@ -1451,32 +1508,26 @@ export default function ClientsPage() {
               <ListItemText>View</ListItemText>
             </MenuItem>
           )}
-          {canUpdate && menuClient && (
+          {viewTab === 'active' && canUpdate && menuClient && (
             <MenuItem onClick={() => openEdit(menuClient.id || (menuClient as { _id?: string })._id || '')}>
               <ListItemIcon><EditIcon size={18} /></ListItemIcon>
               <ListItemText>Edit</ListItemText>
             </MenuItem>
           )}
-          {canUpdate && menuClient?.status === 'archived' && (
-            <MenuItem onClick={() => menuClient && handleUnarchive(menuClient)}>
-              <ListItemIcon><ArchiveRestore size={18} /></ListItemIcon>
-              <ListItemText>Unarchive</ListItemText>
-            </MenuItem>
-          )}
-          {canUpdate && menuClient?.status !== 'archived' && (
+          {viewTab === 'active' && canUpdate && menuClient && (
             <MenuItem onClick={() => menuClient && handleArchive(menuClient)}>
               <ListItemIcon><Archive size={18} /></ListItemIcon>
               <ListItemText>Archive</ListItemText>
             </MenuItem>
           )}
-          {canUpdate && menuClient?.deletedAt && (
-            <MenuItem onClick={() => menuClient && handleRestore(menuClient)}>
-              <ListItemIcon><RotateCcw size={18} /></ListItemIcon>
-              <ListItemText>Restore</ListItemText>
+          {viewTab === 'archived' && canUpdate && menuClient && (
+            <MenuItem onClick={() => menuClient && handleUnarchive(menuClient)}>
+              <ListItemIcon><ArchiveRestore size={18} /></ListItemIcon>
+              <ListItemText>Unarchive</ListItemText>
             </MenuItem>
           )}
-          {canDelete && (
-            <MenuItem onClick={() => menuClient && openDelete(menuClient)} sx={{ color: 'error.main' }}>
+          {canDelete && menuClient && (
+            <MenuItem onClick={() => openDelete(menuClient)} sx={{ color: 'error.main' }}>
               <ListItemIcon><DeleteIcon size={18} /></ListItemIcon>
               <ListItemText>Delete</ListItemText>
             </MenuItem>
