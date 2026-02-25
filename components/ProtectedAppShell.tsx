@@ -12,6 +12,7 @@ const protectedPaths = [
   '/users',
   '/roles',
   '/clients',
+  '/cases',
   '/employees',
   '/permissions',
   '/reports',
