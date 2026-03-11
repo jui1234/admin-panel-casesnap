@@ -1,10 +1,31 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import { APP_BACKEND_URL } from '@/config/env'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import { baseQueryWithSubscriptionGuard } from './baseQuery'
 
 // Types
 export interface LoginRequest {
   email: string
   password: string
+}
+
+export interface ForgotPasswordRequest {
+  email: string
+}
+
+export interface ResetPasswordRequest {
+  resetToken: string
+  password: string
+  confirmPassword: string
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
+  confirmPassword: string
+}
+
+export interface AuthMessageResponse {
+  success: boolean
+  message: string
 }
 
 export interface AssigneePermissions {
@@ -23,6 +44,8 @@ export interface LoginResponse {
     lastName?: string
     role: string | Role  // Can be string (legacy) or Role object (new)
     subscriptionPlan?: string  // Valid values: "free", "base", "popular"
+    subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'expired'
+    subscriptionExpiresAt?: string
     assigneePermissions?: AssigneePermissions
     organization?: {
       _id: string
@@ -59,6 +82,8 @@ export interface OrganizationData {
   industry: string
   practiceAreas: string[]
   subscriptionPlan?: string  // Valid values: "free" (default), "base", "popular"
+  subscriptionStatus?: 'active' | 'inactive' | 'cancelled'
+  subscriptionExpiresAt?: string
 }
 
 export interface SuperAdminData {
@@ -106,21 +131,7 @@ export interface SetupResponse {
 // Create the API slice
 export const authApi = createApi({
   reducerPath: 'authApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: APP_BACKEND_URL,
-    prepareHeaders: (headers) => {
-      // Get token from localStorage if available
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('authToken') || localStorage.getItem('token')
-        if (token) {
-          headers.set('authorization', `Bearer ${token}`)
-        }
-      }
-      headers.set('Content-Type', 'application/json')
-      headers.set('Accept', 'application/json')
-      return headers
-    },
-  }),
+  baseQuery: baseQueryWithSubscriptionGuard,
   tagTypes: ['User', 'Organization'],
   endpoints: (builder) => ({
     // Login endpoint
@@ -157,6 +168,30 @@ export const authApi = createApi({
       }),
       invalidatesTags: ['User'],
     }),
+
+    forgotPassword: builder.mutation<AuthMessageResponse, ForgotPasswordRequest>({
+      query: (body) => ({
+        url: 'api/auth/forgot-password',
+        method: 'POST',
+        body,
+      }),
+    }),
+
+    resetPassword: builder.mutation<AuthMessageResponse, ResetPasswordRequest>({
+      query: ({ resetToken, password, confirmPassword }) => ({
+        url: `api/auth/reset-password/${encodeURIComponent(resetToken)}`,
+        method: 'PUT',
+        body: { password, confirmPassword },
+      }),
+    }),
+
+    changePassword: builder.mutation<AuthMessageResponse, ChangePasswordRequest>({
+      query: (body) => ({
+        url: 'api/auth/change-password',
+        method: 'PUT',
+        body,
+      }),
+    }),
   }),
 })
 
@@ -166,4 +201,7 @@ export const {
   useSetupOrganizationMutation,
   useGetCurrentUserQuery,
   useLogoutMutation,
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
+  useChangePasswordMutation,
 } = authApi

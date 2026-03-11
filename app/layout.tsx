@@ -6,6 +6,7 @@ import SetupGuard from '@/components/SetupGuard'
 import MuiThemeProviderWrapper from '@/components/ThemeProvider'
 import ReduxProvider from '@/components/ReduxProvider'
 import ProtectedAppShell from '@/components/ProtectedAppShell'
+import SubscriptionGuardModal from '@/components/SubscriptionGuardModal'
 import { env } from '@/config/env'
 import { Toaster } from 'react-hot-toast'
 
@@ -230,6 +231,7 @@ export default function RootLayout({
                   <ProtectedAppShell>
                     {children}
                   </ProtectedAppShell>
+                  <SubscriptionGuardModal />
                 </MuiThemeProviderWrapper>
               </SetupGuard>
             </AuthProvider>

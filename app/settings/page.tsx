@@ -1,11 +1,18 @@
 'use client'
 
+import { useState } from 'react'
 import { Settings, Save, User, Shield, Bell, Globe, Database, Key, Check, ArrowUp } from 'lucide-react'
 import Head from 'next/head'
 import { useAuth } from '@/contexts/AuthContext'
+import { useChangePasswordMutation } from '@/redux/api/authApi'
+import toast from 'react-hot-toast'
 
 export default function SettingsPage() {
   const { user } = useAuth()
+  const [changePassword, { isLoading: isChangingPassword }] = useChangePasswordMutation()
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
   // Map subscription plan values to display names
   const getPlanDisplayName = (plan?: string): string => {
@@ -39,6 +46,29 @@ export default function SettingsPage() {
   const planDisplayName = getPlanDisplayName(currentPlan)
   const planPrice = getPlanPrice(currentPlan)
   const isFreeTrial = currentPlan === 'free'
+
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('Please fill all password fields.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New password and confirm password must match.')
+      return
+    }
+
+    try {
+      const result = await changePassword({ currentPassword, newPassword, confirmPassword }).unwrap()
+      toast.success(result?.message || 'Password changed successfully.')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (err: any) {
+      const errorMessage = err?.data?.error || err?.data?.message || 'Failed to change password.'
+      toast.error(errorMessage)
+    }
+  }
+
   return (
     <>
       <Head>
@@ -112,6 +142,8 @@ export default function SettingsPage() {
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Password</label>
                     <input
                       type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
                       placeholder="Enter current password"
                       className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
@@ -120,6 +152,8 @@ export default function SettingsPage() {
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New Password</label>
                     <input
                       type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Enter new password"
                       className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
@@ -128,9 +162,21 @@ export default function SettingsPage() {
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm New Password</label>
                     <input
                       type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm new password"
                       className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleChangePassword}
+                      disabled={isChangingPassword}
+                      className="w-full sm:w-auto px-4 py-2 bg-yellow-500 text-gray-900 rounded-lg hover:bg-yellow-600 transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isChangingPassword ? 'Changing...' : 'Change Password'}
+                    </button>
                   </div>
                   <div className="flex items-center">
                     <input

@@ -1,5 +1,6 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import { APP_BACKEND_URL } from '@/config/env'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import { baseQueryWithSubscriptionGuard } from './baseQuery'
+import { decryptResponseIfNeeded } from '@/utils/responseDecryption'
 
 export type ClientStatus = 'active' | 'inactive' | 'prospect' | 'archived'
 
@@ -134,18 +135,7 @@ export interface ArchiveClientResponse {
 
 export const clientsApi = createApi({
   reducerPath: 'clientsApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: APP_BACKEND_URL,
-    prepareHeaders: (headers) => {
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('authToken') || localStorage.getItem('token')
-        if (token) headers.set('authorization', `Bearer ${token}`)
-      }
-      headers.set('Content-Type', 'application/json')
-      headers.set('Accept', 'application/json')
-      return headers
-    },
-  }),
+  baseQuery: baseQueryWithSubscriptionGuard,
   tagTypes: ['Clients'],
   endpoints: (builder) => ({
     createClient: builder.mutation<CreateClientResponse, CreateClientRequest>({
@@ -154,6 +144,9 @@ export const clientsApi = createApi({
         method: 'POST',
         body,
       }),
+      transformResponse: async (response: CreateClientResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       invalidatesTags: ['Clients'],
     }),
 
@@ -173,6 +166,9 @@ export const clientsApi = createApi({
         }
         return { url: 'api/clients', method: 'GET', params: Object.keys(q).length ? q : undefined }
       },
+      transformResponse: async (response: GetClientsResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       providesTags: (result) =>
         result?.data
           ? [
@@ -184,6 +180,9 @@ export const clientsApi = createApi({
 
     getClientById: builder.query<GetClientResponse, { clientId: string }>({
       query: ({ clientId }) => ({ url: `api/clients/${clientId}`, method: 'GET' }),
+      transformResponse: async (response: GetClientResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       providesTags: (result, err, { clientId }) => [{ type: 'Clients', id: clientId }],
     }),
 
@@ -193,6 +192,9 @@ export const clientsApi = createApi({
         method: 'PUT',
         body: data,
       }),
+      transformResponse: async (response: UpdateClientResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       invalidatesTags: (r, e, { clientId }) => [{ type: 'Clients', id: clientId }, { type: 'Clients', id: 'LIST' }],
     }),
 
@@ -209,6 +211,9 @@ export const clientsApi = createApi({
         url: `api/clients/${clientId}/restore`,
         method: 'PUT',
       }),
+      transformResponse: async (response: RestoreClientResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       invalidatesTags: (r, e, { clientId }) => [{ type: 'Clients', id: clientId }, { type: 'Clients', id: 'LIST' }],
     }),
 
@@ -217,6 +222,9 @@ export const clientsApi = createApi({
         url: `api/clients/${clientId}/archive`,
         method: 'PUT',
       }),
+      transformResponse: async (response: ArchiveClientResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       invalidatesTags: (r, e, { clientId }) => [{ type: 'Clients', id: clientId }, { type: 'Clients', id: 'LIST' }],
     }),
 
@@ -225,6 +233,9 @@ export const clientsApi = createApi({
         url: `api/clients/${clientId}/unarchive`,
         method: 'PUT',
       }),
+      transformResponse: async (response: ArchiveClientResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       invalidatesTags: (r, e, { clientId }) => [{ type: 'Clients', id: clientId }, { type: 'Clients', id: 'LIST' }],
     }),
   }),

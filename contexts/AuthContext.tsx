@@ -31,6 +31,8 @@ interface User {
   lastName?: string
   role: string | Role  // Can be string (legacy) or Role object (new)
   subscriptionPlan?: string  // Valid values: "free", "base", "popular"
+  subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'expired'
+  subscriptionExpiresAt?: string
   assigneePermissions?: AssigneePermissions  // From login; controls Assigned To for client/cases
   organizationId?: string
   organizationName?: string

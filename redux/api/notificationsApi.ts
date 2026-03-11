@@ -1,5 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import { APP_BACKEND_URL } from '@/config/env'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import { baseQueryWithSubscriptionGuard } from './baseQuery'
 
 export type NotificationType = 'success' | 'info' | 'warning' | 'error' | 'client' | 'case'
 
@@ -34,18 +34,7 @@ export interface GetNotificationsResponse {
 
 export const notificationsApi = createApi({
   reducerPath: 'notificationsApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: APP_BACKEND_URL,
-    prepareHeaders: (headers) => {
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('authToken') || localStorage.getItem('token')
-        if (token) headers.set('authorization', `Bearer ${token}`)
-      }
-      headers.set('Content-Type', 'application/json')
-      headers.set('Accept', 'application/json')
-      return headers
-    },
-  }),
+  baseQuery: baseQueryWithSubscriptionGuard,
   tagTypes: ['Notifications'],
   endpoints: (builder) => ({
     /** GET /api/notifications. Use ?read=false for unread only. Use data for list, unreadCount for badge. */

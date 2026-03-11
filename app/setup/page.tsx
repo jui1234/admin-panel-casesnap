@@ -63,7 +63,7 @@ const organizationSchema = yup.object().shape({
   streetAddress: yup.string().required('Street address is required').min(5, 'Address must be at least 5 characters'),
   city: yup.string().required('City is required').min(2, 'City must be at least 2 characters'),
   province: yup.string().required('Province/State is required'),
-  postalCode: yup.string().required('Postal code is required').min(3, 'Postal code must be at least 3 characters'),
+  postalCode: yup.string().required('Postal code is required').matches(/^\d{6}$/, 'Postal code must be exactly 6 digits'),
   country: yup.string().required('Country is required'),
   companyWebsite: yup.string().url('Please enter a valid website URL').optional(),
   industry: yup.string().required('Industry is required'),
@@ -86,6 +86,9 @@ export default function SetupPage() {
   const [isPracticeAreasOpen, setIsPracticeAreasOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [superAdminAcknowledged, setSuperAdminAcknowledged] = useState(false)
+  const [postalLookupLoading, setPostalLookupLoading] = useState(false)
+  const [postalLookupMessage, setPostalLookupMessage] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
   
   // RTK Query mutations
@@ -134,6 +137,39 @@ export default function SetupPage() {
     setOrganizationData(prev => ({ ...prev, companyPhone: limitedDigits }))
   }
 
+  const handlePostalCodeChange = (value: string) => {
+    const digitsOnly = value.replace(/\D/g, '').slice(0, 6)
+    setOrganizationData(prev => ({ ...prev, postalCode: digitsOnly }))
+  }
+
+  const lookupPostalCode = async (code: string) => {
+    if (!code || code.length !== 6) return
+    try {
+      setPostalLookupLoading(true)
+      setPostalLookupMessage('')
+      const response = await fetch(`https://api.postalpincode.in/pincode/${code}`)
+      const data = await response.json()
+      const first = Array.isArray(data) ? data[0] : null
+      const office = first?.PostOffice?.[0]
+
+      if (first?.Status === 'Success' && office) {
+        setOrganizationData(prev => ({
+          ...prev,
+          city: office.District || office.Name || prev.city,
+          province: office.State || prev.province,
+          country: office.Country || 'India',
+        }))
+        setPostalLookupMessage('City, state and country auto-filled from postal code.')
+      } else {
+        setPostalLookupMessage('Could not auto-detect location for this postal code.')
+      }
+    } catch {
+      setPostalLookupMessage('Unable to fetch location from postal code right now.')
+    } finally {
+      setPostalLookupLoading(false)
+    }
+  }
+
   const handleSuperAdminPhoneChange = (value: string) => {
     // Remove all non-digit characters
     const digitsOnly = value.replace(/\D/g, '')
@@ -166,6 +202,30 @@ export default function SetupPage() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [])
+
+  useEffect(() => {
+    const code = organizationData.postalCode?.trim()
+    if (!code || code.length !== 6) {
+      setPostalLookupLoading(false)
+      setPostalLookupMessage('')
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      await lookupPostalCode(code)
+    }, 450)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [organizationData.postalCode])
+
+  const handlePostalCodeBlur = async () => {
+    const code = organizationData.postalCode?.trim()
+    if (code.length === 6) {
+      await lookupPostalCode(code)
+    }
+  }
 
 
   const handleSuperAdminChange = (field: keyof SuperAdminData, value: string) => {
@@ -211,6 +271,12 @@ export default function SetupPage() {
         toast.success('Organization details validated successfully!')
       }
     } else if (currentStep === 2) {
+      if (!superAdminAcknowledged) {
+        const msg = 'Please confirm the Super Admin note before continuing.'
+        setError(msg)
+        toast.error(msg)
+        return
+      }
       const isValid = await validateSuperAdminData()
       if (isValid) {
         setCurrentStep(3)
@@ -284,6 +350,10 @@ export default function SetupPage() {
         'professional': 'popular'
       }
       const subscriptionPlanValue = planMapping[selectedPlan] || 'free'
+      const subscriptionExpiresAtDate = new Date()
+      const durationDays = selectedPlan === 'free-trial' ? 14 : 30
+      subscriptionExpiresAtDate.setDate(subscriptionExpiresAtDate.getDate() + durationDays)
+      const subscriptionExpiresAt = subscriptionExpiresAtDate.toISOString()
 
       // Prepare the API payload
       const payload = {
@@ -299,7 +369,9 @@ export default function SetupPage() {
           companyWebsite: organizationData.companyWebsite,
           industry: organizationData.industry,
           practiceAreas: organizationData.practiceAreas,
-          subscriptionPlan: subscriptionPlanValue
+          subscriptionPlan: subscriptionPlanValue,
+          subscriptionStatus: 'active' as const,
+          subscriptionExpiresAt,
         },
         superAdmin: {
           firstName: superAdminData.firstName,
@@ -358,6 +430,8 @@ export default function SetupPage() {
             lastName: loginResult.user.lastName,
             role: loginResult.user.role, // Can be string or Role object
             subscriptionPlan: (loginResult.user as { subscriptionPlan?: string }).subscriptionPlan,
+            subscriptionStatus: (loginResult.user as { subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'expired' }).subscriptionStatus,
+            subscriptionExpiresAt: (loginResult.user as { subscriptionExpiresAt?: string }).subscriptionExpiresAt,
             assigneePermissions: (loginResult.user as { assigneePermissions?: { canAssignClient?: boolean; canAssignCase?: boolean } }).assigneePermissions,
             organizationId: loginResult.user.organizationId || loginResult.user.organization?._id,
             organizationName: loginResult.user.organization?.companyName
@@ -675,6 +749,27 @@ export default function SetupPage() {
 
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Postal Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={organizationData.postalCode}
+                    onChange={(e) => handlePostalCodeChange(e.target.value)}
+                    onBlur={handlePostalCodeBlur}
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="Enter postal code"
+                    maxLength={6}
+                  />
+                  {postalLookupLoading && (
+                    <p className="text-xs text-blue-500 mt-1">Checking postal code...</p>
+                  )}
+                  {!postalLookupLoading && postalLookupMessage && (
+                    <p className="text-xs text-gray-500 mt-1">{postalLookupMessage}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     City *
                   </label>
                   <input
@@ -713,19 +808,6 @@ export default function SetupPage() {
                       </svg>
                     </div>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Postal Code *
-                  </label>
-                  <input
-                    type="text"
-                    value={organizationData.postalCode}
-                    onChange={(e) => handleOrganizationChange('postalCode', e.target.value)}
-                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    placeholder="Enter postal code"
-                  />
                 </div>
 
                 <div>
@@ -897,6 +979,18 @@ export default function SetupPage() {
                 </div>
               </div>
 
+              <label className="flex items-start gap-3 mb-4 sm:mb-6 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={superAdminAcknowledged}
+                  onChange={(e) => setSuperAdminAcknowledged(e.target.checked)}
+                  className="mt-1 h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
+                />
+                <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">
+                  I understand and confirm that the person creating this organization will become the Super Admin with full access.
+                </span>
+              </label>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -1032,7 +1126,12 @@ export default function SetupPage() {
 
                 <button
                   onClick={handleNext}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold transition-all duration-300 flex items-center justify-center space-x-2 hover:scale-105 hover:shadow-lg cursor-pointer text-sm sm:text-base"
+                  disabled={!superAdminAcknowledged}
+                  className={`px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold transition-all duration-300 flex items-center justify-center space-x-2 text-sm sm:text-base ${
+                    superAdminAcknowledged
+                      ? 'bg-yellow-500 hover:bg-yellow-600 text-gray-900 hover:scale-105 hover:shadow-lg cursor-pointer'
+                      : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                  }`}
                 >
                   <span>Next</span>
                   <ArrowRight className="w-4 h-4" />

@@ -1,5 +1,6 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import { APP_BACKEND_URL } from '@/config/env'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import { baseQueryWithSubscriptionGuard } from './baseQuery'
+import { decryptResponseIfNeeded } from '@/utils/responseDecryption'
 
 export const COURT_NAMES = [
   'District Court Delhi',
@@ -154,18 +155,7 @@ export interface ArchiveCaseResponse {
 
 export const casesApi = createApi({
   reducerPath: 'casesApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: APP_BACKEND_URL,
-    prepareHeaders: (headers) => {
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('authToken') || localStorage.getItem('token')
-        if (token) headers.set('authorization', `Bearer ${token}`)
-      }
-      headers.set('Content-Type', 'application/json')
-      headers.set('Accept', 'application/json')
-      return headers
-    },
-  }),
+  baseQuery: baseQueryWithSubscriptionGuard,
   tagTypes: ['Cases'],
   endpoints: (builder) => ({
     createCase: builder.mutation<CreateCaseResponse, CreateCaseRequest>({
@@ -174,6 +164,9 @@ export const casesApi = createApi({
         method: 'POST',
         body,
       }),
+      transformResponse: async (response: CreateCaseResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       invalidatesTags: ['Cases'],
     }),
 
@@ -195,6 +188,9 @@ export const casesApi = createApi({
         }
         return { url: 'api/cases', method: 'GET', params: Object.keys(q).length ? q : undefined }
       },
+      transformResponse: async (response: GetCasesResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       providesTags: (result) =>
         result?.data
           ? [
@@ -206,6 +202,9 @@ export const casesApi = createApi({
 
     getCaseById: builder.query<GetCaseResponse, { caseId: string }>({
       query: ({ caseId }) => ({ url: `api/cases/${caseId}`, method: 'GET' }),
+      transformResponse: async (response: GetCaseResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       providesTags: (result, err, { caseId }) => [{ type: 'Cases', id: caseId }],
     }),
 
@@ -215,6 +214,9 @@ export const casesApi = createApi({
         method: 'PUT',
         body: data,
       }),
+      transformResponse: async (response: UpdateCaseResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       invalidatesTags: (r, e, { caseId }) => [{ type: 'Cases', id: caseId }, { type: 'Cases', id: 'LIST' }],
     }),
 
@@ -231,6 +233,9 @@ export const casesApi = createApi({
         url: `api/cases/${caseId}/restore`,
         method: 'PUT',
       }),
+      transformResponse: async (response: RestoreCaseResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       invalidatesTags: (r, e, { caseId }) => [{ type: 'Cases', id: caseId }, { type: 'Cases', id: 'LIST' }],
     }),
 
@@ -239,6 +244,9 @@ export const casesApi = createApi({
         url: `api/cases/${caseId}/archive`,
         method: 'PUT',
       }),
+      transformResponse: async (response: ArchiveCaseResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       invalidatesTags: (r, e, { caseId }) => [{ type: 'Cases', id: caseId }, { type: 'Cases', id: 'LIST' }],
     }),
 
@@ -247,6 +255,9 @@ export const casesApi = createApi({
         url: `api/cases/${caseId}/unarchive`,
         method: 'PUT',
       }),
+      transformResponse: async (response: ArchiveCaseResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
       invalidatesTags: (r, e, { caseId }) => [{ type: 'Cases', id: caseId }, { type: 'Cases', id: 'LIST' }],
     }),
   }),

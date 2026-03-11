@@ -1,5 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import { APP_BACKEND_URL } from '@/config/env'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import { baseQueryWithSubscriptionGuard } from './baseQuery'
 
 // Interfaces
 export interface RolePermission {
@@ -99,18 +99,7 @@ export interface GetModulesResponse {
 
 export const rolesApi = createApi({
   reducerPath: 'rolesApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: APP_BACKEND_URL,
-    prepareHeaders: (headers) => {
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('authToken') || localStorage.getItem('token')
-        if (token) headers.set('authorization', `Bearer ${token}`)
-      }
-      headers.set('Content-Type', 'application/json')
-      headers.set('Accept', 'application/json')
-      return headers
-    },
-  }),
+  baseQuery: baseQueryWithSubscriptionGuard,
   tagTypes: ['Roles', 'SuggestedPriority'],
   endpoints: (builder) => ({
     // Get suggested priority

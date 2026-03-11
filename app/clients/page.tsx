@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -80,8 +80,31 @@ function getFeesUnit(fees: number | undefined): string {
   if (fees == null || fees === 0) return ''
   const num = Number(fees)
   if (isNaN(num)) return ''
-  const format = (value: number, unit: string) =>
-    value >= 1000 ? `${Math.round(value)} ${unit}` : value >= 100 ? `${Math.round(value)} ${unit}` : value >= 10 ? `${value.toFixed(1)} ${unit}` : `${value.toFixed(0)} ${unit}`
+  
+  // Helper function to format with appropriate precision
+  const format = (value: number, unit: string): string => {
+    // Round to avoid floating point issues
+    const rounded = Math.round(value * 10) / 10
+    
+    // For whole numbers, show without decimal
+    if (rounded % 1 === 0) {
+      return `${Math.round(rounded)} ${unit}`
+    }
+    
+    // For values >= 100, show as whole number
+    if (rounded >= 100) {
+      return `${Math.round(rounded)} ${unit}`
+    }
+    
+    // For values >= 10, show with 1 decimal place
+    if (rounded >= 10) {
+      return `${rounded.toFixed(1)} ${unit}`
+    }
+    
+    // For values < 10, show with 1 decimal place
+    return `${rounded.toFixed(1)} ${unit}`
+  }
+  
   if (num >= 10000000) return format(num / 10000000, 'Cr')
   if (num >= 100000) return format(num / 100000, 'L')
   if (num >= 1000) return format(num / 1000, 'K')
@@ -267,6 +290,13 @@ export default function ClientsPage() {
     assignedTo: '',
     notes: '',
   })
+  
+  // Memoize the selected value to prevent flickering (must be after createForm is defined)
+  const selectedAssignableValue = useMemo(() => {
+    if (!createForm.assignedTo || assignableOptions.length === 0) return null
+    return assignableOptions.find((o) => (o.id || o._id) === createForm.assignedTo) ?? null
+  }, [createForm.assignedTo, assignableOptions])
+  
   const [createErrors, setCreateErrors] = useState<Partial<Record<keyof CreateClientRequest, string>>>({})
   const [aadharFile, setAadharFile] = useState<File | null>(null)
   const [aadharFileError, setAadharFileError] = useState<string>('')
@@ -1026,13 +1056,27 @@ export default function ClientsPage() {
                       sx={{ width: '100%' }}
                       options={assignableOptions}
                       getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
-                      value={assignableOptions.find((o) => (o.id || o._id) === createForm.assignedTo) ?? null}
+                      value={selectedAssignableValue}
                       onChange={(_, value) => {
-                        setCreateForm((p) => ({ ...p, assignedTo: value ? (value.id || (value as { _id?: string })._id) || '' : '' }))
-                        setAssignableSearchInput(value ? getAssignableOptionLabel(value, currentUser?.id) : '')
+                        const assignedToId = value ? (value.id || (value as { _id?: string })._id) || '' : ''
+                        setCreateForm((p) => ({ ...p, assignedTo: assignedToId }))
+                        // Only update inputValue if a value is selected (not when clearing)
+                        if (value) {
+                          setAssignableSearchInput(getAssignableOptionLabel(value, currentUser?.id))
+                        } else {
+                          setAssignableSearchInput('')
+                        }
                       }}
                       inputValue={assignableSearchInput}
-                      onInputChange={(_, value) => setAssignableSearchInput(value)}
+                      onInputChange={(_, newInputValue, reason) => {
+                        // Only update inputValue when user is typing, not when selecting an option
+                        if (reason === 'input') {
+                          setAssignableSearchInput(newInputValue)
+                        } else if (reason === 'clear') {
+                          setAssignableSearchInput('')
+                          setCreateForm((p) => ({ ...p, assignedTo: '' }))
+                        }
+                      }}
                       loading={assignableLoading}
                       renderInput={(params) => (
                         <TextField
@@ -1041,7 +1085,21 @@ export default function ClientsPage() {
                           placeholder="Search by name or email..."
                         />
                       )}
-                      isOptionEqualToValue={(opt, val) => (opt.id || opt._id) === (val?.id || (val as AssignableOption)?._id)}
+                      isOptionEqualToValue={(opt, val) => {
+                        if (!opt || !val) return false
+                        const optId = opt.id || opt._id
+                        const valId = val.id || (val as { _id?: string })?._id
+                        return optId === valId
+                      }}
+                      filterOptions={(options, state) => {
+                        // Custom filter to search by name or email
+                        const inputValue = state.inputValue.toLowerCase().trim()
+                        if (!inputValue) return options
+                        return options.filter((option) => {
+                          const label = getAssignableOptionLabel(option, currentUser?.id).toLowerCase()
+                          return label.includes(inputValue)
+                        })
+                      }}
                     />
                   </Grid>
                 )}

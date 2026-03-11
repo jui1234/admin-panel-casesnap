@@ -19,6 +19,35 @@ function isSuperAdmin(role: UserRole): boolean {
   return name === 'super-admin' || name === 'SUPER_ADMIN'
 }
 
+/**
+ * Normalize module name to handle both singular and plural forms
+ * Maps common module names to their variations
+ */
+function normalizeModuleName(moduleName: string): string[] {
+  const normalized = moduleName.toLowerCase().trim()
+  const variations: string[] = [normalized]
+  
+  // Handle common singular/plural pairs
+  const singularPluralMap: Record<string, string[]> = {
+    'case': ['case', 'cases'],
+    'cases': ['case', 'cases'],
+    'client': ['client', 'clients'],
+    'clients': ['client', 'clients'],
+    'user': ['user', 'users'],
+    'users': ['user', 'users'],
+    'role': ['role', 'roles'],
+    'roles': ['role', 'roles'],
+    'employee': ['employee', 'employees'],
+    'employees': ['employee', 'employees'],
+  }
+  
+  if (singularPluralMap[normalized]) {
+    return singularPluralMap[normalized]
+  }
+  
+  return variations
+}
+
 function hasAction(role: UserRole, moduleName: string, action: ModuleAction): boolean {
   if (!role) return false
   if (isSuperAdmin(role)) return true
@@ -29,8 +58,14 @@ function hasAction(role: UserRole, moduleName: string, action: ModuleAction): bo
   }
 
   const perms = (role as { permissions?: RolePermission[] }).permissions ?? []
-  const key = moduleName.toLowerCase()
-  const mod = perms.find((p) => p.module.toLowerCase() === key)
+  const moduleVariations = normalizeModuleName(moduleName)
+  
+  // Try to find permission matching any variation of the module name
+  const mod = perms.find((p) => {
+    const permModule = p.module.toLowerCase()
+    return moduleVariations.some(variation => variation === permModule)
+  })
+  
   if (!mod) return false
   const actions = mod.actions ?? []
   return actions.includes(action)

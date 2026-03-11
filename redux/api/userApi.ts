@@ -1,5 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import { APP_BACKEND_URL } from '@/config/env'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import { baseQueryWithSubscriptionGuard } from './baseQuery'
 
 export interface InviteUserRequest {
   firstName: string
@@ -110,26 +110,7 @@ export interface DeleteUserResponse {
 
 export const userApi = createApi({
   reducerPath: 'userApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: APP_BACKEND_URL,
-    prepareHeaders: (headers, { endpoint }) => {
-      // Don't send auth token for public registration endpoints
-      if (endpoint === 'completeUserRegistration' || endpoint === 'getUserByToken') {
-        headers.set('Content-Type', 'application/json')
-        headers.set('Accept', 'application/json')
-        return headers
-      }
-      
-      // For other endpoints, use auth token
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('authToken') || localStorage.getItem('token')
-        if (token) headers.set('authorization', `Bearer ${token}`)
-      }
-      headers.set('Content-Type', 'application/json')
-      headers.set('Accept', 'application/json')
-      return headers
-    },
-  }),
+  baseQuery: baseQueryWithSubscriptionGuard,
   tagTypes: ['Users'],
   endpoints: (builder) => ({
     // Invite user

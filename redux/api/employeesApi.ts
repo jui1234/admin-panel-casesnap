@@ -1,5 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import { APP_BACKEND_URL } from '@/config/env'
+import { createApi } from '@reduxjs/toolkit/query/react'
+import { baseQueryWithSubscriptionGuard } from './baseQuery'
 
 export interface InviteEmployeeRequest {
   firstName: string
@@ -126,18 +126,7 @@ export interface GetEmployeesResponse {
 
 export const employeesApi = createApi({
   reducerPath: 'employeesApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: APP_BACKEND_URL,
-    prepareHeaders: (headers) => {
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('authToken') || localStorage.getItem('token')
-        if (token) headers.set('authorization', `Bearer ${token}`)
-      }
-      headers.set('Content-Type', 'application/json')
-      headers.set('Accept', 'application/json')
-      return headers
-    }
-  }),
+  baseQuery: baseQueryWithSubscriptionGuard,
   tagTypes: ['Employees'],
   endpoints: (builder) => ({
     // Admin: get single employee by id

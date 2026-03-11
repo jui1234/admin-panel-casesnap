@@ -134,6 +134,8 @@ export default function LoginPage() {
           lastName: result.user.lastName,
           role: result.user.role, // Can be string or Role object
           subscriptionPlan: result.user.subscriptionPlan, // Store subscription plan
+          subscriptionStatus: result.user.subscriptionStatus,
+          subscriptionExpiresAt: result.user.subscriptionExpiresAt,
           assigneePermissions: result.user.assigneePermissions ?? undefined, // Store from login; used for Assigned To (client/cases)
           organizationId: result.user.organizationId || result.user.organization?._id,
           organizationName: result.user.organization?.companyName
@@ -164,11 +166,19 @@ export default function LoginPage() {
         }
       }
     } catch (err: any) {
-      let errorMessage = err?.data?.error || err?.message || 'Login failed. Please try again.'
+      const rawErrorMessage = err?.data?.error || err?.data?.message || err?.message || 'Login failed. Please try again.'
+      let errorMessage = rawErrorMessage
       
       // Format pending approval messages to remove "admin" reference
       if (errorMessage.toLowerCase().includes('pending approval') || errorMessage.toLowerCase().includes('admin approval')) {
         errorMessage = 'Your status is pending. Please wait before logging in.'
+      }
+
+      if (err?.status === 403) {
+        const lower = rawErrorMessage.toLowerCase()
+        if (lower.includes('expired') || lower.includes('inactive') || lower.includes('cancelled') || lower.includes('plan') || lower.includes('subscription')) {
+          errorMessage = rawErrorMessage
+        }
       }
       
       setError(errorMessage)
@@ -360,9 +370,13 @@ export default function LoginPage() {
                 </label>
               </div>
               <div className="text-sm">
-                <a href="#" className="font-medium text-yellow-600 hover:text-yellow-500 transition-colors duration-200">
+                <button
+                  type="button"
+                  onClick={() => router.push('/auth/forgot-password')}
+                  className="font-medium text-yellow-600 hover:text-yellow-500 transition-colors duration-200"
+                >
                   Forgot password?
-                </a>
+                </button>
               </div>
             </div>
 
