@@ -175,11 +175,14 @@ export default function ClientsPage() {
   }, [openCreate, editId])
 
   const isDeletedView = viewTab === 'deleted'
-  const clientsParams = {
+  const status: ClientStatus | undefined =
+    isDeletedView ? undefined : viewTab === 'active' ? 'active' : viewTab === 'archived' ? 'archived' : undefined
+
+  const clientsParams: Parameters<typeof useGetClientsQuery>[0] = {
     page: isDeletedView ? 1 : paginationModel.page + 1,
     limit: isDeletedView ? 500 : paginationModel.pageSize,
     search: debouncedSearch || undefined,
-    status: isDeletedView ? undefined : (viewTab === 'active' ? 'active' : viewTab === 'archived' ? 'archived' : undefined),
+    status,
     sortBy: 'createdAt',
     sortOrder: 'desc' as const,
     includeDeleted: isDeletedView ? true : undefined,
@@ -366,6 +369,13 @@ export default function ClientsPage() {
     if (file.size > AADHAR_IMAGE_MAX_BYTES) {
       if (isEdit) { setAadharEditFile(null); setAadharEditFileError('Image must be 1 MB or less') }
       else { setAadharFile(null); setAadharFileError('Image must be 1 MB or less') }
+      e.target.value = ''
+      return
+    }
+    const isSupportedType = file.type.startsWith('image/')
+    if (!isSupportedType) {
+      if (isEdit) { setAadharEditFile(null); setAadharEditFileError('Only image files are allowed') }
+      else { setAadharFile(null); setAadharFileError('Only image files are allowed') }
       e.target.value = ''
       return
     }

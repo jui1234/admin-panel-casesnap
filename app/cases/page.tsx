@@ -174,7 +174,8 @@ export default function CasesPage() {
   const deletedCases = rawCases.filter((c) => c.deletedAt != null)
   const caseTypeOptions = useMemo(() => {
     const fromData = Array.from(new Set(rawCases.map((c) => c.caseType).filter(Boolean))) as string[]
-    const known = new Set(CASE_TYPES)
+    // Widen to string set so we can safely check any backend-provided caseType values.
+    const known = new Set<string>(CASE_TYPES)
     const extra = fromData.filter((t) => !known.has(t))
     return [...CASE_TYPES, ...extra]
   }, [rawCases])

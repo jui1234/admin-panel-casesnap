@@ -209,8 +209,8 @@ export default function UserRegisterPage() {
   
   // Fallback: Set role name from role API if not available from userData
   useEffect(() => {
-    if (!roleName && roleData?.data?.role?.name) {
-      setRoleName(roleData.data.role.name)
+    if (!roleName && roleData?.data?.name) {
+      setRoleName(roleData.data.name)
     }
   }, [roleData, roleName])
 
