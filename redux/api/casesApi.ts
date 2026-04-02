@@ -42,6 +42,14 @@ export interface CaseUserRef {
   email: string
 }
 
+export interface CaseAssignee {
+  id: string
+  _id?: string
+  firstName: string
+  lastName: string
+  email: string
+}
+
 export interface CaseClientRef {
   id: string
   _id?: string
@@ -57,12 +65,12 @@ export interface Case {
   caseNumber: string
   caseType: string
   partyName: string
-  stage?: string
   courtName?: CourtName
   courtPremises?: CourtPremises
   assignedTo?: string | CaseUserRef
   clientCount?: number
   clients?: string[] | CaseClientRef[]
+  stages?: CaseStage[]
   notes?: string
   status?: 'active' | 'archived'
   createdAt?: string
@@ -71,11 +79,24 @@ export interface Case {
   deletedBy?: string | CaseUserRef
 }
 
+export interface CaseStage {
+  id?: string
+  _id?: string
+  stageName: string
+  todaySummary: string
+  nextDate: string
+  nextDatePurpose: string
+  nextDatePreparation: string
+  confirmedBy?: string | CaseUserRef
+  confirmedAt?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 export interface CreateCaseRequest {
   caseNumber: string
   caseType: string
   partyName: string
-  stage?: string
   courtName?: CourtName | string
   courtPremises?: CourtPremises | string
   assignedTo?: string
@@ -88,7 +109,6 @@ export interface UpdateCaseRequest {
   caseNumber?: string
   caseType?: string
   partyName?: string
-  stage?: string
   courtName?: CourtName | string
   courtPremises?: CourtPremises | string
   assignedTo?: string
@@ -153,6 +173,38 @@ export interface ArchiveCaseResponse {
   data: Case
 }
 
+export interface GetCaseAssigneesResponse {
+  success: boolean
+  data: CaseAssignee[]
+}
+
+export interface AddCaseStageRequest {
+  stageName: string
+  todaySummary: string
+  nextDate: string
+  nextDatePurpose: string
+  nextDatePreparation: string
+  confirmedBy: string
+}
+
+/** PUT /api/cases/:caseId/stages/:stageId — fields are optional per API */
+export type UpdateCaseStageRequest = Partial<AddCaseStageRequest>
+
+/** POST body: one object OR an array of stage objects */
+export type AddCaseStagesBody = AddCaseStageRequest | AddCaseStageRequest[]
+
+export interface AddCaseStagesResponse {
+  success: boolean
+  message: string
+  data: CaseStage | CaseStage[] | Case
+}
+
+export interface ConfirmCaseStageResponse {
+  success: boolean
+  message?: string
+  data: CaseStage | Case
+}
+
 export const casesApi = createApi({
   reducerPath: 'casesApi',
   baseQuery: baseQueryWithSubscriptionGuard,
@@ -208,6 +260,13 @@ export const casesApi = createApi({
       providesTags: (result, err, { caseId }) => [{ type: 'Cases', id: caseId }],
     }),
 
+    getCaseAssignees: builder.query<GetCaseAssigneesResponse, void>({
+      query: () => ({ url: 'api/cases/assignees', method: 'GET' }),
+      transformResponse: async (response: GetCaseAssigneesResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
+    }),
+
     updateCase: builder.mutation<UpdateCaseResponse, { caseId: string; data: UpdateCaseRequest }>({
       query: ({ caseId, data }) => ({
         url: `api/cases/${caseId}`,
@@ -260,6 +319,41 @@ export const casesApi = createApi({
       },
       invalidatesTags: (r, e, { caseId }) => [{ type: 'Cases', id: caseId }, { type: 'Cases', id: 'LIST' }],
     }),
+
+    addCaseStage: builder.mutation<AddCaseStagesResponse, { caseId: string; data: AddCaseStagesBody }>({
+      query: ({ caseId, data }) => ({
+        url: `api/cases/${caseId}/stages`,
+        method: 'POST',
+        body: data,
+      }),
+      transformResponse: async (response: AddCaseStagesResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
+      invalidatesTags: (r, e, { caseId }) => [{ type: 'Cases', id: caseId }, { type: 'Cases', id: 'LIST' }],
+    }),
+
+    updateCaseStage: builder.mutation<AddCaseStagesResponse, { caseId: string; stageId: string; data: UpdateCaseStageRequest }>({
+      query: ({ caseId, stageId, data }) => ({
+        url: `api/cases/${caseId}/stages/${stageId}`,
+        method: 'PUT',
+        body: data,
+      }),
+      transformResponse: async (response: AddCaseStagesResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
+      invalidatesTags: (r, e, { caseId }) => [{ type: 'Cases', id: caseId }, { type: 'Cases', id: 'LIST' }],
+    }),
+
+    confirmCaseStage: builder.mutation<ConfirmCaseStageResponse, { caseId: string; stageId: string }>({
+      query: ({ caseId, stageId }) => ({
+        url: `api/cases/${caseId}/stages/${stageId}/confirm`,
+        method: 'PATCH',
+      }),
+      transformResponse: async (response: ConfirmCaseStageResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
+      invalidatesTags: (r, e, { caseId }) => [{ type: 'Cases', id: caseId }, { type: 'Cases', id: 'LIST' }],
+    }),
   }),
 })
 
@@ -269,9 +363,13 @@ export const {
   useLazyGetCasesQuery,
   useGetCaseByIdQuery,
   useLazyGetCaseByIdQuery,
+  useGetCaseAssigneesQuery,
   useUpdateCaseMutation,
   useDeleteCaseMutation,
   useRestoreCaseMutation,
   useArchiveCaseMutation,
   useUnarchiveCaseMutation,
+  useAddCaseStageMutation,
+  useUpdateCaseStageMutation,
+  useConfirmCaseStageMutation,
 } = casesApi

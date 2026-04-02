@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   FolderOpen,
   Plus,
+  ListPlus,
   Search,
   Eye,
   Edit as EditIcon,
@@ -16,7 +17,6 @@ import {
   Archive,
   ArchiveRestore,
   Trash2,
-  Calendar,
   Scale,
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -48,6 +48,11 @@ import {
   Autocomplete,
   Tabs,
   Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
 } from '@mui/material'
 import {
   useGetCasesQuery,
@@ -58,12 +63,19 @@ import {
   useRestoreCaseMutation,
   useArchiveCaseMutation,
   useUnarchiveCaseMutation,
+  useGetCaseAssigneesQuery,
+  useAddCaseStageMutation,
+  useUpdateCaseStageMutation,
+  useConfirmCaseStageMutation,
   COURT_NAMES,
   COURT_PREMISES,
   CASE_TYPES,
+  type CaseStage,
+  type CaseAssignee,
   type Case as CaseType,
   type CreateCaseRequest,
   type UpdateCaseRequest,
+  type AddCaseStageRequest,
   type GetCasesRequest,
 } from '@/redux/api/casesApi'
 import { useGetClientsQuery } from '@/redux/api/clientsApi'
@@ -84,11 +96,50 @@ function getClientDisplayName(c: { fullName?: string; firstName?: string; lastNa
 }
 
 type AssignableOption = User & { _id?: string }
+type CaseAssigneeOption = CaseAssignee & { _id?: string }
 
 function getAssignableOptionLabel(opt: AssignableOption, currentUserId?: string): string {
   const name = [opt.firstName, opt.lastName].filter(Boolean).join(' ').trim() || opt.email || ''
   const id = opt.id || opt._id
   return id === currentUserId ? `${name} (Me)` : `${name} (${opt.email || ''})`
+}
+
+function getConfirmedByName(v: string | { firstName?: string; lastName?: string; email?: string } | undefined): string {
+  if (!v) return '—'
+  if (typeof v === 'string') return v
+  return [v.firstName, v.lastName].filter(Boolean).join(' ') || v.email || '—'
+}
+
+function getCaseStageId(s: CaseStage): string | undefined {
+  return s.id || s._id
+}
+
+function getStageConfirmedByUserId(s: CaseStage): string | undefined {
+  const v = s.confirmedBy
+  if (!v) return undefined
+  if (typeof v === 'string') return v
+  return (v as { id?: string; _id?: string }).id || (v as { _id?: string })._id
+}
+
+function caseStageToRequest(s: CaseStage): AddCaseStageRequest {
+  const cb = s.confirmedBy
+  const confirmedBy =
+    typeof cb === 'string'
+      ? cb
+      : cb && typeof cb === 'object'
+        ? (cb as { id?: string; _id?: string }).id || (cb as { _id?: string })._id || ''
+        : ''
+  let nextDate = s.nextDate || ''
+  if (nextDate.includes('T')) nextDate = nextDate.slice(0, 10)
+  else if (nextDate.length > 10) nextDate = nextDate.slice(0, 10)
+  return {
+    stageName: s.stageName || '',
+    todaySummary: s.todaySummary || '',
+    nextDate,
+    nextDatePurpose: s.nextDatePurpose || '',
+    nextDatePreparation: s.nextDatePreparation || '',
+    confirmedBy,
+  }
 }
 
 export default function CasesPage() {
@@ -105,6 +156,12 @@ export default function CasesPage() {
   const [deletedPaginationModel, setDeletedPaginationModel] = useState({ page: 0, pageSize: 10 })
 
   const [openCreate, setOpenCreate] = useState(false)
+  const [openAddStage, setOpenAddStage] = useState(false)
+  const [showCreateStages, setShowCreateStages] = useState(false)
+  const [showEditStages, setShowEditStages] = useState(false)
+  const [editStageRowId, setEditStageRowId] = useState<string | null>(null)
+  const [editModalPendingRows, setEditModalPendingRows] = useState<AddCaseStageRequest[]>([])
+  const [stageTargetCaseId, setStageTargetCaseId] = useState<string | null>(null)
   const [viewId, setViewId] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteCase, setDeleteCase] = useState<CaseType | null>(null)
@@ -141,6 +198,9 @@ export default function CasesPage() {
     { skip: !canShowAssignedTo }
   )
   const clientsOptions = clientsData?.data ?? []
+  const { data: caseAssigneesData, isLoading: caseAssigneesLoading } = useGetCaseAssigneesQuery(undefined, {
+    skip: !openAddStage && !showCreateStages && !(!!editId && showEditStages),
+  })
 
   useEffect(() => {
     if (openCreate || editId) setAssignableSearchInput('')
@@ -221,8 +281,15 @@ export default function CasesPage() {
     return list
   }, [canShowAssignedTo, currentUser, assignableData?.data])
 
+  const confirmedByOptions = useMemo((): CaseAssigneeOption[] => {
+    return (caseAssigneesData?.data ?? []).map((u) => ({ ...u, _id: u._id || u.id }))
+  }, [caseAssigneesData?.data])
+
   const [createCase, { isLoading: creating }] = useCreateCaseMutation()
   const [updateCase, { isLoading: updating }] = useUpdateCaseMutation()
+  const [addCaseStage, { isLoading: addingStage }] = useAddCaseStageMutation()
+  const [updateCaseStage, { isLoading: updatingStage }] = useUpdateCaseStageMutation()
+  const [confirmCaseStage, { isLoading: confirmingStage }] = useConfirmCaseStageMutation()
   const [deleteCaseFn, { isLoading: deleting }] = useDeleteCaseMutation()
   const [restoreCaseFn, { isLoading: restoring }] = useRestoreCaseMutation()
   const [archiveCaseFn] = useArchiveCaseMutation()
@@ -242,7 +309,6 @@ export default function CasesPage() {
     caseNumber: '',
     caseType: '',
     partyName: '',
-    stage: '',
     courtName: '',
     courtPremises: '',
     assignedTo: '',
@@ -251,6 +317,17 @@ export default function CasesPage() {
     notes: '',
   })
   const [createErrors, setCreateErrors] = useState<Partial<Record<keyof CreateCaseRequest, string>>>({})
+  const [stageForm, setStageForm] = useState<AddCaseStageRequest>({
+    stageName: '',
+    todaySummary: '',
+    nextDate: '',
+    nextDatePurpose: '',
+    nextDatePreparation: '',
+    confirmedBy: '',
+  })
+  const [stageErrors, setStageErrors] = useState<Partial<Record<keyof AddCaseStageRequest, string>>>({})
+  const [createStageRows, setCreateStageRows] = useState<AddCaseStageRequest[]>([])
+  const [pendingStageRows, setPendingStageRows] = useState<AddCaseStageRequest[]>([])
 
   const [editForm, setEditForm] = useState<UpdateCaseRequest>({})
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
@@ -260,7 +337,6 @@ export default function CasesPage() {
       caseNumber: '',
       caseType: '',
       partyName: '',
-      stage: '',
       courtName: '',
       courtPremises: '',
       assignedTo: '',
@@ -269,6 +345,33 @@ export default function CasesPage() {
       notes: '',
     })
     setCreateErrors({})
+  }
+
+  const resetCreateStageRows = () => {
+    setCreateStageRows([])
+  }
+
+  const resetPendingStageRows = () => {
+    setPendingStageRows([])
+  }
+
+  const resetStageForm = () => {
+    setStageForm({
+      stageName: '',
+      todaySummary: '',
+      nextDate: '',
+      nextDatePurpose: '',
+      nextDatePreparation: '',
+      confirmedBy: '',
+    })
+    setStageErrors({})
+  }
+
+  const resetEditStageSection = () => {
+    setShowEditStages(false)
+    setEditStageRowId(null)
+    setEditModalPendingRows([])
+    resetStageForm()
   }
 
   const validateCreate = (): boolean => {
@@ -293,7 +396,6 @@ export default function CasesPage() {
       caseNumber: createForm.caseNumber!.trim(),
       caseType: createForm.caseType!.trim(),
       partyName: createForm.partyName!.trim(),
-      stage: createForm.stage?.trim() || undefined,
       courtName: createForm.courtName || undefined,
       courtPremises: createForm.courtPremises || undefined,
       notes: createForm.notes?.trim() || undefined,
@@ -304,10 +406,24 @@ export default function CasesPage() {
       payload.clients = (createForm.clients ?? []).slice(0, createForm.clientCount ?? 1)
     }
     try {
-      await createCase(payload).unwrap()
+      const created = await createCase(payload).unwrap()
+      const createdCaseId = created?.data?.id || (created?.data as { _id?: string } | undefined)?._id
+      if (createdCaseId && createStageRows.length > 0) {
+        try {
+          await addCaseStage({
+            caseId: createdCaseId,
+            data: createStageRows.length === 1 ? createStageRows[0] : createStageRows,
+          }).unwrap()
+        } catch {
+          toast.error('Case created, but stage(s) failed to save')
+        }
+      }
       toast.success('Case created')
       setOpenCreate(false)
+      setShowCreateStages(false)
       resetCreateForm()
+      resetCreateStageRows()
+      resetStageForm()
       refetchCases()
     } catch (err: unknown) {
       const et = err as { status?: number; data?: { error?: string; message?: string } }
@@ -334,10 +450,118 @@ export default function CasesPage() {
       toast.success('Case updated')
       setEditId(null)
       setEditForm({})
+      resetEditStageSection()
       refetchCases()
     } catch (err: unknown) {
       const et = err as { status?: number; data?: { error?: string; message?: string } }
       toast.error(et?.status === 403 ? "You don't have permission" : (et?.data?.error ?? et?.data?.message ?? 'Update failed'))
+    }
+  }
+
+  const validateStageForm = (): boolean => {
+    const e: typeof stageErrors = {}
+    if (!stageForm.stageName.trim()) e.stageName = 'Stage name is required'
+    if (!stageForm.todaySummary.trim()) e.todaySummary = 'Today summary is required'
+    if (!stageForm.nextDate) e.nextDate = 'Next date is required'
+    if (!stageForm.nextDatePurpose.trim()) e.nextDatePurpose = 'Next date purpose is required'
+    if (!stageForm.nextDatePreparation.trim()) e.nextDatePreparation = 'Preparation details are required'
+    if (!stageForm.confirmedBy) e.confirmedBy = 'Confirm By is required'
+    setStageErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  const pushStageRow = (setter: React.Dispatch<React.SetStateAction<AddCaseStageRequest[]>>) => {
+    if (!validateStageForm()) return
+    setter((prev) => [
+      ...prev,
+      {
+        stageName: stageForm.stageName.trim(),
+        todaySummary: stageForm.todaySummary.trim(),
+        nextDate: stageForm.nextDate,
+        nextDatePurpose: stageForm.nextDatePurpose.trim(),
+        nextDatePreparation: stageForm.nextDatePreparation.trim(),
+        confirmedBy: stageForm.confirmedBy,
+      },
+    ])
+    resetStageForm()
+  }
+
+  const handleAddStageSubmit = async () => {
+    if (!canUpdate) return
+    const caseId = stageTargetCaseId || singleCase?.id || (singleCase as { _id?: string } | undefined)?._id
+    if (!caseId) return
+    try {
+      if (pendingStageRows.length === 0) {
+        toast.error('Add at least one stage row')
+        return
+      }
+      await addCaseStage({
+        caseId,
+        data: pendingStageRows.length === 1 ? pendingStageRows[0] : pendingStageRows,
+      }).unwrap()
+      toast.success('Stages saved')
+      setOpenAddStage(false)
+      resetStageForm()
+      resetPendingStageRows()
+      setStageTargetCaseId(null)
+      refetchCases()
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      toast.error(et?.status === 403 ? "You don't have permission" : (et?.data?.error ?? et?.data?.message ?? 'Save stages failed'))
+    }
+  }
+
+  const handleUpdateEditStage = async () => {
+    if (!editId || !editStageRowId || !canUpdate) return
+    if (!validateStageForm()) return
+    try {
+      await updateCaseStage({
+        caseId: editId,
+        stageId: editStageRowId,
+        data: {
+          stageName: stageForm.stageName.trim(),
+          todaySummary: stageForm.todaySummary.trim(),
+          nextDate: stageForm.nextDate,
+          nextDatePurpose: stageForm.nextDatePurpose.trim(),
+          nextDatePreparation: stageForm.nextDatePreparation.trim(),
+          confirmedBy: stageForm.confirmedBy,
+        },
+      }).unwrap()
+      toast.success('Stage updated')
+      setEditStageRowId(null)
+      resetStageForm()
+      refetchCases()
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      toast.error(et?.status === 403 ? "You don't have permission" : (et?.data?.error ?? et?.data?.message ?? 'Update stage failed'))
+    }
+  }
+
+  const handleSaveEditModalNewStages = async () => {
+    if (!editId || !canUpdate || editModalPendingRows.length === 0) return
+    try {
+      await addCaseStage({
+        caseId: editId,
+        data: editModalPendingRows.length === 1 ? editModalPendingRows[0] : editModalPendingRows,
+      }).unwrap()
+      toast.success('New stages saved')
+      setEditModalPendingRows([])
+      resetStageForm()
+      refetchCases()
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      toast.error(et?.status === 403 ? "You don't have permission" : (et?.data?.error ?? et?.data?.message ?? 'Save stages failed'))
+    }
+  }
+
+  const handleConfirmStage = async (caseId: string, stageId: string) => {
+    try {
+      await confirmCaseStage({ caseId, stageId }).unwrap()
+      toast.success('Stage confirmed')
+      refetchCases()
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      toast.error(et?.status === 403 ? "You can't confirm this stage" : (et?.data?.error ?? et?.data?.message ?? 'Confirm failed'))
     }
   }
 
@@ -414,14 +638,18 @@ export default function CasesPage() {
     setAnchorEl(null)
     setMenuCase(null)
   }
+
   const openView = (id: string) => {
     setViewId(id)
+    setOpenAddStage(false)
+    resetStageForm()
     closeMenu()
   }
   const openEdit = (id: string) => {
     setEditId(id)
     setEditForm({})
     setEditErrors({})
+    resetEditStageSection()
     closeMenu()
   }
   const openDelete = (c: CaseType) => {
@@ -440,7 +668,6 @@ export default function CasesPage() {
       caseNumber: singleCase.caseNumber,
       caseType: singleCase.caseType,
       partyName: singleCase.partyName,
-      stage: singleCase.stage ?? '',
       courtName: singleCase.courtName ?? '',
       courtPremises: singleCase.courtPremises ?? '',
       assignedTo: assignedId || undefined,
@@ -464,6 +691,17 @@ export default function CasesPage() {
     const names = clients.slice(0, 3).map((c) => (typeof c === 'string' ? c : getClientDisplayName(c as { fullName?: string; firstName?: string; lastName?: string; email?: string })))
     return names.join(', ') + (clients.length > 3 ? ` +${clients.length - 3}` : '')
   }
+
+  const formatShortDate = (d: string | undefined): string => {
+    if (!d) return '—'
+    try {
+      return new Date(d).toLocaleDateString('en-IN')
+    } catch {
+      return d
+    }
+  }
+
+  const caseStages = (singleCase?.stages ?? []) as CaseStage[]
 
   const columns: GridColDef[] = [
     {
@@ -600,7 +838,19 @@ export default function CasesPage() {
             </Typography>
           </Box>
           {canCreate && viewTab === 'active' && (
-            <Button variant="contained" startIcon={<Plus />} onClick={() => { setOpenCreate(true); resetCreateForm(); }} sx={{ minWidth: { xs: '100%', sm: 'auto' } }}>
+            <Button
+              variant="contained"
+              startIcon={<Plus />}
+              onClick={() => {
+                setOpenCreate(true)
+                setOpenAddStage(false)
+                setShowCreateStages(false)
+                resetCreateForm()
+                resetCreateStageRows()
+                resetStageForm()
+              }}
+              sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
+            >
               Add Case
             </Button>
           )}
@@ -727,7 +977,18 @@ export default function CasesPage() {
         </Card>
 
         {/* Create Modal */}
-        <Dialog open={openCreate} onClose={() => setOpenCreate(false)} maxWidth="md" fullWidth>
+        <Dialog
+          open={openCreate}
+          onClose={() => {
+            setOpenCreate(false)
+            setShowCreateStages(false)
+            resetCreateForm()
+            resetCreateStageRows()
+            resetStageForm()
+          }}
+          maxWidth="md"
+          fullWidth
+        >
           <DialogTitle>Add Case</DialogTitle>
           <DialogContent>
             <Grid container spacing={2} sx={{ pt: 1 }}>
@@ -739,9 +1000,6 @@ export default function CasesPage() {
               </Grid>
               <Grid item xs={12}>
                 <TextField fullWidth label="Party Name *" value={createForm.partyName} onChange={(e) => setCreateForm((p) => ({ ...p, partyName: e.target.value }))} error={!!createErrors.partyName} helperText={createErrors.partyName} />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField fullWidth label="Stage" value={createForm.stage} onChange={(e) => setCreateForm((p) => ({ ...p, stage: e.target.value }))} />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
@@ -796,21 +1054,216 @@ export default function CasesPage() {
               <Grid item xs={12}>
                 <TextField fullWidth label="Notes" multiline rows={2} value={createForm.notes} onChange={(e) => setCreateForm((p) => ({ ...p, notes: e.target.value }))} />
               </Grid>
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="subtitle2">Stage</Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<ListPlus size={16} />}
+                    onClick={() => setShowCreateStages((v) => !v)}
+                  >
+                    Stage
+                  </Button>
+                </Box>
+
+                {showCreateStages && (
+                  <Box sx={{ mt: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                    <Box sx={{ px: 1, py: 0.5, display: 'flex', justifyContent: 'flex-end', bgcolor: 'action.hover' }}>
+                      <IconButton size="small" onClick={() => { setShowCreateStages(false); resetStageForm(); setStageErrors({}); }}>
+                        <X size={16} />
+                      </IconButton>
+                    </Box>
+                    <Table size="small">
+                      <TableBody>
+                        <TableRow>
+                          <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Stage Name *</TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={stageForm.stageName}
+                              onChange={(e) => setStageForm((p) => ({ ...p, stageName: e.target.value }))}
+                              error={!!stageErrors.stageName}
+                              helperText={stageErrors.stageName}
+                            />
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Today Summary *</TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              multiline
+                              minRows={2}
+                              value={stageForm.todaySummary}
+                              onChange={(e) => setStageForm((p) => ({ ...p, todaySummary: e.target.value }))}
+                              error={!!stageErrors.todaySummary}
+                              helperText={stageErrors.todaySummary}
+                            />
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Next Date *</TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              type="date"
+                              value={stageForm.nextDate}
+                              onChange={(e) => setStageForm((p) => ({ ...p, nextDate: e.target.value }))}
+                              error={!!stageErrors.nextDate}
+                              helperText={stageErrors.nextDate}
+                              InputLabelProps={{ shrink: true }}
+                            />
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Confirm By *</TableCell>
+                          <TableCell>
+                            <Autocomplete
+                              options={confirmedByOptions}
+                              loading={caseAssigneesLoading}
+                              value={confirmedByOptions.find((u) => (u.id || u._id) === stageForm.confirmedBy) ?? null}
+                              onChange={(_, v) => setStageForm((p) => ({ ...p, confirmedBy: v ? (v.id || v._id || '') : '' }))}
+                              getOptionLabel={(opt) => [opt.firstName, opt.lastName].filter(Boolean).join(' ') || opt.email || ''}
+                              isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || v?._id)}
+                              renderInput={(params) => (
+                                <TextField
+                                  {...params}
+                                  size="small"
+                                  error={!!stageErrors.confirmedBy}
+                                  helperText={stageErrors.confirmedBy}
+                                />
+                              )}
+                            />
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Next Date Purpose *</TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              multiline
+                              minRows={2}
+                              value={stageForm.nextDatePurpose}
+                              onChange={(e) => setStageForm((p) => ({ ...p, nextDatePurpose: e.target.value }))}
+                              error={!!stageErrors.nextDatePurpose}
+                              helperText={stageErrors.nextDatePurpose}
+                            />
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Preparation For Next Date *</TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              multiline
+                              minRows={2}
+                              value={stageForm.nextDatePreparation}
+                              onChange={(e) => setStageForm((p) => ({ ...p, nextDatePreparation: e.target.value }))}
+                              error={!!stageErrors.nextDatePreparation}
+                              helperText={stageErrors.nextDatePreparation}
+                            />
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell />
+                          <TableCell>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<ListPlus size={16} />}
+                              onClick={() => {
+                                pushStageRow(setCreateStageRows)
+                              }}
+                            >
+                              Add Stage Row
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </Box>
+                )}
+
+                {createStageRows.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No stage rows added yet.</Typography>
+                ) : (
+                  <Box sx={{ mt: 1, maxHeight: 220, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                    <Table size="small" stickyHeader>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Stage</TableCell>
+                          <TableCell>Next Date</TableCell>
+                          <TableCell>Confirm By</TableCell>
+                          <TableCell align="right">Action</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {createStageRows.map((s, idx) => (
+                          <TableRow key={`${s.stageName}-${idx}`}>
+                            <TableCell>{s.stageName}</TableCell>
+                            <TableCell>{formatShortDate(s.nextDate)}</TableCell>
+                            <TableCell>{getConfirmedByName(confirmedByOptions.find((u) => (u.id || u._id) === s.confirmedBy))}</TableCell>
+                            <TableCell align="right">
+                              <Button size="small" color="error" onClick={() => setCreateStageRows((prev) => prev.filter((_, i) => i !== idx))}>
+                                Remove
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Box>
+                )}
+              </Grid>
             </Grid>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setOpenCreate(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setOpenCreate(false)
+                setShowCreateStages(false)
+                resetCreateForm()
+                resetCreateStageRows()
+                resetStageForm()
+              }}
+            >
+              Cancel
+            </Button>
             <Button variant="contained" onClick={handleCreateSubmit} disabled={creating}>Create</Button>
           </DialogActions>
         </Dialog>
 
         {/* View Modal */}
-        <Dialog open={!!viewId} onClose={() => setViewId(null)} maxWidth="sm" fullWidth>
+        <Dialog
+          open={!!viewId}
+          onClose={() => {
+            setViewId(null)
+            setOpenAddStage(false)
+            resetStageForm()
+          }}
+          maxWidth="sm"
+          fullWidth
+        >
           <DialogTitle>
             <Box display="flex" justifyContent="space-between" alignItems="center">
               <Typography variant="h6">Case Details</Typography>
               {singleCase?.deletedAt && <Chip label={`Deleted on ${formatDeletedDate(singleCase.deletedAt)}`} size="small" color="error" variant="outlined" />}
-              <IconButton onClick={() => setViewId(null)} size="small"><X /></IconButton>
+              <IconButton
+                onClick={() => {
+                  setViewId(null)
+                  setOpenAddStage(false)
+                  resetStageForm()
+                }}
+                size="small"
+              >
+                <X />
+              </IconButton>
             </Box>
           </DialogTitle>
           <DialogContent>
@@ -821,7 +1274,6 @@ export default function CasesPage() {
                 <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Case Number</Typography><Typography variant="body1" fontWeight={500}>{singleCase.caseNumber}</Typography></Grid>
                 <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Case Type</Typography><Typography variant="body1">{singleCase.caseType || '—'}</Typography></Grid>
                 <Grid item xs={12}><Typography variant="caption" color="text.secondary">Party Name</Typography><Typography variant="body1">{singleCase.partyName || '—'}</Typography></Grid>
-                <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Stage</Typography><Typography variant="body1">{singleCase.stage || '—'}</Typography></Grid>
                 <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Court Name</Typography><Typography variant="body1">{singleCase.courtName || '—'}</Typography></Grid>
                 <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Court Premises</Typography><Typography variant="body1">{singleCase.courtPremises || '—'}</Typography></Grid>
                 {(canRead || canShowAssignedTo) && (
@@ -831,6 +1283,70 @@ export default function CasesPage() {
                   <Grid item xs={12}><Typography variant="caption" color="text.secondary">Linked Clients</Typography><Typography variant="body1">{getClientsDisplay(singleCase.clients)}</Typography></Grid>
                 )}
                 {singleCase.notes && <Grid item xs={12}><Typography variant="caption" color="text.secondary">Notes</Typography><Typography variant="body1">{singleCase.notes}</Typography></Grid>}
+                <Grid item xs={12}>
+                  <Box sx={{ mt: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="subtitle2">Case Stages</Typography>
+                    </Box>
+                    {caseStages.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">No stage entries yet.</Typography>
+                    ) : (
+                      <Box sx={{ maxHeight: 260, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                        <Table size="small" stickyHeader>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Stage</TableCell>
+                              <TableCell>Today Summary</TableCell>
+                              <TableCell>Next Date</TableCell>
+                              <TableCell>Purpose</TableCell>
+                              <TableCell>Preparation</TableCell>
+                              <TableCell>Confirmed By</TableCell>
+                              <TableCell align="right">Confirmation</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {caseStages.map((s, idx) => {
+                              const sid = getCaseStageId(s)
+                              const detailCaseId = singleCase.id || (singleCase as { _id?: string })._id
+                              const canConfirmStage =
+                                !!detailCaseId &&
+                                !!sid &&
+                                !s.confirmedAt &&
+                                !!currentUser?.id &&
+                                getStageConfirmedByUserId(s) === currentUser.id
+                              return (
+                              <TableRow key={s.id || s._id || `${s.stageName}-${idx}`}>
+                                <TableCell>{s.stageName || '—'}</TableCell>
+                                <TableCell>{s.todaySummary || '—'}</TableCell>
+                                <TableCell>{formatShortDate(s.nextDate)}</TableCell>
+                                <TableCell>{s.nextDatePurpose || '—'}</TableCell>
+                                <TableCell>{s.nextDatePreparation || '—'}</TableCell>
+                                <TableCell>{getConfirmedByName(s.confirmedBy as string | { firstName?: string; lastName?: string; email?: string } | undefined)}</TableCell>
+                                <TableCell align="right">
+                                  {s.confirmedAt ? (
+                                    <Chip size="small" label="Confirmed" color="success" variant="outlined" />
+                                  ) : canConfirmStage && detailCaseId && sid ? (
+                                    <Button
+                                      size="small"
+                                      variant="contained"
+                                      disabled={confirmingStage}
+                                      onClick={() => handleConfirmStage(detailCaseId, sid)}
+                                    >
+                                      Confirm
+                                    </Button>
+                                  ) : (
+                                    <Typography variant="caption" color="text.secondary">Pending</Typography>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                          </TableBody>
+                        </Table>
+                      </Box>
+                    )}
+                  </Box>
+                </Grid>
               </Grid>
             )}
           </DialogContent>
@@ -838,12 +1354,218 @@ export default function CasesPage() {
             {singleCase?.deletedAt && canUpdate && (
               <Button variant="contained" color="success" startIcon={<RotateCcw size={16} />} onClick={async () => { if (singleCase && (await handleRestore(singleCase))) setViewId(null) }} disabled={restoring}>Restore</Button>
             )}
-            <Button onClick={() => setViewId(null)}>Close</Button>
+            <Button
+              onClick={() => {
+                setViewId(null)
+                setOpenAddStage(false)
+                resetStageForm()
+              }}
+            >
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={openAddStage}
+          onClose={() => {
+            setOpenAddStage(false)
+            resetStageForm()
+            resetPendingStageRows()
+            setStageTargetCaseId(null)
+          }}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle>
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+              <Typography variant="h6">Add Stages</Typography>
+              <IconButton
+                size="small"
+                onClick={() => {
+                  setOpenAddStage(false)
+                  resetStageForm()
+                  resetPendingStageRows()
+                  setStageTargetCaseId(null)
+                }}
+              >
+                <X />
+              </IconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+              <Table size="small">
+                <TableBody>
+                  <TableRow>
+                    <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Stage Name *</TableCell>
+                    <TableCell>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        value={stageForm.stageName}
+                        onChange={(e) => setStageForm((p) => ({ ...p, stageName: e.target.value }))}
+                        error={!!stageErrors.stageName}
+                        helperText={stageErrors.stageName}
+                      />
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Today Summary *</TableCell>
+                    <TableCell>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        multiline
+                        minRows={2}
+                        value={stageForm.todaySummary}
+                        onChange={(e) => setStageForm((p) => ({ ...p, todaySummary: e.target.value }))}
+                        error={!!stageErrors.todaySummary}
+                        helperText={stageErrors.todaySummary}
+                      />
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Next Date *</TableCell>
+                    <TableCell>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        type="date"
+                        value={stageForm.nextDate}
+                        onChange={(e) => setStageForm((p) => ({ ...p, nextDate: e.target.value }))}
+                        error={!!stageErrors.nextDate}
+                        helperText={stageErrors.nextDate}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Confirm By *</TableCell>
+                    <TableCell>
+                      <Autocomplete
+                        options={confirmedByOptions}
+                        loading={caseAssigneesLoading}
+                        value={confirmedByOptions.find((u) => (u.id || u._id) === stageForm.confirmedBy) ?? null}
+                        onChange={(_, v) => setStageForm((p) => ({ ...p, confirmedBy: v ? (v.id || v._id || '') : '' }))}
+                        getOptionLabel={(opt) => [opt.firstName, opt.lastName].filter(Boolean).join(' ') || opt.email || ''}
+                        isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || v?._id)}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            size="small"
+                            error={!!stageErrors.confirmedBy}
+                            helperText={stageErrors.confirmedBy}
+                          />
+                        )}
+                      />
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Next Date Purpose *</TableCell>
+                    <TableCell>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        multiline
+                        minRows={2}
+                        value={stageForm.nextDatePurpose}
+                        onChange={(e) => setStageForm((p) => ({ ...p, nextDatePurpose: e.target.value }))}
+                        error={!!stageErrors.nextDatePurpose}
+                        helperText={stageErrors.nextDatePurpose}
+                      />
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Preparation For Next Date *</TableCell>
+                    <TableCell>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        multiline
+                        minRows={2}
+                        value={stageForm.nextDatePreparation}
+                        onChange={(e) => setStageForm((p) => ({ ...p, nextDatePreparation: e.target.value }))}
+                        error={!!stageErrors.nextDatePreparation}
+                        helperText={stageErrors.nextDatePreparation}
+                      />
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell />
+                    <TableCell>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<ListPlus size={16} />}
+                        onClick={() => pushStageRow(setPendingStageRows)}
+                      >
+                        Add Stage Row
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </Box>
+
+            {pendingStageRows.length > 0 && (
+              <Box sx={{ mt: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Stage</TableCell>
+                      <TableCell>Next Date</TableCell>
+                      <TableCell>Confirm By</TableCell>
+                      <TableCell align="right">Delete</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {pendingStageRows.map((r, idx) => (
+                      <TableRow key={`${r.stageName}-${idx}`}>
+                        <TableCell>{r.stageName}</TableCell>
+                        <TableCell>{formatShortDate(r.nextDate)}</TableCell>
+                        <TableCell>{getConfirmedByName(confirmedByOptions.find((u) => (u.id || u._id) === r.confirmedBy))}</TableCell>
+                        <TableCell align="right">
+                          <IconButton size="small" color="error" onClick={() => setPendingStageRows((p) => p.filter((_, i) => i !== idx))}>
+                            <X size={16} />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => {
+                setOpenAddStage(false)
+                resetStageForm()
+                resetPendingStageRows()
+                setStageTargetCaseId(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="contained" onClick={handleAddStageSubmit} disabled={addingStage || pendingStageRows.length === 0}>
+              {addingStage ? 'Saving...' : 'Save All Stages'}
+            </Button>
           </DialogActions>
         </Dialog>
 
         {/* Edit Modal */}
-        <Dialog open={!!editId} onClose={() => { setEditId(null); setEditForm({}); setEditErrors({}); }} maxWidth="md" fullWidth>
+        <Dialog
+          open={!!editId}
+          onClose={() => {
+            setEditId(null)
+            setEditForm({})
+            setEditErrors({})
+            resetEditStageSection()
+          }}
+          maxWidth="md"
+          fullWidth
+        >
           <DialogTitle>Edit Case</DialogTitle>
           <DialogContent>
             {singleLoading || !singleCase ? (
@@ -858,9 +1580,6 @@ export default function CasesPage() {
                 </Grid>
                 <Grid item xs={12}>
                   <TextField fullWidth label="Party Name *" value={editForm.partyName ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, partyName: e.target.value }))} />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField fullWidth label="Stage" value={editForm.stage ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, stage: e.target.value }))} />
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth>
@@ -911,11 +1630,290 @@ export default function CasesPage() {
                 <Grid item xs={12}>
                   <TextField fullWidth label="Notes" multiline rows={2} value={editForm.notes ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))} />
                 </Grid>
+                {canUpdate && (
+                  <Grid item xs={12}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="subtitle2">Stages</Typography>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<ListPlus size={16} />}
+                        onClick={() => setShowEditStages((v) => !v)}
+                      >
+                        Stage
+                      </Button>
+                    </Box>
+
+                    {showEditStages && (
+                      <Box sx={{ mt: 1 }}>
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                            Current stages
+                          </Typography>
+                          {caseStages.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary">No stage entries yet.</Typography>
+                          ) : (
+                            <Box sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                              <Table size="small" stickyHeader>
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>Stage</TableCell>
+                                    <TableCell>Next Date</TableCell>
+                                    <TableCell>Confirmed By</TableCell>
+                                    <TableCell align="right">Confirm</TableCell>
+                                    <TableCell align="right">Edit</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {caseStages.map((s, idx) => {
+                                    const sid = getCaseStageId(s)
+                                    const canConfirmStage =
+                                      !!editId &&
+                                      !!sid &&
+                                      !s.confirmedAt &&
+                                      !!currentUser?.id &&
+                                      getStageConfirmedByUserId(s) === currentUser.id
+                                    return (
+                                      <TableRow key={sid || `${s.stageName}-${idx}`}>
+                                        <TableCell>{s.stageName || '—'}</TableCell>
+                                        <TableCell>{formatShortDate(s.nextDate)}</TableCell>
+                                        <TableCell>{getConfirmedByName(s.confirmedBy as string | { firstName?: string; lastName?: string; email?: string } | undefined)}</TableCell>
+                                        <TableCell align="right">
+                                          {s.confirmedAt ? (
+                                            <Chip size="small" label="OK" color="success" variant="outlined" />
+                                          ) : canConfirmStage && editId && sid ? (
+                                            <Button
+                                              size="small"
+                                              variant="outlined"
+                                              disabled={confirmingStage}
+                                              onClick={() => handleConfirmStage(editId, sid)}
+                                            >
+                                              Confirm
+                                            </Button>
+                                          ) : (
+                                            <Typography variant="caption" color="text.secondary">—</Typography>
+                                          )}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          <Button
+                                            size="small"
+                                            variant="text"
+                                            disabled={!sid}
+                                            onClick={() => {
+                                              if (!sid) return
+                                              setEditStageRowId(sid)
+                                              setStageForm(caseStageToRequest(s))
+                                              setStageErrors({})
+                                            }}
+                                          >
+                                            Edit
+                                          </Button>
+                                        </TableCell>
+                                      </TableRow>
+                                    )
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </Box>
+                          )}
+                        </Box>
+
+                        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                          <Box sx={{ px: 1, py: 0.5, display: 'flex', justifyContent: 'flex-end', bgcolor: 'action.hover' }}>
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                setShowEditStages(false)
+                                setEditStageRowId(null)
+                                setEditModalPendingRows([])
+                                resetStageForm()
+                              }}
+                            >
+                              <X size={16} />
+                            </IconButton>
+                          </Box>
+                          <Table size="small">
+                            <TableBody>
+                              <TableRow>
+                                <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Stage Name *</TableCell>
+                                <TableCell>
+                                  <TextField
+                                    fullWidth
+                                    size="small"
+                                    value={stageForm.stageName}
+                                    onChange={(e) => setStageForm((p) => ({ ...p, stageName: e.target.value }))}
+                                    error={!!stageErrors.stageName}
+                                    helperText={stageErrors.stageName}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Today Summary *</TableCell>
+                                <TableCell>
+                                  <TextField
+                                    fullWidth
+                                    size="small"
+                                    multiline
+                                    minRows={2}
+                                    value={stageForm.todaySummary}
+                                    onChange={(e) => setStageForm((p) => ({ ...p, todaySummary: e.target.value }))}
+                                    error={!!stageErrors.todaySummary}
+                                    helperText={stageErrors.todaySummary}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Next Date *</TableCell>
+                                <TableCell>
+                                  <TextField
+                                    fullWidth
+                                    size="small"
+                                    type="date"
+                                    value={stageForm.nextDate}
+                                    onChange={(e) => setStageForm((p) => ({ ...p, nextDate: e.target.value }))}
+                                    error={!!stageErrors.nextDate}
+                                    helperText={stageErrors.nextDate}
+                                    InputLabelProps={{ shrink: true }}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Confirm By *</TableCell>
+                                <TableCell>
+                                  <Autocomplete
+                                    options={confirmedByOptions}
+                                    loading={caseAssigneesLoading}
+                                    value={confirmedByOptions.find((u) => (u.id || u._id) === stageForm.confirmedBy) ?? null}
+                                    onChange={(_, v) => setStageForm((p) => ({ ...p, confirmedBy: v ? (v.id || v._id || '') : '' }))}
+                                    getOptionLabel={(opt) => [opt.firstName, opt.lastName].filter(Boolean).join(' ') || opt.email || ''}
+                                    isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || v?._id)}
+                                    renderInput={(params) => (
+                                      <TextField
+                                        {...params}
+                                        size="small"
+                                        error={!!stageErrors.confirmedBy}
+                                        helperText={stageErrors.confirmedBy}
+                                      />
+                                    )}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Next Date Purpose *</TableCell>
+                                <TableCell>
+                                  <TextField
+                                    fullWidth
+                                    size="small"
+                                    multiline
+                                    minRows={2}
+                                    value={stageForm.nextDatePurpose}
+                                    onChange={(e) => setStageForm((p) => ({ ...p, nextDatePurpose: e.target.value }))}
+                                    error={!!stageErrors.nextDatePurpose}
+                                    helperText={stageErrors.nextDatePurpose}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Preparation For Next Date *</TableCell>
+                                <TableCell>
+                                  <TextField
+                                    fullWidth
+                                    size="small"
+                                    multiline
+                                    minRows={2}
+                                    value={stageForm.nextDatePreparation}
+                                    onChange={(e) => setStageForm((p) => ({ ...p, nextDatePreparation: e.target.value }))}
+                                    error={!!stageErrors.nextDatePreparation}
+                                    helperText={stageErrors.nextDatePreparation}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell />
+                                <TableCell>
+                                  {editStageRowId ? (
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                      <Button size="small" variant="contained" onClick={handleUpdateEditStage} disabled={updatingStage}>
+                                        {updatingStage ? 'Saving…' : 'Save stage changes'}
+                                      </Button>
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        onClick={() => {
+                                          setEditStageRowId(null)
+                                          resetStageForm()
+                                        }}
+                                      >
+                                        Cancel edit
+                                      </Button>
+                                    </Box>
+                                  ) : (
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      startIcon={<ListPlus size={16} />}
+                                      onClick={() => pushStageRow(setEditModalPendingRows)}
+                                    >
+                                      Add Stage Row
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </Box>
+
+                        {editModalPendingRows.length > 0 && (
+                          <Box sx={{ mt: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                            <Table size="small" stickyHeader>
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell>Stage</TableCell>
+                                  <TableCell>Next Date</TableCell>
+                                  <TableCell>Confirm By</TableCell>
+                                  <TableCell align="right">Delete</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {editModalPendingRows.map((r, idx) => (
+                                  <TableRow key={`${r.stageName}-${idx}`}>
+                                    <TableCell>{r.stageName}</TableCell>
+                                    <TableCell>{formatShortDate(r.nextDate)}</TableCell>
+                                    <TableCell>{getConfirmedByName(confirmedByOptions.find((u) => (u.id || u._id) === r.confirmedBy))}</TableCell>
+                                    <TableCell align="right">
+                                      <IconButton size="small" color="error" onClick={() => setEditModalPendingRows((p) => p.filter((_, i) => i !== idx))}>
+                                        <X size={16} />
+                                      </IconButton>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                            <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end' }}>
+                              <Button variant="contained" size="small" onClick={handleSaveEditModalNewStages} disabled={addingStage}>
+                                {addingStage ? 'Saving…' : 'Save new stages'}
+                              </Button>
+                            </Box>
+                          </Box>
+                        )}
+                      </Box>
+                    )}
+                  </Grid>
+                )}
               </Grid>
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => { setEditId(null); setEditForm({}); setEditErrors({}); }}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setEditId(null)
+                setEditForm({})
+                setEditErrors({})
+                resetEditStageSection()
+              }}
+            >
+              Cancel
+            </Button>
             <Button variant="contained" onClick={handleEditSubmit} disabled={updating}>Save</Button>
           </DialogActions>
         </Dialog>
@@ -942,6 +1940,21 @@ export default function CasesPage() {
             <MenuItem onClick={() => openView(menuCase.id || (menuCase as { _id?: string })._id || '')}>
               <ListItemIcon><Eye size={18} /></ListItemIcon>
               <ListItemText>View</ListItemText>
+            </MenuItem>
+          )}
+          {viewTab === 'active' && canUpdate && menuCase && (
+            <MenuItem
+              onClick={() => {
+                const id = menuCase.id || (menuCase as { _id?: string })._id || ''
+                closeMenu()
+                resetStageForm()
+                resetPendingStageRows()
+                setStageTargetCaseId(id || null)
+                setOpenAddStage(true)
+              }}
+            >
+              <ListItemIcon><ListPlus size={18} /></ListItemIcon>
+              <ListItemText>Add Stage</ListItemText>
             </MenuItem>
           )}
           {viewTab === 'active' && canUpdate && menuCase && (

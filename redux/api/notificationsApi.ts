@@ -32,6 +32,11 @@ export interface GetNotificationsResponse {
   unreadCount?: number
 }
 
+export interface MarkNotificationReadResponse {
+  success: boolean
+  message: string
+}
+
 export const notificationsApi = createApi({
   reducerPath: 'notificationsApi',
   baseQuery: baseQueryWithSubscriptionGuard,
@@ -60,7 +65,31 @@ export const notificationsApi = createApi({
             ]
           : [{ type: 'Notifications', id: 'LIST' }],
     }),
+    /** PATCH /api/notifications/:id/read */
+    markNotificationAsRead: builder.mutation<MarkNotificationReadResponse, { notificationId: string }>({
+      query: ({ notificationId }) => ({
+        url: `api/notifications/${notificationId}/read`,
+        method: 'PATCH',
+      }),
+      invalidatesTags: (result, error, { notificationId }) => [
+        { type: 'Notifications', id: notificationId },
+        { type: 'Notifications', id: 'LIST' },
+      ],
+    }),
+    /** PATCH /api/notifications/read-all */
+    markAllNotificationsAsRead: builder.mutation<MarkNotificationReadResponse, void>({
+      query: () => ({
+        url: 'api/notifications/read-all',
+        method: 'PATCH',
+      }),
+      invalidatesTags: [{ type: 'Notifications', id: 'LIST' }],
+    }),
   }),
 })
 
-export const { useGetNotificationsQuery, useLazyGetNotificationsQuery } = notificationsApi
+export const {
+  useGetNotificationsQuery,
+  useLazyGetNotificationsQuery,
+  useMarkNotificationAsReadMutation,
+  useMarkAllNotificationsAsReadMutation,
+} = notificationsApi
