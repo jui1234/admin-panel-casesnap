@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -24,7 +25,7 @@ import {
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
-import { DataGrid, GridColDef } from '@mui/x-data-grid'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   Box,
   Button,
@@ -55,6 +56,10 @@ import {
   Tabs,
   Tab,
 } from '@mui/material'
+
+const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), {
+  ssr: false,
+})
 import {
   useGetClientsQuery,
   useGetClientByIdQuery,
@@ -70,6 +75,8 @@ import {
   type UpdateClientRequest,
 } from '@/redux/api/clientsApi'
 import { useGetAssignableUsersQuery, type User } from '@/redux/api/userApi'
+import { useGetOnboardingStatusQuery, onboardingApi } from '@/redux/api/onboardingApi'
+import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
 
 const CLIENT_STATUSES: ClientStatus[] = ['active', 'inactive', 'prospect', 'archived']
@@ -132,7 +139,9 @@ function getAssignableOptionLabel(opt: AssignableOption, currentUserId?: string)
 
 export default function ClientsPage() {
   const router = useRouter()
+  const dispatch = useDispatch()
   const { user: currentUser } = useAuth()
+  const { data: onboarding } = useGetOnboardingStatusQuery(undefined, { skip: !currentUser })
   const { canRead, canCreate, canUpdate, canDelete, canAssignee } = useModulePermissions('client')
   const canShowAssignedTo =
     canAssignee || currentUser?.assigneePermissions?.canAssignClient === true
@@ -463,6 +472,7 @@ export default function ClientsPage() {
       const res = await createClient(payload).unwrap()
       toast.success(res.message || 'Client created')
       if (res.warning) toast(res.warning, { icon: '⚠️' })
+      dispatch(onboardingApi.util.invalidateTags(['OnboardingStatus']))
       setOpenCreate(false)
       resetCreateForm()
       refetchClients()
@@ -920,9 +930,39 @@ export default function ClientsPage() {
                   ) : (
                     <>
                       <Building size={48} style={{ opacity: 0.4 }} />
-                      <Typography variant="body1" color="text.secondary">
+                      <Typography variant="body1" color="text.secondary" align="center">
                         {canShowAssignedTo ? 'No active clients or no clients assigned to you' : 'No active clients'}
                       </Typography>
+                      {onboarding?.suggestedNextStep === 'create_custom_role' && (
+                        <Box sx={{ textAlign: 'center', maxWidth: 420, mt: 1 }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                            Create a custom role first (beyond the built-in Super Admin), then you can onboard your team and
+                            clients with the right permissions.
+                          </Typography>
+                          <Button variant="outlined" onClick={() => router.push('/roles')}>
+                            Go to Roles
+                          </Button>
+                        </Box>
+                      )}
+                      {onboarding?.suggestedNextStep === 'create_client' && (
+                        <Box sx={{ textAlign: 'center', maxWidth: 420, mt: 1 }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                            You&apos;re ready to add your first client.
+                          </Typography>
+                          {canCreate && (
+                            <Button
+                              variant="contained"
+                              startIcon={<Plus />}
+                              onClick={() => {
+                                setOpenCreate(true)
+                                resetCreateForm()
+                              }}
+                            >
+                              Add your first client
+                            </Button>
+                          )}
+                        </Box>
+                      )}
                     </>
                   )}
                 </Box>

@@ -34,6 +34,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import ThemeToggle from '@/components/ThemeToggle'
+import { useAuth } from '@/contexts/AuthContext'
 import { useCompleteUserRegistrationMutation, useGetUserByTokenQuery } from '@/redux/api/userApi'
 import { useGetRoleByIdQuery } from '@/redux/api/rolesApi'
 import toast from 'react-hot-toast'
@@ -116,24 +117,42 @@ export default function UserRegisterPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
+  const roleNameFromQuery = searchParams.get('roleName')
   const { theme } = useTheme()
+  const { isAuthenticated } = useAuth()
   const isDark = theme === 'dark'
 
-  // Fetch user data by token (optional - for displaying user info)
-  const { 
-    data: userData, 
-    isLoading: isLoadingUser 
-  } = useGetUserByTokenQuery(
-    { token: token || '' }, 
-    { skip: !token }
+  // Enrichment only — invite emails include the same fields in the URL; never block the whole page on this request.
+  const {
+    data: userData,
+    isLoading: isLoadingUser,
+    isError: userByTokenError,
+    isFetching: isFetchingUser,
+  } = useGetUserByTokenQuery({ token: token || '' }, { skip: !token })
+
+  const inviteParamsComplete = Boolean(
+    token &&
+      searchParams.get('userName') &&
+      searchParams.get('organizationName') &&
+      searchParams.get('adminName') &&
+      searchParams.get('userEmail')
   )
+
+  const showFullPageInviteLoader =
+    Boolean(token) && !inviteParamsComplete && isLoadingUser && !userByTokenError
   
-  // Fetch role details by roleId from URL params
+  // Role by id is a protected API; invite links must work when logged out. Only fetch when signed in
+  // (e.g. admin preview); otherwise use roleName from URL or getUserByToken response.
   const { 
     data: roleData 
   } = useGetRoleByIdQuery(
     { roleId: urlParams?.roleId || '' }, 
-    { skip: !urlParams?.roleId }
+    {
+      skip:
+        !urlParams?.roleId ||
+        !isAuthenticated ||
+        Boolean(roleNameFromQuery),
+    }
   )
 
   // Extract URL parameters on component mount
@@ -145,6 +164,7 @@ export default function UserRegisterPage() {
     const adminId = searchParams.get('adminId')
     const userEmail = searchParams.get('userEmail')
     const roleId = searchParams.get('roleId')
+    const roleNameParam = searchParams.get('roleName')
     const userTypeParam = searchParams.get('userType')
     const salaryParam = searchParams.get('salary')
 
@@ -160,6 +180,10 @@ export default function UserRegisterPage() {
         userType: userTypeParam ? decodeURIComponent(userTypeParam) : undefined,
         salary: salaryParam ? decodeURIComponent(salaryParam) : undefined
       })
+
+      if (roleNameParam) {
+        setRoleName(decodeURIComponent(roleNameParam))
+      }
 
       // Set userType from URL params
       if (userTypeParam) {
@@ -634,8 +658,8 @@ export default function UserRegisterPage() {
     '& .MuiButton-startIcon svg': { display: 'block' }
   } as const
 
-  // Show loading state
-  if (isLoadingUser) {
+  // Full-screen loader only when we depend on the API to supply invite context (minimal links with token only).
+  if (showFullPageInviteLoader) {
     return (
       <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'} flex items-center justify-center p-4`}>
         <div className="text-center">
@@ -667,7 +691,17 @@ export default function UserRegisterPage() {
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 px-4 mb-4">
             Join our team and get started with your new role
           </p>
+          {inviteParamsComplete && isFetchingUser && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Verifying invitation with server…</p>
+          )}
         </div>
+
+        {inviteParamsComplete && userByTokenError && (
+          <Alert severity="warning" sx={{ mx: { xs: 1, sm: 0 } }}>
+            Could not load extra details from the server (check your connection or backend). Your invitation link still
+            works — fill the form below to complete registration.
+          </Alert>
+        )}
 
         {/* Success Message */}
         {success && (

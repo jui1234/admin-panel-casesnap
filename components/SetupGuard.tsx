@@ -9,25 +9,27 @@ interface SetupGuardProps {
   children: React.ReactNode
 }
 
-const protectedPaths = [
-  '/dashboard',
-  '/users',
-  '/roles',
-  '/clients',
-  '/cases',
-  '/employees',
-  '/permissions',
-  '/reports',
-  '/analytics',
-  '/settings',
-]
-
-function isProtectedPath(pathname: string) {
-  return protectedPaths.some(path => pathname.startsWith(path))
+/** Marketing, auth, onboarding, and registration — no session required. */
+function isPublicPath(pathname: string | null) {
+  if (!pathname) return true
+  if (pathname === '/') return true
+  const prefixes = [
+    '/auth/',
+    '/setup',
+    '/get-started',
+    '/reset-password',
+    '/403',
+    '/blog',
+    '/employees/register',
+    '/users/register',
+  ]
+  return prefixes.some((p) => pathname.startsWith(p))
 }
 
-function isRegistrationPath(pathname: string) {
-  return pathname.startsWith('/employees/register') || pathname.startsWith('/users/register')
+function hasAuthToken() {
+  if (typeof window === 'undefined') return false
+  const t = localStorage.getItem('authToken') || localStorage.getItem('token')
+  return !!t && t.length > 0
 }
 
 export default function SetupGuard({ children }: SetupGuardProps) {
@@ -36,30 +38,36 @@ export default function SetupGuard({ children }: SetupGuardProps) {
   const pathname = usePathname()
   const [hasChecked, setHasChecked] = useState(false)
 
+  const needsAuth = !isPublicPath(pathname)
+
   useEffect(() => {
-    if (!isLoading) {
-      setHasChecked(true)
-      if (isRegistrationPath(pathname)) return
+    if (isLoading) return
 
-      const isProtected = isProtectedPath(pathname)
-      const noToken =
-        typeof window !== 'undefined' &&
-        !localStorage.getItem('authToken') &&
-        !localStorage.getItem('token')
+    setHasChecked(true)
 
-      if (isProtected && (noToken || !isAuthenticated)) {
-        router.replace('/auth/login')
-      }
+    if (!needsAuth) return
+
+    const tokenOk = hasAuthToken()
+    if (!tokenOk || !isAuthenticated) {
+      router.replace('/auth/login')
     }
-  }, [isAuthenticated, isLoading, router, pathname])
+  }, [isAuthenticated, isLoading, router, pathname, needsAuth])
 
-  const isRegistration = isRegistrationPath(pathname)
-  const isProtected = isProtectedPath(pathname) && !isRegistration
-  const mustRedirect = isProtected && (!isLoading && !isAuthenticated)
-  const showBlock = isProtected && (isLoading || !hasChecked || !isAuthenticated)
+  if (!needsAuth) {
+    return <>{children}</>
+  }
+
+  const noSession = !hasAuthToken() || !isAuthenticated
+  const mustRedirect = !isLoading && hasChecked && noSession
+  const showBlock = isLoading || !hasChecked || noSession
 
   if (showBlock) {
-    return <CaseSnapLoader fullscreen={false} message={mustRedirect ? 'Redirecting to login...' : 'Loading CaseSnap...'} />
+    return (
+      <CaseSnapLoader
+        fullscreen={false}
+        message={mustRedirect ? 'Redirecting to login...' : 'Loading CaseSnap...'}
+      />
+    )
   }
 
   return <>{children}</>

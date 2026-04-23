@@ -31,7 +31,12 @@ function isRegistrationPath(pathname: string) {
 export default function ProtectedAppShell({ children }: ProtectedAppShellProps) {
   const pathname = usePathname()
 
-  if (isProtectedPath(pathname) && !isRegistrationPath(pathname)) {
+  // Registration must never use the app shell (matches /users before /users/register is excluded).
+  if (isRegistrationPath(pathname)) {
+    return <>{children}</>
+  }
+
+  if (isProtectedPath(pathname)) {
     return <Layout>{children}</Layout>
   }
 

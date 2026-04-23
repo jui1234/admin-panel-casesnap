@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { 
   Shield, 
@@ -28,12 +29,15 @@ import {
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { APP_BACKEND_URL } from '@/config/env'
 import ThemeToggle from './ThemeToggle'
 import LogoutModal from './LogoutModal'
 import CaseSnapLoader from './CaseSnapLoader'
 import { useLazyGetNotificationsQuery } from '@/redux/api/notificationsApi'
 import type { Notification as ApiNotification } from '@/redux/api/notificationsApi'
+import { useGetOnboardingStatusQuery } from '@/redux/api/onboardingApi'
+
+const APP_BACKEND_URL =
+  process.env.NEXT_PUBLIC_APP_BACKEND_URL || 'https://casesnapbackend.onrender.com/'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -136,6 +140,52 @@ export default function Layout({ children }: LayoutProps) {
   const { theme } = useTheme()
   const { logout, user } = useAuth()
   const modulesCacheKey = `${MODULES_CACHE_KEY_PREFIX}:${user?.organizationId || user?.id || 'default'}`
+
+  const { data: onboarding } = useGetOnboardingStatusQuery(undefined, {
+    skip: !user,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  })
+
+  const onboardingOrgId = onboarding?.organizationId ?? ''
+  const inviteStorageKey = onboardingOrgId ? `onboarding:invite-dismissed:${onboardingOrgId}` : ''
+  const roleBannerStorageKey = onboardingOrgId ? `onboarding:role-banner-dismissed:${onboardingOrgId}` : ''
+
+  const [inviteBannerDismissed, setInviteBannerDismissed] = useState(false)
+  const [roleBannerDismissed, setRoleBannerDismissed] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !inviteStorageKey) {
+      setInviteBannerDismissed(false)
+      return
+    }
+    setInviteBannerDismissed(sessionStorage.getItem(inviteStorageKey) === '1')
+  }, [inviteStorageKey])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !roleBannerStorageKey) {
+      setRoleBannerDismissed(false)
+      return
+    }
+    setRoleBannerDismissed(sessionStorage.getItem(roleBannerStorageKey) === '1')
+  }, [roleBannerStorageKey])
+
+  const dismissInviteBanner = () => {
+    if (inviteStorageKey) sessionStorage.setItem(inviteStorageKey, '1')
+    setInviteBannerDismissed(true)
+  }
+
+  const dismissRoleBanner = () => {
+    if (roleBannerStorageKey) sessionStorage.setItem(roleBannerStorageKey, '1')
+    setRoleBannerDismissed(true)
+  }
+
+  const showInviteBanner =
+    !!onboarding?.readiness?.suggestInviteMoreUsers && !inviteBannerDismissed
+  const showRoleSetupBanner =
+    onboarding?.suggestedNextStep === 'create_custom_role' &&
+    !roleBannerDismissed &&
+    !pathname.startsWith('/roles')
   
   // Helper to check if role is admin or super-admin
   const isAdminRole = (role: string | { name: string } | undefined): boolean => {
@@ -323,9 +373,23 @@ export default function Layout({ children }: LayoutProps) {
   }, [user])
 
   useEffect(() => {
-    topNavigation.forEach((item) => {
-      router.prefetch(item.href)
-    })
+    // Prefetching every route makes dev navigation feel "stuck" because it triggers
+    // compilation of heavy pages (DataGrid, large client bundles) upfront.
+    // In production this can be useful, but in dev it hurts UX a lot.
+    if (process.env.NODE_ENV === 'development') return
+
+    const run = () => {
+      topNavigation.slice(0, 4).forEach((item) => {
+        router.prefetch(item.href)
+      })
+    }
+
+    // Defer prefetch so first paint isn't blocked.
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      ;(window as any).requestIdleCallback(run, { timeout: 2000 })
+    } else {
+      setTimeout(run, 600)
+    }
   }, [router, prefetchKey])
 
   useEffect(() => {
@@ -458,7 +522,7 @@ export default function Layout({ children }: LayoutProps) {
       `}</style>
       <div className={`h-screen flex overflow-hidden transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
       {isRouteLoading && (
-        <CaseSnapLoader message="Redirecting in CaseSnap..." />
+        <CaseSnapLoader message="Opening page..." />
       )}
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
@@ -500,12 +564,22 @@ export default function Layout({ children }: LayoutProps) {
               topNavigation.map((item) => {
                 const Icon = item.icon
                 return (
-                  <a
+                  <Link
                     key={item.name}
                     href={item.href}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      navigateWithLoader(item.href)
+                    prefetch={false}
+                    onClick={() => {
+                      // Let <Link> perform the navigation; we only control the loader UI here.
+                      if (item.href === pathname) {
+                        setSidebarOpen(false)
+                        return
+                      }
+                      setIsRouteLoading(true)
+                      setSidebarOpen(false)
+                      // Fallback: avoid infinite loader if navigation gets interrupted.
+                      setTimeout(() => {
+                        setIsRouteLoading(false)
+                      }, 12000)
                     }}
                     className={`group flex items-center px-2 sm:px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                       isActive(item.href)
@@ -517,7 +591,7 @@ export default function Layout({ children }: LayoutProps) {
                       isActive(item.href) ? 'text-yellow-500' : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400'
                     }`} />
                     <span className="truncate">{item.name}</span>
-                  </a>
+                  </Link>
                 )
               })
             ) : (
@@ -714,7 +788,59 @@ export default function Layout({ children }: LayoutProps) {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
-          <div className="p-3 sm:p-4 lg:p-6">
+          <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
+            {showRoleSetupBanner && (
+              <div
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-100"
+                role="status"
+              >
+                <p className="pr-2">
+                  <span className="font-medium">Set up roles:</span>{' '}
+                  Create a custom role for your team (beyond the built-in Super Admin), then assign it when you add users.
+                </p>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Link
+                    href="/roles"
+                    className="inline-flex items-center justify-center rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+                  >
+                    Go to Roles
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={dismissRoleBanner}
+                    className="text-xs font-medium text-amber-800 underline dark:text-amber-200"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+            {showInviteBanner && (
+              <div
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-950 dark:border-blue-800/80 dark:bg-blue-950/40 dark:text-blue-100"
+                role="status"
+              >
+                <p className="pr-2">
+                  <span className="font-medium">Grow your team:</span> You have custom roles set up, but only one approved
+                  user. Invite teammates from Users so they can collaborate.
+                </p>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Link
+                    href="/users"
+                    className="inline-flex items-center justify-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                  >
+                    Invite users
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={dismissInviteBanner}
+                    className="text-xs font-medium text-blue-800 underline dark:text-blue-200"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
             {children}
           </div>
         </main>

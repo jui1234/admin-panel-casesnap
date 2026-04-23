@@ -4,6 +4,7 @@ import { casesApi } from './api/casesApi'
 import { clientsApi } from './api/clientsApi'
 import { employeesApi } from './api/employeesApi'
 import { notificationsApi } from './api/notificationsApi'
+import { onboardingApi } from './api/onboardingApi'
 import { rolesApi } from './api/rolesApi'
 import { userApi } from './api/userApi'
 
@@ -14,6 +15,7 @@ export const store = configureStore({
     [clientsApi.reducerPath]: clientsApi.reducer,
     [employeesApi.reducerPath]: employeesApi.reducer,
     [notificationsApi.reducerPath]: notificationsApi.reducer,
+    [onboardingApi.reducerPath]: onboardingApi.reducer,
     [rolesApi.reducerPath]: rolesApi.reducer,
     [userApi.reducerPath]: userApi.reducer,
   },
@@ -28,6 +30,7 @@ export const store = configureStore({
       clientsApi.middleware,
       employeesApi.middleware,
       notificationsApi.middleware,
+      onboardingApi.middleware,
       rolesApi.middleware,
       userApi.middleware
     ),

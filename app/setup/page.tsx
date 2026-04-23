@@ -20,6 +20,8 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
 import { useSetupOrganizationMutation, useLoginMutation } from '@/redux/api/authApi'
+import { onboardingApi } from '@/redux/api/onboardingApi'
+import { store } from '@/redux/store'
 import toast from 'react-hot-toast'
 import * as yup from 'yup'
 
@@ -70,12 +72,38 @@ const organizationSchema = yup.object().shape({
   practiceAreas: yup.array().of(yup.string()).min(1, 'Please select at least one practice area').required('Practice areas are required')
 })
 
+/** Shown next to the password field; keep in sync with `setupPasswordSchema`. */
+const SETUP_PASSWORD_REQUIREMENTS =
+  'At least 8 characters, including uppercase, lowercase, a number, and a special character (e.g. !@#$%).'
+
+const setupPasswordSchema = yup
+  .string()
+  .required('Password is required')
+  .min(8, 'Password must be at least 8 characters')
+  .max(128, 'Password must be at most 128 characters')
+  .matches(/[a-z]/, 'Password must include at least one lowercase letter')
+  .matches(/[A-Z]/, 'Password must include at least one uppercase letter')
+  .matches(/[0-9]/, 'Password must include at least one number')
+  .matches(
+    /[^A-Za-z0-9]/,
+    'Password must include at least one special character (e.g. ! @ # $ % ^ & *)'
+  )
+
+function isSetupPasswordValid(password: string): boolean {
+  try {
+    setupPasswordSchema.validateSync(password)
+    return true
+  } catch {
+    return false
+  }
+}
+
 const superAdminSchema = yup.object().shape({
   firstName: yup.string().required('First name is required').min(2, 'First name must be at least 2 characters'),
   lastName: yup.string().required('Last name is required').min(2, 'Last name must be at least 2 characters'),
   email: yup.string().email('Please enter a valid email address').required('Email is required'),
   phone: yup.string().required('Phone number is required').matches(/^\d{10}$/, 'Phone number must be exactly 10 digits'),
-  password: yup.string().required('Password is required').min(6, 'Password must be at least 6 characters'),
+  password: setupPasswordSchema,
   confirmPassword: yup.string().required('Please confirm your password').oneOf([yup.ref('password')], 'Passwords must match')
 })
 
@@ -86,6 +114,8 @@ export default function SetupPage() {
   const [isPracticeAreasOpen, setIsPracticeAreasOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [superAdminPasswordError, setSuperAdminPasswordError] = useState('')
+  const [superAdminConfirmPasswordError, setSuperAdminConfirmPasswordError] = useState('')
   const [superAdminAcknowledged, setSuperAdminAcknowledged] = useState(false)
   const [postalLookupLoading, setPostalLookupLoading] = useState(false)
   const [postalLookupMessage, setPostalLookupMessage] = useState('')
@@ -229,7 +259,14 @@ export default function SetupPage() {
 
 
   const handleSuperAdminChange = (field: keyof SuperAdminData, value: string) => {
-    setSuperAdminData(prev => ({ ...prev, [field]: value }))
+    setSuperAdminData((prev) => ({ ...prev, [field]: value }))
+    if (field === 'password') {
+      setSuperAdminPasswordError('')
+      setSuperAdminConfirmPasswordError('')
+    }
+    if (field === 'confirmPassword') {
+      setSuperAdminConfirmPasswordError('')
+    }
   }
 
   const validateOrganizationData = async () => {
@@ -241,23 +278,29 @@ export default function SetupPage() {
         const firstError = error.errors[0]
         setError(firstError)
         toast.error(firstError)
-      return false
-    }
         return false
       }
+      return false
     }
+  }
 
   const validateSuperAdminData = async () => {
+    setSuperAdminPasswordError('')
+    setSuperAdminConfirmPasswordError('')
     try {
       await superAdminSchema.validate(superAdminData, { abortEarly: false })
       return true
     } catch (error) {
       if (error instanceof yup.ValidationError) {
-        const firstError = error.errors[0]
+        const firstError = error.errors[0] ?? 'Please fix the errors below'
         setError(firstError)
         toast.error(firstError)
-      return false
-    }
+        const pwdErr = error.inner.find((e) => e.path === 'password')
+        const confErr = error.inner.find((e) => e.path === 'confirmPassword')
+        if (pwdErr) setSuperAdminPasswordError(pwdErr.message)
+        if (confErr) setSuperAdminConfirmPasswordError(confErr.message)
+        return false
+      }
       return false
     }
   }
@@ -314,10 +357,12 @@ export default function SetupPage() {
       lastName: 'Admin',
       email: 'superadmin@casesnap.com',
       phone: '9988776655',
-      password: 'StrongPassword123',
-      confirmPassword: 'StrongPassword123'
+      password: 'StrongPass1!',
+      confirmPassword: 'StrongPass1!',
     })
-    
+    setSuperAdminPasswordError('')
+    setSuperAdminConfirmPasswordError('')
+
     toast.success('✅ Test data filled successfully!')
   }
 
@@ -442,6 +487,8 @@ export default function SetupPage() {
           if (loginResult.user?.organization) {
             localStorage.setItem('organizationData', JSON.stringify(loginResult.user.organization))
           }
+
+          store.dispatch(onboardingApi.endpoints.getOnboardingStatus.initiate(undefined, { forceRefetch: true }))
 
           // Update AuthContext by calling login function
           const loginSuccess = await login(superAdminData.email, superAdminData.password)
@@ -1072,7 +1119,8 @@ export default function SetupPage() {
                       value={superAdminData.password}
                       onChange={(e) => handleSuperAdminChange('password', e.target.value)}
                       className="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 text-sm sm:text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      placeholder="Enter password (min 6 characters)"
+                      placeholder="e.g. MySecure1!"
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"
@@ -1086,6 +1134,15 @@ export default function SetupPage() {
                       )}
                     </button>
                   </div>
+                  {superAdminPasswordError ? (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 leading-relaxed">
+                      {superAdminPasswordError}
+                    </p>
+                  ) : !isSetupPasswordValid(superAdminData.password) ? (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">
+                      {SETUP_PASSWORD_REQUIREMENTS}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div>
@@ -1099,6 +1156,7 @@ export default function SetupPage() {
                       onChange={(e) => handleSuperAdminChange('confirmPassword', e.target.value)}
                       className="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 text-sm sm:text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="Confirm your password"
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"
@@ -1112,6 +1170,9 @@ export default function SetupPage() {
                       )}
                     </button>
                   </div>
+                  {superAdminConfirmPasswordError ? (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1.5">{superAdminConfirmPasswordError}</p>
+                  ) : null}
                 </div>
               </div>
 

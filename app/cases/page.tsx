@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -21,7 +22,7 @@ import {
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
-import { DataGrid, GridColDef } from '@mui/x-data-grid'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   Box,
   Button,
@@ -80,7 +81,13 @@ import {
 } from '@/redux/api/casesApi'
 import { useGetClientsQuery } from '@/redux/api/clientsApi'
 import { useGetAssignableUsersQuery, type User } from '@/redux/api/userApi'
+import { useGetOnboardingStatusQuery, onboardingApi } from '@/redux/api/onboardingApi'
+import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
+
+const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), {
+  ssr: false,
+})
 
 function getAssignedToName(a: string | { id?: string; firstName?: string; lastName?: string; email?: string } | undefined): string {
   if (!a) return '—'
@@ -144,7 +151,9 @@ function caseStageToRequest(s: CaseStage): AddCaseStageRequest {
 
 export default function CasesPage() {
   const router = useRouter()
+  const dispatch = useDispatch()
   const { user: currentUser } = useAuth()
+  const { data: onboarding } = useGetOnboardingStatusQuery(undefined, { skip: !currentUser })
   const { canRead, canCreate, canUpdate, canDelete, canAssignee } = useModulePermissions('case')
   const canShowAssignedTo = canAssignee || currentUser?.assigneePermissions?.canAssignCase === true
 
@@ -419,6 +428,7 @@ export default function CasesPage() {
         }
       }
       toast.success('Case created')
+      dispatch(onboardingApi.util.invalidateTags(['OnboardingStatus']))
       setOpenCreate(false)
       setShowCreateStages(false)
       resetCreateForm()
@@ -953,9 +963,41 @@ export default function CasesPage() {
               ) : (
                 <>
                   <FolderOpen size={48} style={{ opacity: 0.4 }} />
-                  <Typography variant="body1" color="text.secondary">
+                  <Typography variant="body1" color="text.secondary" align="center">
                     {canShowAssignedTo ? 'No active cases or no cases assigned to you' : 'No active cases'}
                   </Typography>
+                  {onboarding && onboarding.readiness && !onboarding.readiness.hasClients && (
+                    <Box sx={{ textAlign: 'center', maxWidth: 440, mt: 1 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                        Add at least one client before you create cases.
+                      </Typography>
+                      <Button variant="outlined" onClick={() => router.push('/clients')}>
+                        Go to Clients
+                      </Button>
+                    </Box>
+                  )}
+                  {onboarding?.suggestedNextStep === 'create_case' && onboarding.readiness?.hasClients && (
+                    <Box sx={{ textAlign: 'center', maxWidth: 440, mt: 1 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                        Create your first case to start tracking matters and hearings.
+                      </Typography>
+                      {canCreate && (
+                        <Button
+                          variant="contained"
+                          startIcon={<Plus />}
+                          onClick={() => {
+                            setOpenCreate(true)
+                            setShowCreateStages(false)
+                            resetCreateForm()
+                            resetCreateStageRows()
+                            resetStageForm()
+                          }}
+                        >
+                          Add your first case
+                        </Button>
+                      )}
+                    </Box>
+                  )}
                 </>
               )}
             </Box>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { 
   Users, 
@@ -20,11 +21,7 @@ import {
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { ROLES, getRoleById } from '@/utils/roles'
 import { useAuth } from '@/contexts/AuthContext'
-import { 
-  DataGrid, 
-  GridColDef, 
-  GridToolbar,
-} from '@mui/x-data-grid'
+import type { GridColDef } from '@mui/x-data-grid'
 import { 
   Box, 
   Button, 
@@ -68,6 +65,9 @@ import {
 import { useGetRolesQuery } from '@/redux/api/rolesApi'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
 import toast from 'react-hot-toast'
+
+const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), { ssr: false })
+const GridToolbar = dynamic(() => import('@mui/x-data-grid').then((m) => m.GridToolbar), { ssr: false })
 
 interface InviteUserData {
   firstName: string

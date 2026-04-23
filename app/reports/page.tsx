@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import { 
   FileText, 
   Download, 
@@ -12,12 +13,7 @@ import {
   Download as DownloadIcon,
   Delete as DeleteIcon
 } from 'lucide-react'
-import { 
-  DataGrid, 
-  GridColDef, 
-  GridActionsCellItem,
-  GridToolbar
-} from '@mui/x-data-grid'
+import type { GridColDef } from '@mui/x-data-grid'
 import { 
   Box, 
   Button, 
@@ -28,6 +24,9 @@ import {
   Grid,
   IconButton
 } from '@mui/material'
+
+const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), { ssr: false })
+const GridToolbar = dynamic(() => import('@mui/x-data-grid').then((m) => m.GridToolbar), { ssr: false })
 
 interface Report {
   id: number
@@ -143,28 +142,22 @@ export default function ReportsPage() {
     {
       field: 'actions',
       headerName: 'Actions',
-      type: 'actions',
       width: 120,
-      getActions: (params) => [
-        <GridActionsCellItem
-          icon={<Eye />}
-          label="View"
-          onClick={() => handleView(params.id as number)}
-          color="primary"
-        />,
-        <GridActionsCellItem
-          icon={<DownloadIcon />}
-          label="Download"
-          onClick={() => handleDownload(params.id as number)}
-          color="primary"
-        />,
-        <GridActionsCellItem
-          icon={<DeleteIcon />}
-          label="Delete"
-          onClick={() => handleDelete(params.id as number)}
-          color="error"
-        />,
-      ],
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <IconButton size="small" color="primary" onClick={() => handleView(params.id as number)}>
+            <Eye size={18} />
+          </IconButton>
+          <IconButton size="small" color="primary" onClick={() => handleDownload(params.id as number)}>
+            <DownloadIcon size={18} />
+          </IconButton>
+          <IconButton size="small" color="error" onClick={() => handleDelete(params.id as number)}>
+            <DeleteIcon size={18} />
+          </IconButton>
+        </Box>
+      ),
     },
   ]
 

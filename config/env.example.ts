@@ -1,13 +1,8 @@
-// Example environment config (safe to commit)
-// Copy to config/env.ts locally and adjust values as needed.
-
-export const env = {
-  APP_NAME: 'CaseSnap',
-  APP_URL: 'http://localhost:3000',
-  APP_DESCRIPTION:
-    'Best Lawyer Case Management Software for Law Firms in India',
-}
-
-export const { APP_NAME, APP_URL, APP_DESCRIPTION } = env
+// DEPRECATED:
+// This file existed only to provide a TS wrapper for env variables.
+// We now read from `.env` directly via `process.env.NEXT_PUBLIC_*`.
+//
+// Use `.env` locally, and commit a plain `.env.example` template instead (recommended).
+export {}
 
 

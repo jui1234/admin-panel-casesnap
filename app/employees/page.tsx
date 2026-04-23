@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { 
   UserPlus, 
@@ -23,11 +24,7 @@ import ActionMenu from '@/components/ActionMenu'
 import { useAuth } from '@/contexts/AuthContext'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
 import { ROLES, getRoleById } from '@/utils/roles'
-import { 
-  DataGrid, 
-  GridColDef, 
-  GridToolbar
-} from '@mui/x-data-grid'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useInviteEmployeeMutation, useGetEmployeesQuery, useUpdateEmployeeStatusMutation, useLazyGetEmployeeByAdminQuery, useUpdateEmployeeByAdminMutation, useSoftDeleteEmployeeByAdminMutation } from '@/redux/api/employeesApi'
 import toast from 'react-hot-toast'
 import { 
@@ -55,6 +52,14 @@ import {
   ToggleButton,
   ToggleButtonGroup
 } from '@mui/material'
+
+const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), {
+  ssr: false,
+})
+const GridToolbar = dynamic(
+  () => import('@mui/x-data-grid').then((m) => m.GridToolbar),
+  { ssr: false }
+)
 
 // Import Employee type from Redux API
 import type { Employee } from '@/redux/api/employeesApi'
