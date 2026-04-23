@@ -7,8 +7,12 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
 import { useLoginMutation } from '@/redux/api/authApi'
-import { APP_BACKEND_URL } from '@/config/env'
+import { onboardingApi } from '@/redux/api/onboardingApi'
+import { store } from '@/redux/store'
 import toast from 'react-hot-toast'
+
+const APP_BACKEND_URL =
+  process.env.NEXT_PUBLIC_APP_BACKEND_URL || 'https://casesnapbackend.onrender.com/'
 
 interface SidebarModule {
   _id: string
@@ -63,10 +67,10 @@ export default function LoginPage() {
     }
   }
 
-  // Redirect to dashboard if already authenticated
+  // Redirect to cases if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.replace('/dashboard')
+      router.replace('/cases')
     }
   }, [isAuthenticated, authLoading, router])
 
@@ -151,19 +155,16 @@ export default function LoginPage() {
         }
         
         toast.success('Login successful!')
-        
+
+        store.dispatch(onboardingApi.endpoints.getOnboardingStatus.initiate(undefined, { forceRefetch: true }))
+
         // Set redirecting state
         setIsRedirecting(true)
-        
+
         // Use AuthContext login to update the state properly
         const loginSuccess = await login(email, password)
-        
-        if (loginSuccess) {
-          router.replace('/dashboard')
-        } else {
-          // Fallback: redirect anyway since we have the data
-          router.replace('/dashboard')
-        }
+
+        router.replace('/cases')
       }
     } catch (err: any) {
       const rawErrorMessage = err?.data?.error || err?.data?.message || err?.message || 'Login failed. Please try again.'

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Settings, Save, User, Shield, Bell, Globe, Database, Key, Check, ArrowUp } from 'lucide-react'
 import Head from 'next/head'
 import { useAuth } from '@/contexts/AuthContext'
@@ -13,6 +13,48 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [legalTitle, setLegalTitle] = useState('')
+
+  const [language, setLanguage] = useState('English')
+  const [timeZone, setTimeZone] = useState('IST (Indian Standard Time)')
+  const [autoSave, setAutoSave] = useState(true)
+  const [twoFactor, setTwoFactor] = useState(false)
+
+  const profile = useMemo(() => {
+    const fromCtx = user
+    const src = fromCtx as any
+    const name =
+      (src?.name as string | undefined) ||
+      [src?.firstName, src?.lastName].filter(Boolean).join(' ').trim() ||
+      '—'
+    const mail = (src?.email as string | undefined) || '—'
+    const plan = (src?.subscriptionPlan as string | undefined) || fromCtx?.subscriptionPlan || 'free'
+    return { name, mail, plan }
+  }, [user])
+
+  useEffect(() => {
+    setFullName(profile.name === '—' ? '' : profile.name)
+    setEmail(profile.mail === '—' ? '' : profile.mail)
+    try {
+      const stored = localStorage.getItem('settings:legalTitle')
+      if (stored) setLegalTitle(stored)
+      const pref = localStorage.getItem('settings:prefs')
+      if (pref) {
+        const p = JSON.parse(pref) as { language?: string; timeZone?: string; autoSave?: boolean; twoFactor?: boolean }
+        if (p.language) setLanguage(p.language)
+        if (p.timeZone) setTimeZone(p.timeZone)
+        if (typeof p.autoSave === 'boolean') setAutoSave(p.autoSave)
+        if (typeof p.twoFactor === 'boolean') setTwoFactor(p.twoFactor)
+      }
+    } catch {
+      // ignore
+    }
+    // only once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Map subscription plan values to display names
   const getPlanDisplayName = (plan?: string): string => {
@@ -42,7 +84,7 @@ export default function SettingsPage() {
     }
   }
 
-  const currentPlan = user?.subscriptionPlan || 'free'
+  const currentPlan = profile.plan || 'free'
   const planDisplayName = getPlanDisplayName(currentPlan)
   const planPrice = getPlanPrice(currentPlan)
   const isFreeTrial = currentPlan === 'free'
@@ -69,6 +111,24 @@ export default function SettingsPage() {
     }
   }
 
+  const handleSaveSettings = () => {
+    try {
+      localStorage.setItem('settings:legalTitle', legalTitle)
+      localStorage.setItem(
+        'settings:prefs',
+        JSON.stringify({
+          language,
+          timeZone,
+          autoSave,
+          twoFactor,
+        })
+      )
+      toast.success('Settings saved')
+    } catch {
+      toast.error('Failed to save settings')
+    }
+  }
+
   return (
     <>
       <Head>
@@ -84,10 +144,16 @@ export default function SettingsPage() {
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Legal Practice Management Settings</h1>
             <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">Configure your law firm management software settings and advocate admin panel preferences for optimal legal case tracking</p>
           </div>
-          <button className="flex items-center px-3 sm:px-4 py-2 bg-yellow-500 text-gray-900 rounded-lg hover:bg-yellow-600 transition-colors duration-200 w-full sm:w-auto justify-center">
+          <div className="flex w-full sm:w-auto gap-2">
+            <button
+              type="button"
+              onClick={handleSaveSettings}
+              className="flex items-center px-3 sm:px-4 py-2 bg-yellow-500 text-gray-900 rounded-lg hover:bg-yellow-600 transition-colors duration-200 w-full sm:w-auto justify-center"
+            >
             <Save className="h-4 w-4 mr-2" />
             <span className="text-sm">Save Changes</span>
-          </button>
+            </button>
+          </div>
         </div>
 
         {/* Settings Grid */}
@@ -106,7 +172,8 @@ export default function SettingsPage() {
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
                     <input
                       type="text"
-                      defaultValue="Admin User"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
                   </div>
@@ -114,7 +181,8 @@ export default function SettingsPage() {
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
                     <input
                       type="email"
-                      defaultValue="admin@example.com"
+                      value={email}
+                      disabled
                       className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
                   </div>
@@ -122,7 +190,8 @@ export default function SettingsPage() {
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Legal Practice Title</label>
                     <input
                       type="text"
-                      defaultValue="Senior Advocate"
+                      value={legalTitle}
+                      onChange={(e) => setLegalTitle(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
                     />
                   </div>
@@ -182,6 +251,8 @@ export default function SettingsPage() {
                     <input
                       id="two-factor"
                       type="checkbox"
+                      checked={twoFactor}
+                      onChange={(e) => setTwoFactor(e.target.checked)}
                       className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
                     />
                     <label htmlFor="two-factor" className="ml-2 block text-xs sm:text-sm text-gray-700 dark:text-gray-300">
@@ -202,7 +273,11 @@ export default function SettingsPage() {
                 <div className="space-y-3 sm:space-y-4">
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Language</label>
-                    <select className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200">
+                    <select
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
+                    >
                       <option>English</option>
                       <option>Hindi</option>
                       <option>Bengali</option>
@@ -214,7 +289,11 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time Zone</label>
-                    <select className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200">
+                    <select
+                      value={timeZone}
+                      onChange={(e) => setTimeZone(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
+                    >
                       <option>IST (Indian Standard Time)</option>
                       <option>UTC (Coordinated Universal Time)</option>
                       <option>EST (Eastern Standard Time)</option>
@@ -226,7 +305,8 @@ export default function SettingsPage() {
                     <input
                       id="auto-save"
                       type="checkbox"
-                      defaultChecked
+                      checked={autoSave}
+                      onChange={(e) => setAutoSave(e.target.checked)}
                       className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 dark:border-gray-600 rounded"
                     />
                     <label htmlFor="auto-save" className="ml-2 block text-xs sm:text-sm text-gray-700 dark:text-gray-300">

@@ -4,7 +4,7 @@ import {
   type FetchArgs,
   type FetchBaseQueryError,
 } from '@reduxjs/toolkit/query'
-import { APP_BACKEND_URL } from '@/config/env'
+import { clearAuthStorage } from '@/lib/clearAuthStorage'
 
 export const SUBSCRIPTION_BLOCK_EVENT = 'casesnap:subscription-blocked'
 
@@ -13,6 +13,9 @@ export interface SubscriptionBlockPayload {
   subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'expired'
   subscriptionExpiresAt?: string
 }
+
+const APP_BACKEND_URL =
+  process.env.NEXT_PUBLIC_APP_BACKEND_URL || 'https://casesnapbackend.onrender.com/'
 
 const baseQuery = fetchBaseQuery({
   baseUrl: APP_BACKEND_URL,
@@ -64,6 +67,25 @@ const shouldSkipForLogin = (args: string | FetchArgs): boolean => {
   return url.includes('/api/auth/login') || url.includes('api/auth/login')
 }
 
+/** Do not treat 401 as "session expired" for these calls (wrong password, public flows, etc.). */
+const shouldSkip401SessionRedirect = (args: string | FetchArgs): boolean => {
+  const url = typeof args === 'string' ? args : args.url
+  const u = url.toLowerCase()
+  return (
+    u.includes('api/auth/login') ||
+    u.includes('api/auth/logout') ||
+    u.includes('api/auth/forgot-password') ||
+    u.includes('api/auth/reset-password') ||
+    u.includes('api/auth/change-password') ||
+    u.includes('api/setup/initialize') ||
+    u.includes('completeuserregistration') ||
+    u.includes('getuserbytoken') ||
+    // Invite registration (RTK URLs are api/users/register/:token — not the endpoint name string)
+    u.includes('api/users/register/') ||
+    u.includes('api/employees/register/')
+  )
+}
+
 export const baseQueryWithSubscriptionGuard: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
   args,
   api,
@@ -87,6 +109,14 @@ export const baseQueryWithSubscriptionGuard: BaseQueryFn<string | FetchArgs, unk
         subscriptionStatus: errorData.subscriptionStatus,
         subscriptionExpiresAt: errorData.subscriptionExpiresAt,
       })
+    }
+  }
+
+  if (result.error?.status === 401 && typeof window !== 'undefined' && !shouldSkip401SessionRedirect(args)) {
+    clearAuthStorage()
+    const path = window.location.pathname
+    if (!path.startsWith('/auth/login') && path !== '/') {
+      window.location.replace('/auth/login')
     }
   }
 

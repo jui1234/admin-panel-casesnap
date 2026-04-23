@@ -7,11 +7,12 @@ import MuiThemeProviderWrapper from '@/components/ThemeProvider'
 import ReduxProvider from '@/components/ReduxProvider'
 import ProtectedAppShell from '@/components/ProtectedAppShell'
 import SubscriptionGuardModal from '@/components/SubscriptionGuardModal'
-import { env } from '@/config/env'
 import { Toaster } from 'react-hot-toast'
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
 export const metadata: Metadata = {
-  metadataBase: new URL(env.APP_URL),
+  metadataBase: new URL(APP_URL),
   title: 'CaseSnap - Best Lawyer Case Management Software | Legal Practice Management System',
   description: 'Professional lawyer case management software for law firms. Cloud-based legal practice management system with case tracking, document management, and billing. Trusted by 500+ law firms in India.',
   icons: {

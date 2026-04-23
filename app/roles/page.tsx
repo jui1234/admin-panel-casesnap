@@ -51,7 +51,9 @@ import {
   type RolePermission,
   type Module
 } from '@/redux/api/rolesApi'
+import { onboardingApi } from '@/redux/api/onboardingApi'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
+import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
 
 const DEFAULT_ACTIONS = ['create', 'read', 'update', 'delete'] as const
@@ -70,6 +72,7 @@ interface RoleFormData {
 }
 
 export default function RolesPage() {
+  const dispatch = useDispatch()
   const { user, isLoading: isAuthLoading } = useAuth()
   const { canCreate, canUpdate, canDelete } = useModulePermissions('role')
   const [searchTerm, setSearchTerm] = useState('')
@@ -334,6 +337,7 @@ export default function RolesPage() {
       }
 
       await createRole(payload).unwrap()
+      dispatch(onboardingApi.util.invalidateTags(['OnboardingStatus']))
       toast.success('Role created successfully!')
       setOpenCreateDialog(false)
       setCreateRoleError(null)

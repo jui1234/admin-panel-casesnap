@@ -27,9 +27,9 @@ export default function DemoPage() {
   const isDark = theme === 'dark'
 
   useEffect(() => {
-    // If user is already authenticated, redirect to dashboard
+    // If user is already authenticated, redirect to main working page
     if (!isLoading && isAuthenticated) {
-      router.push('/dashboard')
+      router.replace('/cases')
     }
   }, [isAuthenticated, isLoading, router])
 

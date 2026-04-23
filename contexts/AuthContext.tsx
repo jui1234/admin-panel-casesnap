@@ -2,9 +2,10 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { APP_BACKEND_URL } from '@/config/env'
+import { clearAuthStorage } from '@/lib/clearAuthStorage'
 
-const MODULES_CACHE_KEY_PREFIX = 'sidebarModulesCache:'
+const APP_BACKEND_URL =
+  process.env.NEXT_PUBLIC_APP_BACKEND_URL || 'https://casesnapbackend.onrender.com/'
 
 interface Role {
   id: string
@@ -103,19 +104,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth()
   }, [])
 
-  const clearSidebarModulesCache = () => {
-    try {
-      for (let index = localStorage.length - 1; index >= 0; index--) {
-        const key = localStorage.key(index)
-        if (key?.startsWith(MODULES_CACHE_KEY_PREFIX)) {
-          localStorage.removeItem(key)
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to clear sidebar modules cache', error)
-    }
-  }
-
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       // Check if we already have real API data in localStorage
@@ -210,15 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      localStorage.removeItem('authToken')
-      localStorage.removeItem('token')
-      localStorage.removeItem('userData')
-      localStorage.removeItem('organizationData')
-      localStorage.removeItem('user')
-      localStorage.removeItem('organization')
-      localStorage.removeItem('role')
-      localStorage.removeItem('permissions')
-      clearSidebarModulesCache()
+      clearAuthStorage()
     } catch (error) {
       console.warn('localStorage not available during logout', error)
     }

@@ -38,8 +38,8 @@ export default function GetStartedPage() {
       const organizationData = localStorage.getItem('organizationData')
       
       if (authToken && organizationData) {
-        // User is authenticated and organization exists, redirect to dashboard
-        router.push('/dashboard')
+        // User is authenticated and organization exists, redirect to cases
+        router.replace('/cases')
       }
     } catch (error) {
       // localStorage not available, continue normally
