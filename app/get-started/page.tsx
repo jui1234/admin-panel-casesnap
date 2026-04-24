@@ -39,7 +39,7 @@ export default function GetStartedPage() {
       
       if (authToken && organizationData) {
         // User is authenticated and organization exists, redirect to cases
-        router.replace('/cases')
+        router.replace('/dashboard')
       }
     } catch (error) {
       // localStorage not available, continue normally

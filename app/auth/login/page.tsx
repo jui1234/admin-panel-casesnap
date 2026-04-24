@@ -70,7 +70,7 @@ export default function LoginPage() {
   // Redirect to cases if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.replace('/cases')
+      router.replace('/dashboard')
     }
   }, [isAuthenticated, authLoading, router])
 
@@ -164,7 +164,7 @@ export default function LoginPage() {
         // Use AuthContext login to update the state properly
         const loginSuccess = await login(email, password)
 
-        router.replace('/cases')
+        router.replace('/dashboard')
       }
     } catch (err: any) {
       const rawErrorMessage = err?.data?.error || err?.data?.message || err?.message || 'Login failed. Please try again.'
