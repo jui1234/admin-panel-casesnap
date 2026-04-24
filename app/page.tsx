@@ -29,7 +29,7 @@ export default function DemoPage() {
   useEffect(() => {
     // If user is already authenticated, redirect to main working page
     if (!isLoading && isAuthenticated) {
-      router.replace('/cases')
+      router.replace('/dashboard')
     }
   }, [isAuthenticated, isLoading, router])
 
