@@ -74,19 +74,20 @@ const organizationSchema = yup.object().shape({
 
 /** Shown next to the password field; keep in sync with `setupPasswordSchema`. */
 const SETUP_PASSWORD_REQUIREMENTS =
-  'At least 8 characters, including uppercase, lowercase, a number, and a special character (e.g. !@#$%).'
+  'At least 8 characters, including uppercase, lowercase, a number, and a symbol (e.g. ! @ # $ %). No spaces.'
 
 const setupPasswordSchema = yup
   .string()
   .required('Password is required')
   .min(8, 'Password must be at least 8 characters')
   .max(128, 'Password must be at most 128 characters')
+  .matches(/^\S+$/, 'Password cannot contain spaces')
   .matches(/[a-z]/, 'Password must include at least one lowercase letter')
   .matches(/[A-Z]/, 'Password must include at least one uppercase letter')
   .matches(/[0-9]/, 'Password must include at least one number')
   .matches(
-    /[^A-Za-z0-9]/,
-    'Password must include at least one special character (e.g. ! @ # $ % ^ & *)'
+    /[!@#$%^&*()[\]{};:'",.<>/?\\|`~_\-+=]/,
+    'Password must include at least one symbol (e.g. ! @ # $ % ^ & *)'
   )
 
 function isSetupPasswordValid(password: string): boolean {
@@ -95,6 +96,16 @@ function isSetupPasswordValid(password: string): boolean {
     return true
   } catch {
     return false
+  }
+}
+
+function getSetupPasswordError(password: string): string {
+  try {
+    setupPasswordSchema.validateSync(password)
+    return ''
+  } catch (e) {
+    if (e instanceof yup.ValidationError) return e.message
+    return 'Invalid password'
   }
 }
 
@@ -261,10 +272,12 @@ export default function SetupPage() {
   const handleSuperAdminChange = (field: keyof SuperAdminData, value: string) => {
     setSuperAdminData((prev) => ({ ...prev, [field]: value }))
     if (field === 'password') {
+      // Don't validate live; show errors on "Next" via Yup.
       setSuperAdminPasswordError('')
       setSuperAdminConfirmPasswordError('')
     }
     if (field === 'confirmPassword') {
+      // Don't validate live; show errors on "Next" via Yup.
       setSuperAdminConfirmPasswordError('')
     }
   }
@@ -320,6 +333,32 @@ export default function SetupPage() {
         toast.error(msg)
         return
       }
+
+      // Strong password + confirm password validation must block step transition.
+      // Do this explicitly here so we never advance to Step 3 with a weak password.
+      const pwdErr = getSetupPasswordError(superAdminData.password)
+      if (pwdErr) {
+        setSuperAdminPasswordError(pwdErr)
+        setSuperAdminConfirmPasswordError('')
+        setError(pwdErr)
+        toast.error(pwdErr)
+        return
+      }
+      if (!superAdminData.confirmPassword) {
+        const msg = 'Please confirm your password'
+        setSuperAdminConfirmPasswordError(msg)
+        setError(msg)
+        toast.error(msg)
+        return
+      }
+      if (superAdminData.confirmPassword !== superAdminData.password) {
+        const msg = 'Passwords must match'
+        setSuperAdminConfirmPasswordError(msg)
+        setError(msg)
+        toast.error(msg)
+        return
+      }
+
       const isValid = await validateSuperAdminData()
       if (isValid) {
         setCurrentStep(3)
