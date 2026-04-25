@@ -81,7 +81,9 @@ import toast from 'react-hot-toast'
 
 const CLIENT_STATUSES: ClientStatus[] = ['active', 'inactive', 'prospect', 'archived']
 const AADHAR_IMAGE_MAX_BYTES = 1048576 // 1 MB
-const UPLOAD_API_URL = process.env.NEXT_PUBLIC_UPLOAD_API_URL || 'http://localhost:5004/api/upload'
+const BACKEND_BASE_URL = (process.env.NEXT_PUBLIC_APP_BACKEND_URL || '').replace(/\/$/, '')
+const UPLOAD_API_URL =
+  process.env.NEXT_PUBLIC_UPLOAD_API_URL || (BACKEND_BASE_URL ? `${BACKEND_BASE_URL}/api/upload` : '')
 
 function getFeesUnit(fees: number | undefined): string {
   if (fees == null || fees === 0) return ''
@@ -441,6 +443,10 @@ export default function ClientsPage() {
     if (aadharFile && aadharFile.size <= AADHAR_IMAGE_MAX_BYTES) {
       payload.aadharImageSize = aadharFile.size
       try {
+        if (!UPLOAD_API_URL) {
+          toast.error('Upload URL is not configured. Set NEXT_PUBLIC_UPLOAD_API_URL (or NEXT_PUBLIC_APP_BACKEND_URL).')
+          return
+        }
         setAadharUploading(true)
         await new Promise((r) => setTimeout(r, 100))
         const formData = new FormData()
@@ -499,6 +505,10 @@ export default function ClientsPage() {
     if (aadharEditFile && aadharEditFile.size <= AADHAR_IMAGE_MAX_BYTES) {
       payload.aadharImageSize = aadharEditFile.size
       try {
+        if (!UPLOAD_API_URL) {
+          toast.error('Upload URL is not configured. Set NEXT_PUBLIC_UPLOAD_API_URL (or NEXT_PUBLIC_APP_BACKEND_URL).')
+          return
+        }
         setAadharUploading(true)
         await new Promise((r) => setTimeout(r, 100))
         const formData = new FormData()
