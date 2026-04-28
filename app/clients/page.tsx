@@ -1052,6 +1052,7 @@ export default function ClientsPage() {
                     fullWidth
                     label="Phone"
                     placeholder="10 digits"
+                    required
                     value={createForm.phone}
                     onChange={(e) => setCreateForm((p) => ({ ...p, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
                     error={!!createErrors.phone}

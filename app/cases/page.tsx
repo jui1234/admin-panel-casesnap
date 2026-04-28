@@ -1045,8 +1045,12 @@ export default function CasesPage() {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
-                  <InputLabel>Court Name</InputLabel>
-                  <Select value={createForm.courtName || ''} label="Court Name" onChange={(e) => setCreateForm((p) => ({ ...p, courtName: e.target.value || undefined }))}>
+                  <InputLabel>Court Premises</InputLabel>
+                  <Select
+                    value={createForm.courtName || ''}
+                    label="Court Premises"
+                    onChange={(e) => setCreateForm((p) => ({ ...p, courtName: e.target.value || undefined }))}
+                  >
                     <MenuItem value="">—</MenuItem>
                     {COURT_NAMES.map((cn) => (
                       <MenuItem key={cn} value={cn}>{cn}</MenuItem>
@@ -1055,15 +1059,18 @@ export default function CasesPage() {
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Court Premises</InputLabel>
-                  <Select value={createForm.courtPremises || ''} label="Court Premises" onChange={(e) => setCreateForm((p) => ({ ...p, courtPremises: e.target.value || undefined }))}>
-                    <MenuItem value="">—</MenuItem>
-                    {COURT_PREMISES.map((cp) => (
-                      <MenuItem key={cp} value={cp}>{cp}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <TextField
+                  fullWidth
+                  label="Court Name"
+                  value={createForm.courtPremises || ''}
+                  onChange={(e) =>
+                    setCreateForm((p) => ({
+                      ...p,
+                      courtPremises: e.target.value.slice(0, 100) || undefined,
+                    }))
+                  }
+                  inputProps={{ maxLength: 100 }}
+                />
               </Grid>
               {canShowAssignedTo && (
                 <>
@@ -1625,21 +1632,30 @@ export default function CasesPage() {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth>
-                    <InputLabel>Court Name</InputLabel>
-                    <Select value={editForm.courtName ?? ''} label="Court Name" onChange={(e) => setEditForm((p) => ({ ...p, courtName: e.target.value || undefined }))}>
+                    <InputLabel>Court Premises</InputLabel>
+                    <Select
+                      value={editForm.courtName ?? ''}
+                      label="Court Premises"
+                      onChange={(e) => setEditForm((p) => ({ ...p, courtName: e.target.value || undefined }))}
+                    >
                       <MenuItem value="">—</MenuItem>
                       {COURT_NAMES.map((cn) => <MenuItem key={cn} value={cn}>{cn}</MenuItem>)}
                     </Select>
                   </FormControl>
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Court Premises</InputLabel>
-                    <Select value={editForm.courtPremises ?? ''} label="Court Premises" onChange={(e) => setEditForm((p) => ({ ...p, courtPremises: e.target.value || undefined }))}>
-                      <MenuItem value="">—</MenuItem>
-                      {COURT_PREMISES.map((cp) => <MenuItem key={cp} value={cp}>{cp}</MenuItem>)}
-                    </Select>
-                  </FormControl>
+                  <TextField
+                    fullWidth
+                    label="Court Name"
+                    value={editForm.courtPremises ?? ''}
+                    onChange={(e) =>
+                      setEditForm((p) => ({
+                        ...p,
+                        courtPremises: e.target.value.slice(0, 100) || undefined,
+                      }))
+                    }
+                    inputProps={{ maxLength: 100 }}
+                  />
                 </Grid>
                 {canShowAssignedTo && (
                   <>
