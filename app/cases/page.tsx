@@ -19,6 +19,8 @@ import {
   ArchiveRestore,
   Trash2,
   Scale,
+  Upload,
+  Download,
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
@@ -84,6 +86,8 @@ import { useGetAssignableUsersQuery, type User } from '@/redux/api/userApi'
 import { useGetOnboardingStatusQuery, onboardingApi } from '@/redux/api/onboardingApi'
 import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
+import ExcelImportDialog from '@/components/ExcelImportDialog'
+import { downloadExcelFile } from '@/utils/excelApi'
 
 const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), {
   ssr: false,
@@ -165,6 +169,8 @@ export default function CasesPage() {
   const [deletedPaginationModel, setDeletedPaginationModel] = useState({ page: 0, pageSize: 10 })
 
   const [openCreate, setOpenCreate] = useState(false)
+  const [openExcelImport, setOpenExcelImport] = useState(false)
+  const [showImportNote, setShowImportNote] = useState(true)
   const [openAddStage, setOpenAddStage] = useState(false)
   const [showCreateStages, setShowCreateStages] = useState(false)
   const [showEditStages, setShowEditStages] = useState(false)
@@ -847,23 +853,60 @@ export default function CasesPage() {
               Manage cases and court matters
             </Typography>
           </Box>
-          {canCreate && viewTab === 'active' && (
-            <Button
-              variant="contained"
-              startIcon={<Plus />}
-              onClick={() => {
-                setOpenCreate(true)
-                setOpenAddStage(false)
-                setShowCreateStages(false)
-                resetCreateForm()
-                resetCreateStageRows()
-                resetStageForm()
-              }}
-              sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
-            >
-              Add Case
-            </Button>
-          )}
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'stretch', sm: 'flex-end' } }}>
+            {canRead && (
+              <Button
+                variant="outlined"
+                startIcon={<Download size={18} />}
+                onClick={async () => {
+                  try {
+                    await downloadExcelFile('/api/cases/excel/template', 'cases-template.xlsx')
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Template download failed')
+                  }
+                }}
+              >
+                Template
+              </Button>
+            )}
+            {canCreate && (
+              <Button variant="outlined" startIcon={<Upload size={18} />} onClick={() => setOpenExcelImport(true)}>
+                Import
+              </Button>
+            )}
+            {canRead && (
+              <Button
+                variant="outlined"
+                startIcon={<Download size={18} />}
+                onClick={async () => {
+                  try {
+                    await downloadExcelFile('/api/cases/excel/export', 'cases-export.xlsx')
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Export failed')
+                  }
+                }}
+              >
+                Export
+              </Button>
+            )}
+            {canCreate && viewTab === 'active' && (
+              <Button
+                variant="contained"
+                startIcon={<Plus />}
+                onClick={() => {
+                  setOpenCreate(true)
+                  setOpenAddStage(false)
+                  setShowCreateStages(false)
+                  resetCreateForm()
+                  resetCreateStageRows()
+                  resetStageForm()
+                }}
+                sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
+              >
+                Add Case
+              </Button>
+            )}
+          </Box>
         </Box>
 
         <Tabs value={viewTab} onChange={(_, v: 'active' | 'archived' | 'deleted') => setViewTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
@@ -871,6 +914,52 @@ export default function CasesPage() {
           <Tab label="Archive" value="archived" icon={<Archive size={18} />} iconPosition="start" />
           <Tab label="Deleted" value="deleted" icon={<Trash2 size={18} />} iconPosition="start" />
         </Tabs>
+
+        {showImportNote && (canCreate || canRead) && (
+          <Alert severity="info" onClose={() => setShowImportNote(false)} sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+              Cases bulk import note (with clients) — Important (Read before upload)
+            </Typography>
+            <Box component="ul" sx={{ pl: 2, my: 0 }}>
+              <li>
+                <Typography variant="body2">
+                  Please upload only the Excel file downloaded from <strong>Template</strong>.
+                </Typography>
+              </li>
+              <li>
+                <Typography variant="body2">
+                  Do not rename, delete, add, or reorder columns (otherwise upload will fail).
+                </Typography>
+              </li>
+              <li>
+                <Typography variant="body2">
+                  Fill required case fields: <strong>caseNumber</strong>, <strong>caseType</strong>, <strong>partyName</strong>.
+                </Typography>
+              </li>
+              <li>
+                <Typography variant="body2">
+                  Each row can include a client. We recommend using <strong>clientPhone</strong> (10-digit) (and/or <strong>clientEmail</strong>) to link an existing client.
+                </Typography>
+              </li>
+              <li>
+                <Typography variant="body2">
+                  If the client is not found, the system will create a new client automatically only when you provide:
+                  <strong> clientPhone or clientEmail</strong>, <strong>clientFirstName</strong>, <strong>clientLastName</strong>, <strong>full address fields</strong>, and <strong>clientFees</strong>.
+                </Typography>
+              </li>
+              <li>
+                <Typography variant="body2">
+                  Multiple rows with the same <strong>caseNumber</strong> will be merged into one case with multiple clients.
+                </Typography>
+              </li>
+              <li>
+                <Typography variant="body2">
+                  Use <strong>Preview</strong> to see what will be created/linked and to fix row errors before importing.
+                </Typography>
+              </li>
+            </Box>
+          </Alert>
+        )}
 
         <Box sx={{ mb: 3 }}>
           <Grid container spacing={2} alignItems="center">
@@ -2040,6 +2129,16 @@ export default function CasesPage() {
             </MenuItem>
           )}
         </Menu>
+
+        <ExcelImportDialog
+          open={openExcelImport}
+          title="Import Cases (Excel)"
+          previewPath="/api/cases/excel/preview"
+          importPath="/api/cases/excel/import"
+          onClose={() => setOpenExcelImport(false)}
+          onImported={() => refetchCases()}
+          disabled={!canCreate}
+        />
       </Box>
     </ProtectedRoute>
   )
