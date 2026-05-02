@@ -70,7 +70,6 @@ import {
   useAddCaseStageMutation,
   useUpdateCaseStageMutation,
   useConfirmCaseStageMutation,
-  COURT_NAMES,
   COURT_PREMISES,
   CASE_TYPES,
   type CaseStage,
@@ -88,6 +87,15 @@ import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
 import ExcelImportDialog from '@/components/ExcelImportDialog'
 import { downloadExcelFile } from '@/utils/excelApi'
+import { extractLinkedClientIdsFromCase } from '@/utils/caseClientIds'
+
+/** Court premises dropdown lists template values plus any value already stored (import / legacy). */
+function premisesMenuIncludingValue(value?: string | null): string[] {
+  const set = new Set<string>([...COURT_PREMISES])
+  const v = value?.trim()
+  if (v) set.add(v)
+  return Array.from(set)
+}
 
 const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), {
   ssr: false,
@@ -209,8 +217,8 @@ export default function CasesPage() {
   )
 
   const { data: clientsData } = useGetClientsQuery(
-    canShowAssignedTo ? { status: 'active', limit: 200 } : undefined,
-    { skip: !canShowAssignedTo }
+    canShowAssignedTo ? { status: 'active', limit: 500 } : undefined,
+    { skip: !canShowAssignedTo },
   )
   const clientsOptions = clientsData?.data ?? []
   const { data: caseAssigneesData, isLoading: caseAssigneesLoading } = useGetCaseAssigneesQuery(undefined, {
@@ -267,6 +275,14 @@ export default function CasesPage() {
     { skip: !viewId && !editId }
   )
   const singleCase = singleRes?.data
+
+  /** True when the case advertises multiple clients but GET did not return any link field we can read (common after spreadsheet import). */
+  const linkedClientsHydrationGap = useMemo(() => {
+    if (!singleCase || !editId) return false
+    const extracted = extractLinkedClientIdsFromCase(singleCase as unknown as Record<string, unknown>)
+    const hasLegacyList = Array.isArray(singleCase.clients) && singleCase.clients.length > 0
+    return !hasLegacyList && extracted.length === 0 && (singleCase.clientCount ?? 0) >= 2
+  }, [singleCase, editId])
 
   const assignableOptions = useMemo((): AssignableOption[] => {
     if (!canShowAssignedTo) return []
@@ -678,8 +694,11 @@ export default function CasesPage() {
     const assignedId = typeof singleCase.assignedTo === 'string'
       ? singleCase.assignedTo
       : (singleCase.assignedTo?.id || (singleCase.assignedTo as { _id?: string })?._id)
-    const clientsArr = singleCase.clients ?? []
-    const clientIds = clientsArr.map((cl) => (typeof cl === 'string' ? cl : (cl as { id?: string; _id?: string }).id || (cl as { _id?: string })._id || '')).filter(Boolean)
+    const fromNestedAliases = extractLinkedClientIdsFromCase(singleCase as unknown as Record<string, unknown>)
+    const fromDeclaredClients = (singleCase.clients ?? [])
+      .map((cl) => (typeof cl === 'string' ? cl : (cl as { id?: string; _id?: string }).id || (cl as { _id?: string })._id || ''))
+      .filter(Boolean)
+    const clientIds = Array.from(new Set([...fromNestedAliases, ...fromDeclaredClients]))
     setEditForm({
       caseNumber: singleCase.caseNumber,
       caseType: singleCase.caseType,
@@ -706,6 +725,19 @@ export default function CasesPage() {
     if (!clients || !Array.isArray(clients)) return '—'
     const names = clients.slice(0, 3).map((c) => (typeof c === 'string' ? c : getClientDisplayName(c as { fullName?: string; firstName?: string; lastName?: string; email?: string })))
     return names.join(', ') + (clients.length > 3 ? ` +${clients.length - 3}` : '')
+  }
+
+  const getLinkedClientsLineForDetail = (c: CaseType | undefined): string => {
+    if (!c) return '—'
+    const fromArr = getClientsDisplay(c.clients)
+    if (fromArr !== '—') return fromArr
+    const ids = extractLinkedClientIdsFromCase(c as unknown as Record<string, unknown>)
+    if (ids.length > 0) return ids.slice(0, 5).join(', ') + (ids.length > 5 ? ` +${ids.length - 5}` : '')
+    const n = c.clientCount ?? 0
+    if (n > 0) {
+      return `${n} on this case — who they are did not come back with this response. Try Edit to link them, or refresh after import.`
+    }
+    return '—'
   }
 
   const formatShortDate = (d: string | undefined): string => {
@@ -770,10 +802,10 @@ export default function CasesPage() {
           {
             field: 'clients',
             headerName: 'Clients',
-            width: 160,
+            width: 200,
             renderCell: (params) => (
               <Typography variant="body2" color="text.secondary">
-                {getClientsDisplay((params.row as CaseType).clients)}
+                {getLinkedClientsLineForDetail(params.row as CaseType)}
               </Typography>
             ),
           } as GridColDef,
@@ -1133,33 +1165,35 @@ export default function CasesPage() {
                 <TextField fullWidth label="Party Name *" value={createForm.partyName} onChange={(e) => setCreateForm((p) => ({ ...p, partyName: e.target.value }))} error={!!createErrors.partyName} helperText={createErrors.partyName} />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Court Premises</InputLabel>
-                  <Select
-                    value={createForm.courtName || ''}
-                    label="Court Premises"
-                    onChange={(e) => setCreateForm((p) => ({ ...p, courtName: e.target.value || undefined }))}
-                  >
-                    <MenuItem value="">—</MenuItem>
-                    {COURT_NAMES.map((cn) => (
-                      <MenuItem key={cn} value={cn}>{cn}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="Court Name"
-                  value={createForm.courtPremises || ''}
+                  value={createForm.courtName ?? ''}
                   onChange={(e) =>
                     setCreateForm((p) => ({
                       ...p,
-                      courtPremises: e.target.value.slice(0, 100) || undefined,
+                      courtName: e.target.value.slice(0, 120) || undefined,
                     }))
                   }
-                  inputProps={{ maxLength: 100 }}
+                  inputProps={{ maxLength: 120 }}
                 />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Court Premises</InputLabel>
+                  <Select
+                    value={createForm.courtPremises || ''}
+                    label="Court Premises"
+                    onChange={(e) => setCreateForm((p) => ({ ...p, courtPremises: e.target.value || undefined }))}
+                  >
+                    <MenuItem value="">—</MenuItem>
+                    {premisesMenuIncludingValue(createForm.courtPremises).map((opt) => (
+                      <MenuItem key={opt} value={opt}>
+                        {opt}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
               {canShowAssignedTo && (
                 <>
@@ -1418,7 +1452,7 @@ export default function CasesPage() {
                   <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Assigned To</Typography><Typography variant="body1">{getAssignedToName(singleCase.assignedTo)}</Typography></Grid>
                 )}
                 {canShowAssignedTo && (
-                  <Grid item xs={12}><Typography variant="caption" color="text.secondary">Linked Clients</Typography><Typography variant="body1">{getClientsDisplay(singleCase.clients)}</Typography></Grid>
+                  <Grid item xs={12}><Typography variant="caption" color="text.secondary">Linked Clients</Typography><Typography variant="body1">{getLinkedClientsLineForDetail(singleCase)}</Typography></Grid>
                 )}
                 {singleCase.notes && <Grid item xs={12}><Typography variant="caption" color="text.secondary">Notes</Typography><Typography variant="body1">{singleCase.notes}</Typography></Grid>}
                 <Grid item xs={12}>
@@ -1720,31 +1754,35 @@ export default function CasesPage() {
                   <TextField fullWidth label="Party Name *" value={editForm.partyName ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, partyName: e.target.value }))} />
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Court Premises</InputLabel>
-                    <Select
-                      value={editForm.courtName ?? ''}
-                      label="Court Premises"
-                      onChange={(e) => setEditForm((p) => ({ ...p, courtName: e.target.value || undefined }))}
-                    >
-                      <MenuItem value="">—</MenuItem>
-                      {COURT_NAMES.map((cn) => <MenuItem key={cn} value={cn}>{cn}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
                     label="Court Name"
-                    value={editForm.courtPremises ?? ''}
+                    value={editForm.courtName ?? ''}
                     onChange={(e) =>
                       setEditForm((p) => ({
                         ...p,
-                        courtPremises: e.target.value.slice(0, 100) || undefined,
+                        courtName: e.target.value.slice(0, 120) || undefined,
                       }))
                     }
-                    inputProps={{ maxLength: 100 }}
+                    inputProps={{ maxLength: 120 }}
                   />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Court Premises</InputLabel>
+                    <Select
+                      value={editForm.courtPremises ?? ''}
+                      label="Court Premises"
+                      onChange={(e) => setEditForm((p) => ({ ...p, courtPremises: e.target.value || undefined }))}
+                    >
+                      <MenuItem value="">—</MenuItem>
+                      {premisesMenuIncludingValue(editForm.courtPremises).map((opt) => (
+                        <MenuItem key={opt} value={opt}>
+                          {opt}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                 </Grid>
                 {canShowAssignedTo && (
                   <>
@@ -1772,6 +1810,15 @@ export default function CasesPage() {
                         isOptionEqualToValue={(o, v) => (o.id || (o as { _id?: string })._id) === (v?.id || (v as { _id?: string })?._id)}
                       />
                     </Grid>
+                    {linkedClientsHydrationGap && (
+                      <Grid item xs={12}>
+                        <Alert severity="info" sx={{ py: 1 }}>
+                          <Typography variant="body2">
+                            This case is set up for more than one person, but nothing filled in above—usually that means the server did not send the linked people for this record (spreadsheet imports often hit that gap). Pick the right people here to fix it, or ask your team to attach client links on the case after import.
+                          </Typography>
+                        </Alert>
+                      </Grid>
+                    )}
                   </>
                 )}
                 <Grid item xs={12}>
