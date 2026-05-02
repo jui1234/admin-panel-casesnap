@@ -1,6 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQueryWithSubscriptionGuard } from './baseQuery'
 import { decryptResponseIfNeeded } from '@/utils/responseDecryption'
+import { clientsApi } from './clientsApi'
 
 export const COURT_NAMES = [
   'Supreme Court',
@@ -251,6 +252,14 @@ export const casesApi = createApi({
               { type: 'Cases', id: 'LIST' },
             ]
           : [{ type: 'Cases', id: 'LIST' }],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled
+          dispatch(clientsApi.util.invalidateTags([{ type: 'Clients', id: 'LIST' }]))
+        } catch {
+          /* list failed — skip */
+        }
+      },
     }),
 
     getCaseById: builder.query<GetCaseResponse, { caseId: string }>({
@@ -259,6 +268,14 @@ export const casesApi = createApi({
         return await decryptResponseIfNeeded(response)
       },
       providesTags: (result, err, { caseId }) => [{ type: 'Cases', id: caseId }],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled
+          dispatch(clientsApi.util.invalidateTags([{ type: 'Clients', id: 'LIST' }]))
+        } catch {
+          /* detail failed — skip */
+        }
+      },
     }),
 
     getCaseAssignees: builder.query<GetCaseAssigneesResponse, void>({

@@ -22,25 +22,230 @@ const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid
 
 type PreviewRows = Array<Record<string, unknown>>
 
-function toRows(preview: unknown): PreviewRows | null {
-  if (!preview) return null
-  if (Array.isArray(preview) && preview.every((r) => r && typeof r === 'object' && !Array.isArray(r))) {
-    return preview as PreviewRows
+function fieldToHeader(field: string): string {
+  const base = field.replace(/^data\./, '')
+  const spaced = base.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim()
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
+/** Grid headers phrased for people skimming imports, not developers */
+function tableColumnLabel(field: string): string {
+  const friendly: Record<string, string> = {
+    clientsRow: 'Person (slot)',
+    clientsPreviewSummary: 'Who this row mentions',
+    willCreate: 'Creates new?',
+    issues: 'Flags',
+    clientCount: 'People count',
   }
-  if (typeof preview === 'object' && preview) {
-    const obj = preview as Record<string, unknown>
-    const data = obj.data
-    if (Array.isArray(data) && data.every((r) => r && typeof r === 'object' && !Array.isArray(r))) return data as PreviewRows
-    if (data && typeof data === 'object') {
-      const maybeRows = (data as Record<string, unknown>).rows
-      if (Array.isArray(maybeRows) && maybeRows.every((r) => r && typeof r === 'object' && !Array.isArray(r))) {
-        return maybeRows as PreviewRows
+  if (friendly[field]) return friendly[field]
+  if (field.startsWith('client.')) return `${fieldToHeader(field.replace(/^client\./, ''))}`
+  return fieldToHeader(field)
+}
+
+/** Where the API might attach per-case client preview payloads */
+const CLIENT_EMBED_ARRAY_FIELDS = ['clients', 'linkedClients', 'clientPreviews', 'newClients'] as const
+
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return !!(v && typeof v === 'object' && !Array.isArray(v))
+}
+
+function formatScalarForPreview(v: unknown): string {
+  if (v == null) return ''
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v)
+  return ''
+}
+
+function formatClientBrief(c: Record<string, unknown>): string {
+  const fn = formatScalarForPreview(c.clientFirstName ?? c.firstName)
+  const ln = formatScalarForPreview(c.clientLastName ?? c.lastName)
+  const nameFromParts = [fn, ln].filter(Boolean).join(' ')
+  const full = formatScalarForPreview(c.fullName ?? c.name ?? c.displayName ?? c.clientName ?? '')
+  const name = nameFromParts || full
+  const phone = formatScalarForPreview(c.clientPhone ?? c.phone ?? c.mobile ?? c.Mobile)
+  const email = formatScalarForPreview(c.clientEmail ?? c.email)
+  const fees = formatScalarForPreview(c.clientFees ?? c.fees)
+  const parts: string[] = []
+  if (name) parts.push(name)
+  if (phone) parts.push(`Mo. ${phone}`)
+  if (email) parts.push(email)
+  if (fees) parts.push(`Fees: ${fees}`)
+  return parts.join(' · ') || '— details not listed here'
+}
+
+function summarizeClientsMixedForCell(entries: unknown[]): string {
+  return entries
+    .map((entry, idx) => {
+      if (isPlainRecord(entry)) return `${idx + 1}. ${formatClientBrief(entry)}`
+      return `${idx + 1}. ${typeof entry === 'string' ? entry : typeof entry === 'number' ? String(entry) : JSON.stringify(entry)}`
+    })
+    .join('\n')
+}
+
+function extractEmbeddedClientsArray(row: Record<string, unknown>): unknown[] | undefined {
+  for (const field of CLIENT_EMBED_ARRAY_FIELDS) {
+    const v = row[field]
+    if (Array.isArray(v) && v.length > 0) return v as unknown[]
+  }
+  return undefined
+}
+
+function stripEmbeddedClientArrays(row: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...row }
+  for (const field of CLIENT_EMBED_ARRAY_FIELDS) delete out[field]
+  return out
+}
+
+function numericClientCount(row: Record<string, unknown>): number | undefined {
+  const c = row.clientCount
+  if (typeof c === 'number' && Number.isFinite(c)) return c
+  if (typeof c === 'string') {
+    const n = Number.parseInt(c, 10)
+    if (!Number.isNaN(n)) return n
+  }
+  return undefined
+}
+
+/** Duplicate case-level columns per client row when embedded client objects exist. */
+function expandRowsWithEmbeddedClients(rows: PreviewRows): PreviewRows {
+  const expanded: PreviewRows = []
+  for (const row of rows) {
+    const embedded = extractEmbeddedClientsArray(row)
+
+    if (embedded !== undefined && embedded.length > 0) {
+      const allRecords = embedded.every(isPlainRecord)
+      const base = stripEmbeddedClientArrays(row)
+
+      if (allRecords) {
+        const objs = embedded as Record<string, unknown>[]
+        const total = objs.length
+        for (let idx = 0; idx < total; idx++) {
+          const client = objs[idx]
+          const merged: Record<string, unknown> = {
+            ...base,
+            clientsRow: `${idx + 1} of ${total}`,
+          }
+          const used = new Set(Object.keys(merged))
+          for (const [key, val] of Object.entries(client)) {
+            if (val == null) continue
+            const scalarLike =
+              typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean'
+            if (scalarLike) {
+              const outKey = used.has(key) ? `client.${key}` : key
+              merged[outKey] = val
+              used.add(outKey)
+              continue
+            }
+            if (Array.isArray(val)) {
+              const cell = val.every((x) => x == null || typeof x !== 'object')
+                ? val.map(String).join('; ')
+                : JSON.stringify(val)
+              merged[`client.${key}`] = cell
+            }
+          }
+          expanded.push(merged)
+        }
+        continue
+      }
+
+      const copyMixed = { ...base }
+      copyMixed.clientsPreviewSummary = summarizeClientsMixedForCell(embedded)
+      expanded.push(copyMixed)
+      continue
+    }
+
+    const copy = stripEmbeddedClientArrays(row)
+    const n = numericClientCount(copy)
+    const hasEmbedded = embedded !== undefined && embedded.length > 0
+    const missingDetail = !hasEmbedded && n !== undefined && n > 0
+    if (missingDetail) {
+      copy.clientsPreviewSummary =
+        n === 1
+          ? 'One person is tied to this row, but names and phone numbers weren’t unpacked here—open your workbook to confirm who they are before importing.'
+          : `${n} people are tied to this row here, without names unpacked—open your workbook to remind yourself who those people are, then carry on when it feels right.`
+    }
+    expanded.push(copy)
+  }
+  return expanded
+}
+
+function formatIssuesCell(issues: unknown): string {
+  if (issues == null) return ''
+  if (Array.isArray(issues)) {
+    const parts = issues.map((x) => (typeof x === 'string' ? x : JSON.stringify(x)))
+    return parts.join('; ')
+  }
+  return String(issues)
+}
+
+/** Turns API preview rows (nested `data`, `issues` arrays) into flat records for DataGrid */
+function flattenPreviewRecord(row: Record<string, unknown>): Record<string, unknown> {
+  const { data: nested, issues, ...rest } = row
+  const out: Record<string, unknown> = { ...rest }
+  if ('data' in out) delete out.data
+  if (issues !== undefined) out.issues = formatIssuesCell(issues)
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    for (const [k, v] of Object.entries(nested as Record<string, unknown>)) {
+      if (k in out && out[k] !== v) {
+        out[`data.${k}`] = v
+      } else {
+        out[k] = v
       }
     }
-    const maybeRows = obj.rows
-    if (Array.isArray(maybeRows) && maybeRows.every((r) => r && typeof r === 'object' && !Array.isArray(r))) return maybeRows as PreviewRows
   }
+  return out
+}
+
+/** Collect row objects from common backend envelope shapes (cases/clients/excel preview). */
+function extractRowArray(payload: Record<string, unknown>): PreviewRows | null {
+  const dataVal = payload.data
+  const tryArray = (v: unknown): PreviewRows | null => {
+    if (!Array.isArray(v)) return null
+    if (!v.every((r) => r && typeof r === 'object' && !Array.isArray(r))) return null
+    return v as PreviewRows
+  }
+
+  const direct = tryArray(payload)
+  if (direct) return direct
+
+  if (Array.isArray(dataVal) && tryArray(dataVal)) return dataVal as PreviewRows
+
+  if (dataVal && typeof dataVal === 'object' && !Array.isArray(dataVal)) {
+    const dataObj = dataVal as Record<string, unknown>
+    for (const key of ['rows', 'cases', 'clients', 'items', 'records', 'preview']) {
+      const found = tryArray(dataObj[key])
+      if (found) return found
+    }
+    const vals = Object.values(dataObj).filter(Array.isArray) as unknown[][]
+    for (const arr of vals) {
+      const found = tryArray(arr)
+      if (found) return found
+    }
+  }
+
+  const topKeys = ['rows', 'cases', 'clients']
+  for (const key of topKeys) {
+    const found = tryArray(payload[key])
+    if (found) return found
+  }
+
   return null
+}
+
+function toRows(preview: unknown): PreviewRows | null {
+  if (!preview) return null
+
+  let raw: PreviewRows | null = null
+
+  if (Array.isArray(preview) && preview.every((r) => r && typeof r === 'object' && !Array.isArray(r))) {
+    raw = preview as PreviewRows
+  } else if (typeof preview === 'object' && preview) {
+    raw = extractRowArray(preview as Record<string, unknown>)
+  }
+
+  if (!raw || raw.length === 0) return raw
+
+  const flattened = raw.map((r) => flattenPreviewRecord(r as Record<string, unknown>))
+  return expandRowsWithEmbeddedClients(flattened)
 }
 
 function toErrors(preview: unknown): string[] {
@@ -107,6 +312,20 @@ export default function ExcelImportDialog({
   const rows = useMemo(() => toRows(preview), [preview])
   const errors = useMemo(() => toErrors(preview), [preview])
 
+  const previewSummary = useMemo(() => {
+    if (!preview || typeof preview !== 'object') return { msg: '', success: null as boolean | null }
+    const p = preview as Record<string, unknown>
+    const dataObj = p.data && typeof p.data === 'object' && !Array.isArray(p.data) ? (p.data as Record<string, unknown>) : null
+    const msg =
+      typeof p.message === 'string'
+        ? p.message
+        : dataObj && typeof dataObj.message === 'string'
+          ? dataObj.message
+          : ''
+    const success = typeof p.success === 'boolean' ? p.success : null
+    return { msg, success }
+  }, [preview])
+
   const columns = useMemo(() => {
     if (!rows || rows.length === 0) return []
     const keys = Array.from(
@@ -115,18 +334,38 @@ export default function ExcelImportDialog({
         return set
       }, new Set<string>())
     )
-    return keys.slice(0, 40).map((k) => ({
-      field: k,
-      headerName: k,
-      flex: 1,
-      minWidth: 140,
-      valueGetter: (params: any) => {
-        const v = params.row?.[k]
-        if (v == null) return ''
-        if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v
-        return JSON.stringify(v)
-      },
-    }))
+    const commonCol = (
+      field: string,
+      extra?: Partial<{ flex: number; minWidth: number; renderCell: (params: any) => JSX.Element }>,
+    ) =>
+      ({
+        field,
+        headerName: tableColumnLabel(field),
+        flex: 1,
+        minWidth: 140,
+        valueGetter: (params: any) => {
+          const v = params.row?.[field]
+          if (v == null) return ''
+          if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v
+          return JSON.stringify(v)
+        },
+        ...extra,
+      }) as Record<string, unknown>
+
+    return keys.slice(0, 48).map((k) => {
+      if (k === 'clientsPreviewSummary') {
+        return commonCol(k, {
+          flex: 1.75,
+          minWidth: 280,
+          renderCell: (params: any) => (
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', py: 0.5 }}>
+              {params.value ?? ''}
+            </Typography>
+          ),
+        }) as Record<string, unknown>
+      }
+      return commonCol(k)
+    }) as Record<string, unknown>[]
   }, [rows])
 
   const canPreview = !!file && !previewLoading && !importLoading && !disabled
@@ -151,9 +390,9 @@ export default function ExcelImportDialog({
     try {
       const res = await previewExcelImport(previewPath, file)
       setPreview(res)
-      toast.success('Preview generated')
+      toast.success('Here’s a quick look at your file—scroll the table below.')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Preview failed')
+      toast.error(e instanceof Error ? e.message : 'We couldn’t read that preview—give it another shot or pick a different file.')
       setPreview(null)
     } finally {
       setPreviewLoading(false)
@@ -190,7 +429,7 @@ export default function ExcelImportDialog({
       onImported?.()
       onClose()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Import failed')
+      toast.error(e instanceof Error ? e.message : 'Import didn’t finish—try again in a moment.')
     } finally {
       setImportLoading(false)
     }
@@ -208,7 +447,7 @@ export default function ExcelImportDialog({
           )}
 
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Upload an Excel file, preview the changes (no DB write), then confirm import.
+            Choose your spreadsheet, tap Preview to see how it reads, then Import when you’re happy. Nothing is saved until you import.
           </Typography>
 
           <input
@@ -285,7 +524,7 @@ export default function ExcelImportDialog({
           {errors.length > 0 && (
             <Alert severity="warning" sx={{ mb: 2 }}>
               <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                Validation notes
+                Worth fixing before you import
               </Typography>
               <Box component="ul" sx={{ pl: 2, my: 0 }}>
                 {errors.slice(0, 12).map((e, i) => (
@@ -303,12 +542,15 @@ export default function ExcelImportDialog({
           )}
 
           {preview == null ? (
-            <Alert severity="info">No preview yet. Upload a file and click Preview.</Alert>
+            <Alert severity="info">Choose a file above, then Preview—we’ll show you what we understood.</Alert>
           ) : rows && rows.length > 0 ? (
             <Box sx={{ height: 420, width: '100%' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Read this like a quick sanity check. {rows.length} line{rows.length === 1 ? '' : 's'} below—you can still tweak the workbook and Preview again anytime.
+              </Typography>
               <DataGrid
                 rows={rows.map((r, idx) => ({ __id: idx, ...r }))}
-                columns={[{ field: '__id', headerName: '#', width: 70 }, ...columns] as any}
+                columns={[{ field: '__id', headerName: 'Line #', width: 78 }, ...columns] as any}
                 getRowId={(r) => (r as any).__id}
                 disableRowSelectionOnClick
                 pageSizeOptions={[5, 10, 25, 50]}
@@ -317,25 +559,21 @@ export default function ExcelImportDialog({
                 }}
               />
             </Box>
+          ) : typeof preview === 'string' ? (
+            <Alert severity="warning">{preview}</Alert>
           ) : (
-            <Box
-              sx={{
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                p: 2,
-                bgcolor: 'background.paper',
-                maxHeight: 420,
-                overflow: 'auto',
-              }}
-            >
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Preview response
+            <Alert severity={previewSummary.success === false ? 'error' : 'info'}>
+              {previewSummary.msg ? (
+                <Typography variant="body2" sx={{ mb: previewSummary.success === false ? 0 : 0.5, fontWeight: 500 }}>
+                  {previewSummary.msg}
+                </Typography>
+              ) : null}
+              <Typography variant="body2">
+                {previewSummary.success === false
+                  ? 'Something didn’t go through—adjust anything that looks odd in your file and try Preview again.'
+                  : 'We didn’t find readable rows yet. Confirm you’re using the official template with data filled in, then Preview again—and we’ll try to lay them out neatly.'}
               </Typography>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                {typeof preview === 'string' ? preview : JSON.stringify(preview, null, 2)}
-              </pre>
-            </Box>
+            </Alert>
           )}
         </Box>
       </DialogContent>
