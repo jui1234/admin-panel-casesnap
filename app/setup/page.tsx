@@ -268,9 +268,18 @@ export default function SetupPage() {
     }
   }
 
+  const capitalizeFirstLetter = (value: string) => {
+    const v = value.trimStart()
+    if (!v) return value
+    return v.charAt(0).toUpperCase() + v.slice(1)
+  }
 
   const handleSuperAdminChange = (field: keyof SuperAdminData, value: string) => {
-    setSuperAdminData((prev) => ({ ...prev, [field]: value }))
+    const nextValue =
+      field === 'firstName' || field === 'lastName'
+        ? capitalizeFirstLetter(value)
+        : value
+    setSuperAdminData((prev) => ({ ...prev, [field]: nextValue }))
     if (field === 'password') {
       // Don't validate live; show errors on "Next" via Yup.
       setSuperAdminPasswordError('')

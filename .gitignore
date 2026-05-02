@@ -118,7 +118,7 @@ Thumbs.db
 # Env files
 .env
 .env.*
-!.env.example 
+.env.example
 
 # Ignore TypeScript env config file (kept local)
 config/env.ts

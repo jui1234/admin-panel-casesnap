@@ -3,12 +3,13 @@ import { baseQueryWithSubscriptionGuard } from './baseQuery'
 import { decryptResponseIfNeeded } from '@/utils/responseDecryption'
 
 export const COURT_NAMES = [
-  'District Court Delhi',
-  'High Court Delhi',
   'Supreme Court',
-  'Consumer Forum',
-  'Labour Court',
-  'Family Court',
+  'High Court',
+  'District Court',
+  'Magistrate Court',
+  'Consumer Court',
+  'Authority',
+  'Tribunal',
   'Other',
 ] as const
 

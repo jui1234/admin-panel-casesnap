@@ -78,10 +78,14 @@ import { useGetAssignableUsersQuery, type User } from '@/redux/api/userApi'
 import { useGetOnboardingStatusQuery, onboardingApi } from '@/redux/api/onboardingApi'
 import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
+import ExcelImportDialog from '@/components/ExcelImportDialog'
+import { downloadExcelFile } from '@/utils/excelApi'
 
 const CLIENT_STATUSES: ClientStatus[] = ['active', 'inactive', 'prospect', 'archived']
 const AADHAR_IMAGE_MAX_BYTES = 1048576 // 1 MB
-const UPLOAD_API_URL = process.env.NEXT_PUBLIC_UPLOAD_API_URL || 'http://localhost:5004/api/upload'
+const BACKEND_BASE_URL = (process.env.NEXT_PUBLIC_APP_BACKEND_URL || '').replace(/\/$/, '')
+const UPLOAD_API_URL =
+  process.env.NEXT_PUBLIC_UPLOAD_API_URL || (BACKEND_BASE_URL ? `${BACKEND_BASE_URL}/api/upload` : '')
 
 function getFeesUnit(fees: number | undefined): string {
   if (fees == null || fees === 0) return ''
@@ -152,6 +156,8 @@ export default function ClientsPage() {
   const [deletedPaginationModel, setDeletedPaginationModel] = useState({ page: 0, pageSize: 10 })
 
   const [openCreate, setOpenCreate] = useState(false)
+  const [openExcelImport, setOpenExcelImport] = useState(false)
+  const [showImportNote, setShowImportNote] = useState(true)
   const [viewId, setViewId] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteClient, setDeleteClient] = useState<Client | null>(null)
@@ -441,6 +447,10 @@ export default function ClientsPage() {
     if (aadharFile && aadharFile.size <= AADHAR_IMAGE_MAX_BYTES) {
       payload.aadharImageSize = aadharFile.size
       try {
+        if (!UPLOAD_API_URL) {
+          toast.error('Upload URL is not configured. Set NEXT_PUBLIC_UPLOAD_API_URL (or NEXT_PUBLIC_APP_BACKEND_URL).')
+          return
+        }
         setAadharUploading(true)
         await new Promise((r) => setTimeout(r, 100))
         const formData = new FormData()
@@ -499,6 +509,10 @@ export default function ClientsPage() {
     if (aadharEditFile && aadharEditFile.size <= AADHAR_IMAGE_MAX_BYTES) {
       payload.aadharImageSize = aadharEditFile.size
       try {
+        if (!UPLOAD_API_URL) {
+          toast.error('Upload URL is not configured. Set NEXT_PUBLIC_UPLOAD_API_URL (or NEXT_PUBLIC_APP_BACKEND_URL).')
+          return
+        }
         setAadharUploading(true)
         await new Promise((r) => setTimeout(r, 100))
         const formData = new FormData()
@@ -845,11 +859,60 @@ export default function ClientsPage() {
                 Manage client relationships and information
               </Typography>
             </Box>
-            {canCreate && viewTab === 'active' && (
-              <Button variant="contained" startIcon={<Plus />} onClick={() => { setOpenCreate(true); resetCreateForm(); }} sx={{ minWidth: { xs: '100%', sm: 'auto' } }}>
-                Add Client
-              </Button>
-            )}
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'stretch', sm: 'flex-end' } }}>
+              {canRead && (
+                <Button
+                  variant="outlined"
+                  startIcon={<Download size={18} />}
+                  onClick={async () => {
+                    try {
+                      await downloadExcelFile('/api/clients/excel/template', 'clients-template.xlsx')
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : 'Template download failed')
+                    }
+                  }}
+                >
+                  Template
+                </Button>
+              )}
+              {canCreate && (
+                <Button
+                  variant="outlined"
+                  startIcon={<Upload size={18} />}
+                  onClick={() => setOpenExcelImport(true)}
+                >
+                  Import
+                </Button>
+              )}
+              {canRead && (
+                <Button
+                  variant="outlined"
+                  startIcon={<Download size={18} />}
+                  onClick={async () => {
+                    try {
+                      await downloadExcelFile('/api/clients/excel/export', 'clients-export.xlsx')
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : 'Export failed')
+                    }
+                  }}
+                >
+                  Export
+                </Button>
+              )}
+              {canCreate && viewTab === 'active' && (
+                <Button
+                  variant="contained"
+                  startIcon={<Plus />}
+                  onClick={() => {
+                    setOpenCreate(true)
+                    resetCreateForm()
+                  }}
+                  sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
+                >
+                  Add Client
+                </Button>
+              )}
+            </Box>
           </Box>
 
           <Tabs value={viewTab} onChange={(_, v: 'active' | 'archived' | 'deleted') => setViewTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
@@ -857,6 +920,35 @@ export default function ClientsPage() {
             <Tab label="Archive" value="archived" icon={<Archive size={18} />} iconPosition="start" />
             <Tab label="Deleted" value="deleted" icon={<Trash2 size={18} />} iconPosition="start" />
           </Tabs>
+
+          {showImportNote && (canCreate || canRead) && (
+            <Alert
+              severity="info"
+              onClose={() => setShowImportNote(false)}
+              sx={{ mb: 2 }}
+            >
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                Clients bulk import note (Read before upload)
+              </Typography>
+              <Box component="ul" sx={{ pl: 2, my: 0 }}>
+                <li>
+                  <Typography variant="body2">
+                    Upload only the Excel downloaded from <strong>Template</strong> (filename: <strong>clients-template.xlsx</strong>).
+                  </Typography>
+                </li>
+                <li>
+                  <Typography variant="body2">
+                    Don&apos;t rename, delete, add, reorder columns (otherwise upload fails).
+                  </Typography>
+                </li>
+                <li>
+                  <Typography variant="body2">
+                    Use <strong>Preview</strong> first to validate rows before Import.
+                  </Typography>
+                </li>
+              </Box>
+            </Alert>
+          )}
 
           <Box sx={{ mb: 3 }}>
             <Grid container spacing={2} alignItems="center">
@@ -1042,6 +1134,7 @@ export default function ClientsPage() {
                     fullWidth
                     label="Phone"
                     placeholder="10 digits"
+                    required
                     value={createForm.phone}
                     onChange={(e) => setCreateForm((p) => ({ ...p, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
                     error={!!createErrors.phone}
@@ -1641,6 +1734,16 @@ export default function ClientsPage() {
             </MenuItem>
           )}
         </Menu>
+
+        <ExcelImportDialog
+          open={openExcelImport}
+          title="Import Clients (Excel)"
+          previewPath="/api/clients/excel/preview"
+          importPath="/api/clients/excel/import"
+          onClose={() => setOpenExcelImport(false)}
+          onImported={() => refetchClients()}
+          disabled={!canCreate}
+        />
     </ProtectedRoute>
   )
 }
