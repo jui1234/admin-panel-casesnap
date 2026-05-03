@@ -22,10 +22,11 @@ import {
   Download,
   Trash2,
   Calendar,
+  UserCog,
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
-import type { GridColDef } from '@mui/x-data-grid'
+import type { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import {
   Box,
   Button,
@@ -69,6 +70,7 @@ import {
   useRestoreClientMutation,
   useArchiveClientMutation,
   useUnarchiveClientMutation,
+  useBulkAssignClientsMutation,
   type Client,
   type ClientStatus,
   type CreateClientRequest,
@@ -163,6 +165,9 @@ export default function ClientsPage() {
   const [deleteClient, setDeleteClient] = useState<Client | null>(null)
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [menuClient, setMenuClient] = useState<Client | null>(null)
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([])
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
+  const [bulkAssignAssignee, setBulkAssignAssignee] = useState<AssignableOption | null>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 500)
@@ -189,6 +194,14 @@ export default function ClientsPage() {
     if (openCreate || editId) setAssignableSearchInput('')
   }, [openCreate, editId])
 
+  useEffect(() => {
+    if (bulkAssignOpen) setAssignableSearchInput('')
+  }, [bulkAssignOpen])
+
+  useEffect(() => {
+    setRowSelectionModel([])
+  }, [viewTab, debouncedSearch, paginationModel.page, paginationModel.pageSize, deletedPaginationModel.page, deletedPaginationModel.pageSize])
+
   const isDeletedView = viewTab === 'deleted'
   const status: ClientStatus | undefined =
     isDeletedView ? undefined : viewTab === 'active' ? 'active' : viewTab === 'archived' ? 'archived' : undefined
@@ -209,6 +222,8 @@ export default function ClientsPage() {
     error: clientsError,
     refetch: refetchClients,
   } = useGetClientsQuery(clientsParams)
+
+  const [bulkAssignClients, { isLoading: bulkAssigning }] = useBulkAssignClientsMutation()
 
   const rawClients = clientsRes?.data ?? []
   const deletedClients = rawClients.filter((c) => c.deletedAt != null)
@@ -594,6 +609,37 @@ export default function ClientsPage() {
     }
   }
 
+  const handleBulkAssign = async () => {
+    if (!canShowAssignedTo) {
+      toast.error("You don't have permission to assign clients")
+      return
+    }
+    const clientIds = rowSelectionModel.map(String).filter(Boolean)
+    if (clientIds.length === 0) {
+      toast.error('Select at least one client')
+      return
+    }
+    const assigneeId = bulkAssignAssignee
+      ? bulkAssignAssignee.id || (bulkAssignAssignee as { _id?: string })._id || ''
+      : null
+    if (bulkAssignAssignee && !assigneeId) {
+      toast.error('Invalid assignee selection')
+      return
+    }
+    try {
+      const res = await bulkAssignClients({ clientIds, assignedTo: assigneeId }).unwrap()
+      toast.success(res.message || 'Assignments updated')
+      setRowSelectionModel([])
+      setBulkAssignOpen(false)
+      setBulkAssignAssignee(null)
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      const msg = et?.data?.error ?? et?.data?.message ?? 'Bulk assign failed'
+      if (et?.status === 403) toast.error("You don't have permission to bulk assign clients")
+      else toast.error(msg)
+    }
+  }
+
   const handleArchive = async (c: Client) => {
     if (!canUpdate) {
       toast.error("You don't have permission to archive clients")
@@ -899,6 +945,19 @@ export default function ClientsPage() {
                   Export
                 </Button>
               )}
+              {canShowAssignedTo && !isDeletedView && (
+                <Button
+                  variant="outlined"
+                  startIcon={<UserCog size={18} />}
+                  disabled={rowSelectionModel.length === 0}
+                  onClick={() => {
+                    setBulkAssignAssignee(null)
+                    setBulkAssignOpen(true)
+                  }}
+                >
+                  Bulk assign{rowSelectionModel.length > 0 ? ` (${rowSelectionModel.length})` : ''}
+                </Button>
+              )}
               {canCreate && viewTab === 'active' && (
                 <Button
                   variant="contained"
@@ -1068,6 +1127,9 @@ export default function ClientsPage() {
                   paginationModel={isDeletedView ? deletedPaginationModel : paginationModel}
                   onPaginationModelChange={isDeletedView ? setDeletedPaginationModel : setPaginationModel}
                   pageSizeOptions={[5, 10, 25, 50]}
+                  checkboxSelection={canShowAssignedTo && !isDeletedView}
+                  rowSelectionModel={rowSelectionModel}
+                  onRowSelectionModelChange={setRowSelectionModel}
                   disableRowSelectionOnClick
                   sx={{ '& .MuiDataGrid-cell:focus': { outline: 'none' } }}
                 />
@@ -1075,6 +1137,34 @@ export default function ClientsPage() {
             </Box>
           </Card>
         </Box>
+
+        <Dialog open={bulkAssignOpen} onClose={() => !bulkAssigning && setBulkAssignOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Bulk assign clients</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {rowSelectionModel.length} client{rowSelectionModel.length === 1 ? '' : 's'} selected (current page only when using checkboxes with server paging). Choose an assignee, or clear the field and apply to remove assignee for all selected.
+            </Typography>
+            {canShowAssignedTo && (
+              <Autocomplete
+                options={assignableOptions}
+                getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
+                value={bulkAssignAssignee}
+                onChange={(_, v) => setBulkAssignAssignee(v)}
+                renderInput={(params) => <TextField {...params} label="Assign to" placeholder="Leave empty to unassign" />}
+                isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || (v as { _id?: string })?._id)}
+                loading={assignableLoading}
+              />
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => !bulkAssigning && setBulkAssignOpen(false)} disabled={bulkAssigning}>
+              Cancel
+            </Button>
+            <Button variant="contained" onClick={handleBulkAssign} disabled={bulkAssigning || rowSelectionModel.length === 0}>
+              {bulkAssigning ? 'Applying…' : 'Apply'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Create Client Modal */}
         <Dialog open={openCreate} onClose={() => !aadharUploading && setOpenCreate(false)} maxWidth="md" fullWidth>
