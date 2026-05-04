@@ -268,14 +268,6 @@ export const casesApi = createApi({
         return await decryptResponseIfNeeded(response)
       },
       providesTags: (result, err, { caseId }) => [{ type: 'Cases', id: caseId }],
-      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
-        try {
-          await queryFulfilled
-          dispatch(clientsApi.util.invalidateTags([{ type: 'Clients', id: 'LIST' }]))
-        } catch {
-          /* detail failed — skip */
-        }
-      },
     }),
 
     getCaseAssignees: builder.query<GetCaseAssigneesResponse, void>({
