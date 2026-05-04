@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
@@ -133,6 +133,16 @@ function getCaseStageId(s: CaseStage): string | undefined {
   return s.id || s._id
 }
 
+/** Keeps single-select Autocomplete listboxes in-dialog; multi-select Linked Clients uses portal + ListboxProps to avoid backdrop closes. */
+const autocompletePopperInDialog = { popper: { disablePortal: true } as const }
+
+/** Prevents focus moving to the list before click, which can confuse `Dialog` + portaled listbox (backdrop click / close). */
+const linkedClientsListboxProps = {
+  onMouseDown: (e: { preventDefault: () => void }) => {
+    e.preventDefault()
+  },
+} as const
+
 function getStageConfirmedByUserId(s: CaseStage): string | undefined {
   const v = s.confirmedBy
   if (!v) return undefined
@@ -211,7 +221,7 @@ export default function CasesPage() {
     return () => clearTimeout(t)
   }, [assignableSearchInput])
 
-  const { data: assignableData } = useGetAssignableUsersQuery(
+  const { data: assignableData, isFetching: assignableLoading } = useGetAssignableUsersQuery(
     canShowAssignedTo ? { search: assignableSearchDebounced || undefined, limit: 50 } : undefined,
     { skip: !canShowAssignedTo }
   )
@@ -311,6 +321,27 @@ export default function CasesPage() {
     })
     return list
   }, [canShowAssignedTo, currentUser, assignableData?.data])
+
+  /** Ensures the case's current assignee appears in the list even if they are outside the latest search page. */
+  const caseAssignableOptions = useMemo((): AssignableOption[] => {
+    const list: AssignableOption[] = [...assignableOptions]
+    const seen = new Set(list.map((x) => x.id || x._id).filter(Boolean) as string[])
+    const pushRef = (u: CaseType['assignedTo']) => {
+      if (!u || typeof u !== 'object') return
+      const id = (u as { id?: string; _id?: string }).id || (u as { _id?: string })._id
+      if (!id || seen.has(id)) return
+      seen.add(id)
+      list.push({
+        ...(u as AssignableOption),
+        role: (u as AssignableOption).role ?? ('' as User['role']),
+        status: (u as AssignableOption).status ?? 'approved',
+        createdAt: (u as AssignableOption).createdAt ?? '',
+        updatedAt: (u as AssignableOption).updatedAt ?? '',
+      })
+    }
+    if (editId && singleCase?.assignedTo) pushRef(singleCase.assignedTo)
+    return list
+  }, [assignableOptions, editId, singleCase?.assignedTo])
 
   const confirmedByOptions = useMemo((): CaseAssigneeOption[] => {
     return (caseAssigneesData?.data ?? []).map((u) => ({ ...u, _id: u._id || u.id }))
@@ -689,8 +720,20 @@ export default function CasesPage() {
     closeMenu()
   }
 
+  /** Avoid overwriting the edit form on every case-detail refetch (new RTK object references). */
+  const editCaseFormHydratedRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (!singleCase || !editId) return
+    if (!editId) {
+      editCaseFormHydratedRef.current = null
+      return
+    }
+    if (!singleCase) return
+    const sid = singleCase.id || (singleCase as { _id?: string })._id
+    if (!sid || sid !== editId) return
+    if (editCaseFormHydratedRef.current === editId) return
+    editCaseFormHydratedRef.current = editId
+
     const assignedId = typeof singleCase.assignedTo === 'string'
       ? singleCase.assignedTo
       : (singleCase.assignedTo?.id || (singleCase.assignedTo as { _id?: string })?._id)
@@ -710,7 +753,12 @@ export default function CasesPage() {
       clients: clientIds,
       notes: singleCase.notes ?? '',
     })
-  }, [singleCase, editId])
+    if (typeof singleCase.assignedTo === 'object' && singleCase.assignedTo) {
+      setAssignableSearchInput(getAssignableOptionLabel(singleCase.assignedTo as AssignableOption, currentUser?.id))
+    } else {
+      setAssignableSearchInput('')
+    }
+  }, [singleCase, editId, currentUser?.id])
 
   const formatDeletedDate = (deletedAt: string | undefined) => {
     if (!deletedAt) return '—'
@@ -1151,6 +1199,8 @@ export default function CasesPage() {
           }}
           maxWidth="md"
           fullWidth
+          disableEnforceFocus
+          PaperProps={{ sx: { overflow: 'visible' } }}
         >
           <DialogTitle>Add Case</DialogTitle>
           <DialogContent>
@@ -1199,11 +1249,20 @@ export default function CasesPage() {
                 <>
                   <Grid item xs={12} sm={6}>
                     <Autocomplete
-                      options={assignableOptions}
+                      componentsProps={autocompletePopperInDialog}
+                      options={caseAssignableOptions}
                       getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
-                      value={assignableOptions.find((o) => (o.id || o._id) === createForm.assignedTo) ?? null}
-                      onChange={(_, v) => setCreateForm((p) => ({ ...p, assignedTo: v ? (v.id || (v as { _id?: string })._id) || '' : '' }))}
-                      renderInput={(params) => <TextField {...params} label="Assigned To" />}
+                      value={caseAssignableOptions.find((o) => (o.id || o._id) === createForm.assignedTo) ?? null}
+                      onChange={(_, v) => {
+                        setCreateForm((p) => ({ ...p, assignedTo: v ? (v.id || (v as { _id?: string })._id) || '' : '' }))
+                        setAssignableSearchInput(v ? getAssignableOptionLabel(v, currentUser?.id) : '')
+                      }}
+                      inputValue={assignableSearchInput}
+                      onInputChange={(_, v) => setAssignableSearchInput(v)}
+                      loading={assignableLoading}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Assigned To" placeholder="Search by name or email..." />
+                      )}
                       isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || (v as { _id?: string })?._id)}
                     />
                   </Grid>
@@ -1217,7 +1276,20 @@ export default function CasesPage() {
                       getOptionLabel={(opt) => getClientDisplayName(opt)}
                       value={clientsOptions.filter((c) => (createForm.clients ?? []).includes(c.id || (c as { _id?: string })._id || ''))}
                       onChange={(_, v) => setCreateForm((p) => ({ ...p, clients: v.map((c) => c.id || (c as { _id?: string })._id || '').slice(0, p.clientCount ?? 1) }))}
-                      renderInput={(params) => <TextField {...params} label="Linked Clients" placeholder="Select clients" error={!!createErrors.clients} helperText={createErrors.clients} />}
+                      ListboxProps={linkedClientsListboxProps}
+                      componentsProps={{
+                        popper: { sx: { zIndex: (theme) => theme.zIndex.modal + 1 } },
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Linked Clients"
+                          placeholder="Select clients"
+                          error={!!createErrors.clients}
+                          helperText={createErrors.clients}
+                          InputLabelProps={{ ...params.InputLabelProps, shrink: true }}
+                        />
+                      )}
                       isOptionEqualToValue={(o, v) => (o.id || (o as { _id?: string })._id) === (v?.id || (v as { _id?: string })?._id)}
                     />
                   </Grid>
@@ -1295,6 +1367,7 @@ export default function CasesPage() {
                           <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Confirm By *</TableCell>
                           <TableCell>
                             <Autocomplete
+                              componentsProps={autocompletePopperInDialog}
                               options={confirmedByOptions}
                               loading={caseAssigneesLoading}
                               value={confirmedByOptions.find((u) => (u.id || u._id) === stageForm.confirmedBy) ?? null}
@@ -1548,6 +1621,8 @@ export default function CasesPage() {
           }}
           maxWidth="md"
           fullWidth
+          disableEnforceFocus
+          PaperProps={{ sx: { overflow: 'visible' } }}
         >
           <DialogTitle>
             <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -1616,6 +1691,7 @@ export default function CasesPage() {
                     <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Confirm By *</TableCell>
                     <TableCell>
                       <Autocomplete
+                        componentsProps={autocompletePopperInDialog}
                         options={confirmedByOptions}
                         loading={caseAssigneesLoading}
                         value={confirmedByOptions.find((u) => (u.id || u._id) === stageForm.confirmedBy) ?? null}
@@ -1737,6 +1813,8 @@ export default function CasesPage() {
           }}
           maxWidth="md"
           fullWidth
+          disableEnforceFocus
+          PaperProps={{ sx: { overflow: 'visible' } }}
         >
           <DialogTitle>Edit Case</DialogTitle>
           <DialogContent>
@@ -1788,11 +1866,20 @@ export default function CasesPage() {
                   <>
                     <Grid item xs={12} sm={6}>
                       <Autocomplete
-                        options={assignableOptions}
+                        componentsProps={autocompletePopperInDialog}
+                        options={caseAssignableOptions}
                         getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
-                        value={assignableOptions.find((o) => (o.id || o._id) === editForm.assignedTo) ?? null}
-                        onChange={(_, v) => setEditForm((p) => ({ ...p, assignedTo: v ? (v.id || (v as { _id?: string })._id) || '' : '' }))}
-                        renderInput={(params) => <TextField {...params} label="Assigned To" />}
+                        value={caseAssignableOptions.find((o) => (o.id || o._id) === editForm.assignedTo) ?? null}
+                        onChange={(_, v) => {
+                          setEditForm((p) => ({ ...p, assignedTo: v ? (v.id || (v as { _id?: string })._id) || '' : '' }))
+                          setAssignableSearchInput(v ? getAssignableOptionLabel(v, currentUser?.id) : '')
+                        }}
+                        inputValue={assignableSearchInput}
+                        onInputChange={(_, v) => setAssignableSearchInput(v)}
+                        loading={assignableLoading}
+                        renderInput={(params) => (
+                          <TextField {...params} label="Assigned To" placeholder="Search by name or email..." />
+                        )}
                         isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || (v as { _id?: string })?._id)}
                       />
                     </Grid>
@@ -1806,7 +1893,20 @@ export default function CasesPage() {
                         getOptionLabel={(opt) => getClientDisplayName(opt)}
                         value={clientsOptions.filter((c) => (editForm.clients ?? []).includes(c.id || (c as { _id?: string })._id || ''))}
                         onChange={(_, v) => setEditForm((p) => ({ ...p, clients: v.map((c) => c.id || (c as { _id?: string })._id || '').slice(0, p.clientCount ?? 1) }))}
-                        renderInput={(params) => <TextField {...params} label="Linked Clients" error={!!editErrors.clients} helperText={editErrors.clients} />}
+                        ListboxProps={linkedClientsListboxProps}
+                        componentsProps={{
+                          popper: { sx: { zIndex: (theme) => theme.zIndex.modal + 1 } },
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Linked Clients"
+                            placeholder="Search clients"
+                            error={!!editErrors.clients}
+                            helperText={editErrors.clients}
+                            InputLabelProps={{ ...params.InputLabelProps, shrink: true }}
+                          />
+                        )}
                         isOptionEqualToValue={(o, v) => (o.id || (o as { _id?: string })._id) === (v?.id || (v as { _id?: string })?._id)}
                       />
                     </Grid>
@@ -1975,6 +2075,7 @@ export default function CasesPage() {
                                 <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Confirm By *</TableCell>
                                 <TableCell>
                                   <Autocomplete
+                                    componentsProps={autocompletePopperInDialog}
                                     options={confirmedByOptions}
                                     loading={caseAssigneesLoading}
                                     value={confirmedByOptions.find((u) => (u.id || u._id) === stageForm.confirmedBy) ?? null}
