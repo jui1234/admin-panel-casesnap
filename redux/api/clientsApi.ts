@@ -133,6 +133,30 @@ export interface ArchiveClientResponse {
   data: Client
 }
 
+/** POST /api/clients/bulk-assign — Mode A: many clients → one assignee (or null to unassign). */
+export interface BulkAssignClientsModeARequest {
+  clientIds: string[]
+  assignedTo?: string | null
+}
+
+export interface BulkAssignClientGroup {
+  clientIds: string[]
+  assignedTo?: string | null
+}
+
+/** POST /api/clients/bulk-assign — Mode B: several batches in one request. */
+export interface BulkAssignClientsModeBRequest {
+  groups: BulkAssignClientGroup[]
+}
+
+export type BulkAssignClientsRequest = BulkAssignClientsModeARequest | BulkAssignClientsModeBRequest
+
+export interface BulkAssignClientsResponse {
+  success: boolean
+  message?: string
+  data?: unknown
+}
+
 export const clientsApi = createApi({
   reducerPath: 'clientsApi',
   baseQuery: baseQueryWithSubscriptionGuard,
@@ -238,6 +262,18 @@ export const clientsApi = createApi({
       },
       invalidatesTags: (r, e, { clientId }) => [{ type: 'Clients', id: clientId }, { type: 'Clients', id: 'LIST' }],
     }),
+
+    bulkAssignClients: builder.mutation<BulkAssignClientsResponse, BulkAssignClientsRequest>({
+      query: (body) => ({
+        url: 'api/clients/bulk-assign',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: async (response: BulkAssignClientsResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
+      invalidatesTags: ['Clients'],
+    }),
   }),
 })
 
@@ -252,4 +288,5 @@ export const {
   useRestoreClientMutation,
   useArchiveClientMutation,
   useUnarchiveClientMutation,
+  useBulkAssignClientsMutation,
 } = clientsApi
