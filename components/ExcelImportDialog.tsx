@@ -6,11 +6,14 @@ import {
   Box,
   Button,
   CircularProgress,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
+  Paper,
+  Stack,
   Typography,
 } from '@mui/material'
 import dynamic from 'next/dynamic'
@@ -21,6 +24,23 @@ import { importExcel, previewExcelImport } from '@/utils/excelApi'
 const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), { ssr: false })
 
 type PreviewRows = Array<Record<string, unknown>>
+type ImportRowError = { row?: number; caseNumber?: string; messages: string[] }
+
+type PreviewClient = {
+  row?: number
+  action?: string
+  issues?: string[]
+  match?: { clientId?: string | null }
+  data?: Record<string, unknown>
+}
+
+type PreviewCase = {
+  caseNumber?: string
+  willCreate?: boolean
+  issues?: string[]
+  data?: Record<string, unknown>
+  clients?: PreviewClient[]
+}
 
 function fieldToHeader(field: string): string {
   const base = field.replace(/^data\./, '')
@@ -276,6 +296,122 @@ function toErrors(preview: unknown): string[] {
   return out.filter(Boolean)
 }
 
+function toRowErrors(preview: unknown): ImportRowError[] {
+  if (!preview || typeof preview !== 'object') return []
+  const obj = preview as Record<string, unknown>
+  const candidates = [obj.errors, (obj.data as any)?.errors, (obj.data as any)?.validationErrors]
+  const arr = candidates.find((v) => Array.isArray(v)) as unknown[] | undefined
+  if (!arr) return []
+
+  const out: ImportRowError[] = []
+  for (const e of arr) {
+    if (typeof e === 'string') {
+      out.push({ messages: [e] })
+      continue
+    }
+    if (e && typeof e === 'object') {
+      const rowRaw = (e as any).row
+      const row = typeof rowRaw === 'number' ? rowRaw : typeof rowRaw === 'string' ? Number.parseInt(rowRaw, 10) : undefined
+      const caseNumber =
+        typeof (e as any).caseNumber === 'string'
+          ? (e as any).caseNumber
+          : typeof (e as any).case_number === 'string'
+            ? (e as any).case_number
+            : undefined
+
+      const nested = (e as any).errors
+      if (Array.isArray(nested) && nested.every((x) => typeof x === 'string')) {
+        out.push({ row: Number.isFinite(row as number) ? row : undefined, caseNumber, messages: nested as string[] })
+        continue
+      }
+      const msg = (e as any).message || (e as any).error
+      out.push({
+        row: Number.isFinite(row as number) ? row : undefined,
+        caseNumber,
+        messages: [typeof msg === 'string' ? msg : JSON.stringify(e)].filter(Boolean),
+      })
+      continue
+    }
+    out.push({ messages: [String(e)] })
+  }
+  return out
+}
+
+function groupDuplicateCaseNumbers(rowErrors: ImportRowError[]) {
+  const map = new Map<string, { caseNumber: string; rows: number[]; messages: string[] }>()
+  for (const re of rowErrors) {
+    if (!re.caseNumber) continue
+    const key = re.caseNumber.trim()
+    if (!key) continue
+    const existing = map.get(key) ?? { caseNumber: key, rows: [], messages: [] }
+    if (typeof re.row === 'number' && Number.isFinite(re.row)) existing.rows.push(re.row)
+    for (const m of re.messages) if (typeof m === 'string' && m.trim()) existing.messages.push(m.trim())
+    map.set(key, existing)
+  }
+  const items = Array.from(map.values()).map((x) => ({
+    ...x,
+    rows: Array.from(new Set(x.rows)).sort((a, b) => a - b),
+    messages: Array.from(new Set(x.messages)),
+  }))
+  items.sort((a, b) => a.caseNumber.localeCompare(b.caseNumber))
+  return items
+}
+
+function extractCasesPreview(preview: unknown): PreviewCase[] | null {
+  if (!preview || typeof preview !== 'object') return null
+  const obj = preview as Record<string, unknown>
+  const candidates: unknown[] = [obj.cases, (obj.data as any)?.cases, (obj.data as any)?.preview?.cases]
+  const arr = candidates.find((v) => Array.isArray(v)) as unknown[] | undefined
+  if (!arr) return null
+
+  const out: PreviewCase[] = []
+  for (const item of arr) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const it = item as any
+    const clientsRaw = it.clients
+    const clients: PreviewClient[] | undefined = Array.isArray(clientsRaw)
+      ? (clientsRaw
+          .filter((c: any) => c && typeof c === 'object' && !Array.isArray(c))
+          .map((c: any) => ({
+            row: typeof c.row === 'number' ? c.row : typeof c.row === 'string' ? Number.parseInt(c.row, 10) : undefined,
+            action: typeof c.action === 'string' ? c.action : undefined,
+            issues: Array.isArray(c.issues) ? c.issues.filter((x: any) => typeof x === 'string') : undefined,
+            match: c.match && typeof c.match === 'object' ? { clientId: c.match.clientId } : undefined,
+            data: c.data && typeof c.data === 'object' && !Array.isArray(c.data) ? (c.data as Record<string, unknown>) : undefined,
+          })))
+      : undefined
+
+    out.push({
+      caseNumber: typeof it.caseNumber === 'string' ? it.caseNumber : undefined,
+      willCreate: typeof it.willCreate === 'boolean' ? it.willCreate : undefined,
+      issues: Array.isArray(it.issues) ? it.issues.filter((x: any) => typeof x === 'string') : undefined,
+      data: it.data && typeof it.data === 'object' && !Array.isArray(it.data) ? (it.data as Record<string, unknown>) : undefined,
+      clients,
+    })
+  }
+  return out.length > 0 ? out : null
+}
+
+function compactCaseMeta(data?: Record<string, unknown>): Array<[string, string]> {
+  if (!data) return []
+  const pick = (k: string) => {
+    const v = data[k]
+    if (v == null) return ''
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v)
+    return ''
+  }
+  const entries = [
+    ['caseType', pick('caseType')],
+    ['partyName', pick('partyName')],
+    ['stage', pick('stage')],
+    ['courtName', pick('courtName')],
+    ['courtPremises', pick('courtPremises')],
+    ['clientCount', pick('clientCount')],
+    ['assignedTo', pick('assignedTo')],
+  ] as Array<[string, string]>
+  return entries.filter(([, v]) => !!v).map(([k, v]) => [tableColumnLabel(k), v])
+}
+
 export interface ExcelImportDialogProps {
   open: boolean
   title: string
@@ -311,6 +447,22 @@ export default function ExcelImportDialog({
 
   const rows = useMemo(() => toRows(preview), [preview])
   const errors = useMemo(() => toErrors(preview), [preview])
+  const rowErrors = useMemo(() => toRowErrors(preview), [preview])
+  const duplicateCaseNumbers = useMemo(() => groupDuplicateCaseNumbers(rowErrors), [rowErrors])
+  const casesPreview = useMemo(() => extractCasesPreview(preview), [preview])
+  const casesSummary = useMemo(() => {
+    if (!casesPreview) return null
+    const totalCases = casesPreview.length
+    const willCreate = casesPreview.filter((c) => c.willCreate === true).length
+    const willNotCreate = casesPreview.filter((c) => c.willCreate === false).length
+    const totalClients = casesPreview.reduce((sum, c) => sum + (c.clients?.length ?? 0), 0)
+    const casesWithIssues = casesPreview.filter((c) => (c.issues?.length ?? 0) > 0).length
+    const clientsWithIssues = casesPreview.reduce(
+      (sum, c) => sum + (c.clients?.filter((cl) => (cl.issues?.length ?? 0) > 0).length ?? 0),
+      0,
+    )
+    return { totalCases, willCreate, willNotCreate, totalClients, casesWithIssues, clientsWithIssues }
+  }, [casesPreview])
 
   const previewSummary = useMemo(() => {
     if (!preview || typeof preview !== 'object') return { msg: '', success: null as boolean | null }
@@ -369,7 +521,7 @@ export default function ExcelImportDialog({
   }, [rows])
 
   const canPreview = !!file && !previewLoading && !importLoading && !disabled
-  const canImport = !!file && !!preview && !importLoading && !previewLoading && !disabled
+  const canImport = !!file && !!preview && errors.length === 0 && !importLoading && !previewLoading && !disabled
 
   const pickFile = (f?: File) => {
     if (!f) return
@@ -401,6 +553,10 @@ export default function ExcelImportDialog({
 
   const handleImport = async () => {
     if (!file) return
+    if (errors.length > 0) {
+      toast.error('Fix the highlighted errors first, then import again.')
+      return
+    }
     setImportLoading(true)
     try {
       const res = await importExcel(importPath, file)
@@ -526,6 +682,29 @@ export default function ExcelImportDialog({
               <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
                 Worth fixing before you import
               </Typography>
+              {duplicateCaseNumbers.length > 0 && (
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                    Duplicate caseNumbers found
+                  </Typography>
+                  <Box component="ul" sx={{ pl: 2, my: 0 }}>
+                    {duplicateCaseNumbers.slice(0, 12).map((d) => (
+                      <li key={d.caseNumber}>
+                        <Typography variant="body2">
+                          <strong>{d.caseNumber}</strong>
+                          {d.rows.length > 0 ? ` (rows: ${d.rows.join(', ')})` : ''}
+                          {d.messages.length > 0 ? ` — ${d.messages[0]}` : ''}
+                        </Typography>
+                      </li>
+                    ))}
+                  </Box>
+                  {duplicateCaseNumbers.length > 12 && (
+                    <Typography variant="caption" color="text.secondary">
+                      Showing 12 of {duplicateCaseNumbers.length} duplicate caseNumbers.
+                    </Typography>
+                  )}
+                </Box>
+              )}
               <Box component="ul" sx={{ pl: 2, my: 0 }}>
                 {errors.slice(0, 12).map((e, i) => (
                   <li key={`${i}-${e}`}>
@@ -543,6 +722,134 @@ export default function ExcelImportDialog({
 
           {preview == null ? (
             <Alert severity="info">Choose a file above, then Preview—we’ll show you what we understood.</Alert>
+          ) : casesPreview && casesPreview.length > 0 ? (
+            <Box>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
+                  Preview summary
+                </Typography>
+                {casesSummary ? (
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                    <Chip label={`${casesSummary.totalCases} case${casesSummary.totalCases === 1 ? '' : 's'}`} />
+                    <Chip color="success" variant="outlined" label={`${casesSummary.willCreate} will create`} />
+                    <Chip color="default" variant="outlined" label={`${casesSummary.willNotCreate} already exists`} />
+                    <Chip label={`${casesSummary.totalClients} client row${casesSummary.totalClients === 1 ? '' : 's'}`} />
+                    {(casesSummary.casesWithIssues > 0 || casesSummary.clientsWithIssues > 0) && (
+                      <Chip
+                        color="warning"
+                        label={`${casesSummary.casesWithIssues} case issue(s), ${casesSummary.clientsWithIssues} client issue(s)`}
+                      />
+                    )}
+                  </Stack>
+                ) : null}
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                  Tip: fix anything highlighted below, then Preview again. Import is disabled until warnings are resolved.
+                </Typography>
+              </Alert>
+
+              <Stack spacing={1.25}>
+                {casesPreview.map((c, idx) => {
+                  const issueCount = c.issues?.length ?? 0
+                  const clientIssueCount = c.clients?.filter((x) => (x.issues?.length ?? 0) > 0).length ?? 0
+                  const meta = compactCaseMeta(c.data)
+                  const title = c.caseNumber || `Case #${idx + 1}`
+                  return (
+                    <Paper key={`${title}-${idx}`} variant="outlined" sx={{ p: 1.5 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                          {title}
+                        </Typography>
+                        {c.willCreate === true ? (
+                          <Chip size="small" color="success" label="Will create" />
+                        ) : c.willCreate === false ? (
+                          <Chip size="small" color="warning" label="Already exists" />
+                        ) : null}
+                        {issueCount > 0 && <Chip size="small" color="warning" label={`${issueCount} issue(s)`} />}
+                        {clientIssueCount > 0 && (
+                          <Chip size="small" color="warning" variant="outlined" label={`${clientIssueCount} client issue(s)`} />
+                        )}
+                      </Stack>
+
+                      {meta.length > 0 && (
+                        <Box sx={{ mt: 1 }}>
+                          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                            {meta.slice(0, 8).map(([k, v]) => (
+                              <Chip key={`${title}-${k}`} size="small" variant="outlined" label={`${k}: ${v}`} />
+                            ))}
+                          </Stack>
+                        </Box>
+                      )}
+
+                      {(c.issues?.length ?? 0) > 0 && (
+                        <Alert severity="warning" sx={{ mt: 1 }}>
+                          <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
+                            Case issues
+                          </Typography>
+                          <Box component="ul" sx={{ pl: 2, my: 0 }}>
+                            {c.issues!.map((msg, i) => (
+                              <li key={`${title}-issue-${i}`}>
+                                <Typography variant="body2">{msg}</Typography>
+                              </li>
+                            ))}
+                          </Box>
+                        </Alert>
+                      )}
+
+                      <Divider sx={{ my: 1.25 }} />
+
+                      <Typography variant="body2" fontWeight={700} sx={{ mb: 0.75 }}>
+                        Clients in this case ({c.clients?.length ?? 0})
+                      </Typography>
+                      {c.clients && c.clients.length > 0 ? (
+                        <Stack spacing={0.75}>
+                          {c.clients.map((cl, cidx) => {
+                            const clTitleParts: string[] = []
+                            if (typeof cl.row === 'number') clTitleParts.push(`Row ${cl.row}`)
+                            if (cl.action) clTitleParts.push(cl.action.replace(/_/g, ' '))
+                            const clTitle = clTitleParts.join(' · ') || `Client #${cidx + 1}`
+                            const phone = typeof cl.data?.clientPhone === 'string' ? cl.data.clientPhone : undefined
+                            const email = typeof cl.data?.clientEmail === 'string' ? cl.data.clientEmail : undefined
+                            const clientId =
+                              typeof cl.match?.clientId === 'string' && cl.match.clientId ? cl.match.clientId : null
+                            const hasIssues = (cl.issues?.length ?? 0) > 0
+                            return (
+                              <Paper
+                                key={`${title}-client-${cidx}`}
+                                variant="outlined"
+                                sx={{ p: 1, bgcolor: hasIssues ? 'warning.50' : 'background.paper' }}
+                              >
+                                <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                                  <Typography variant="body2" fontWeight={700}>
+                                    {clTitle}
+                                  </Typography>
+                                  {clientId && <Chip size="small" variant="outlined" label={`clientId: ${clientId}`} />}
+                                  {phone && <Chip size="small" variant="outlined" label={`phone: ${phone}`} />}
+                                  {email && <Chip size="small" variant="outlined" label={`email: ${email}`} />}
+                                  {hasIssues && <Chip size="small" color="warning" label={`${cl.issues!.length} issue(s)`} />}
+                                </Stack>
+                                {hasIssues && (
+                                  <Box component="ul" sx={{ pl: 2, my: 0.75 }}>
+                                    {cl.issues!.map((msg, i) => (
+                                      <li key={`${title}-client-${cidx}-issue-${i}`}>
+                                        <Typography variant="body2">{msg}</Typography>
+                                      </li>
+                                    ))}
+                                  </Box>
+                                )}
+                              </Paper>
+                            )
+                          })}
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No client rows listed under this case.
+                        </Typography>
+                      )}
+                    </Paper>
+                  )
+                })}
+              </Stack>
+            </Box>
           ) : rows && rows.length > 0 ? (
             <Box sx={{ height: 420, width: '100%' }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
