@@ -180,6 +180,30 @@ export interface GetCaseAssigneesResponse {
   data: CaseAssignee[]
 }
 
+/** POST /api/cases/bulk-assign — Mode A: many cases → one assignee (or null to unassign). */
+export interface BulkAssignCasesModeARequest {
+  caseIds: string[]
+  assignedTo?: string | null
+}
+
+export interface BulkAssignCaseGroup {
+  caseIds: string[]
+  assignedTo?: string | null
+}
+
+/** POST /api/cases/bulk-assign — Mode B: several batches in one request. */
+export interface BulkAssignCasesModeBRequest {
+  groups: BulkAssignCaseGroup[]
+}
+
+export type BulkAssignCasesRequest = BulkAssignCasesModeARequest | BulkAssignCasesModeBRequest
+
+export interface BulkAssignCasesResponse {
+  success: boolean
+  message?: string
+  data?: unknown
+}
+
 export interface AddCaseStageRequest {
   stageName: string
   todaySummary: string
@@ -364,6 +388,18 @@ export const casesApi = createApi({
       },
       invalidatesTags: (r, e, { caseId }) => [{ type: 'Cases', id: caseId }, { type: 'Cases', id: 'LIST' }],
     }),
+
+    bulkAssignCases: builder.mutation<BulkAssignCasesResponse, BulkAssignCasesRequest>({
+      query: (body) => ({
+        url: 'api/cases/bulk-assign',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: async (response: BulkAssignCasesResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
+      invalidatesTags: ['Cases'],
+    }),
   }),
 })
 
@@ -382,4 +418,5 @@ export const {
   useAddCaseStageMutation,
   useUpdateCaseStageMutation,
   useConfirmCaseStageMutation,
+  useBulkAssignCasesMutation,
 } = casesApi
