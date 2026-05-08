@@ -9,6 +9,7 @@ import {
   Plus,
   ListPlus,
   Search,
+  UserCog,
   Eye,
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -24,7 +25,7 @@ import {
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
-import type { GridColDef } from '@mui/x-data-grid'
+import type { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import {
   Box,
   Button,
@@ -70,6 +71,7 @@ import {
   useAddCaseStageMutation,
   useUpdateCaseStageMutation,
   useConfirmCaseStageMutation,
+  useBulkAssignCasesMutation,
   COURT_PREMISES,
   CASE_TYPES,
   type CaseStage,
@@ -80,7 +82,7 @@ import {
   type AddCaseStageRequest,
   type GetCasesRequest,
 } from '@/redux/api/casesApi'
-import { useGetClientsQuery } from '@/redux/api/clientsApi'
+import { useGetClientsQuery, type Client } from '@/redux/api/clientsApi'
 import { useGetAssignableUsersQuery, type User } from '@/redux/api/userApi'
 import { useGetOnboardingStatusQuery, onboardingApi } from '@/redux/api/onboardingApi'
 import { useDispatch } from 'react-redux'
@@ -200,6 +202,9 @@ export default function CasesPage() {
   const [deleteCase, setDeleteCase] = useState<CaseType | null>(null)
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [menuCase, setMenuCase] = useState<CaseType | null>(null)
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([])
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
+  const [bulkAssignAssignee, setBulkAssignAssignee] = useState<AssignableOption | null>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedCaseNumber(caseNumberSearch), 400)
@@ -221,16 +226,55 @@ export default function CasesPage() {
     return () => clearTimeout(t)
   }, [assignableSearchInput])
 
+  const [clientSearchInput, setClientSearchInput] = useState('')
+  const [clientSearchDebounced, setClientSearchDebounced] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setClientSearchDebounced(clientSearchInput), 400)
+    return () => clearTimeout(t)
+  }, [clientSearchInput])
+
   const { data: assignableData, isFetching: assignableLoading } = useGetAssignableUsersQuery(
     canShowAssignedTo ? { search: assignableSearchDebounced || undefined, limit: 50 } : undefined,
     { skip: !canShowAssignedTo }
   )
 
   const { data: clientsData } = useGetClientsQuery(
-    canShowAssignedTo ? { status: 'active', limit: 500 } : undefined,
+    canShowAssignedTo ? { status: 'active', limit: 50, search: clientSearchDebounced || undefined } : undefined,
     { skip: !canShowAssignedTo },
   )
   const clientsOptions = clientsData?.data ?? []
+
+  const [selectedClientCache, setSelectedClientCache] = useState<Record<string, Client>>({})
+  const cacheClients = (list: Client[]) => {
+    if (!list || list.length === 0) return
+    setSelectedClientCache((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const c of list) {
+        const id = c.id || (c as { _id?: string })._id
+        if (!id) continue
+        if (!next[id]) {
+          next[id] = c
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }
+
+  const getSelectedClientsForIds = (ids: string[] | undefined): Client[] => {
+    if (!ids || ids.length === 0) return []
+    const byId: Record<string, Client> = {}
+    for (const c of clientsOptions) {
+      const id = c.id || (c as { _id?: string })._id
+      if (id) byId[id] = c
+    }
+    return ids
+      .map((id) => byId[id] || selectedClientCache[id])
+      .filter(Boolean) as Client[]
+  }
+
+  // Selected client resolution is computed after create/edit form state declarations.
   const { data: caseAssigneesData, isLoading: caseAssigneesLoading } = useGetCaseAssigneesQuery(undefined, {
     skip: !openAddStage && !showCreateStages && !(!!editId && showEditStages),
   })
@@ -238,6 +282,18 @@ export default function CasesPage() {
   useEffect(() => {
     if (openCreate || editId) setAssignableSearchInput('')
   }, [openCreate, editId])
+
+  useEffect(() => {
+    if (openCreate || editId) setClientSearchInput('')
+  }, [openCreate, editId])
+
+  useEffect(() => {
+    if (bulkAssignOpen) setAssignableSearchInput('')
+  }, [bulkAssignOpen])
+
+  useEffect(() => {
+    setRowSelectionModel([])
+  }, [viewTab, debouncedCaseNumber, caseTypeFilter, paginationModel.page, paginationModel.pageSize, deletedPaginationModel.page, deletedPaginationModel.pageSize])
 
   const isDeletedView = viewTab === 'deleted'
   const casesParams = useMemo((): GetCasesRequest => {
@@ -356,6 +412,7 @@ export default function CasesPage() {
   const [restoreCaseFn, { isLoading: restoring }] = useRestoreCaseMutation()
   const [archiveCaseFn] = useArchiveCaseMutation()
   const [unarchiveCaseFn] = useUnarchiveCaseMutation()
+  const [bulkAssignCases, { isLoading: bulkAssigning }] = useBulkAssignCasesMutation()
 
   useEffect(() => {
     if (!casesLoading && casesError && 'status' in casesError) {
@@ -393,6 +450,25 @@ export default function CasesPage() {
 
   const [editForm, setEditForm] = useState<UpdateCaseRequest>({})
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
+
+  const createSelectedClients = useMemo(
+    () => getSelectedClientsForIds((createForm.clients ?? []).slice(0, createForm.clientCount ?? 1)),
+    [createForm.clients, createForm.clientCount, clientsOptions, selectedClientCache]
+  )
+  const editSelectedClients = useMemo(
+    () => getSelectedClientsForIds((editForm.clients ?? []).slice(0, editForm.clientCount ?? 1)),
+    [editForm.clients, editForm.clientCount, clientsOptions, selectedClientCache]
+  )
+
+  const mergedClientsOptions = useMemo(() => {
+    const map = new Map<string, Client>()
+    for (const c of [...createSelectedClients, ...editSelectedClients, ...clientsOptions]) {
+      const id = c.id || (c as { _id?: string })._id
+      if (!id) continue
+      if (!map.has(id)) map.set(id, c)
+    }
+    return Array.from(map.values())
+  }, [clientsOptions, createSelectedClients, editSelectedClients])
 
   const resetCreateForm = () => {
     setCreateForm({
@@ -640,6 +716,38 @@ export default function CasesPage() {
     } catch (err: unknown) {
       const et = err as { status?: number; data?: { error?: string; message?: string } }
       toast.error(et?.status === 403 ? "You don't have permission" : (et?.data?.error ?? et?.data?.message ?? 'Delete failed'))
+    }
+  }
+
+  const handleBulkAssign = async () => {
+    if (!canShowAssignedTo) {
+      toast.error("You don't have permission to assign cases")
+      return
+    }
+    const caseIds = rowSelectionModel.map(String).filter(Boolean)
+    if (caseIds.length === 0) {
+      toast.error('Select at least one case')
+      return
+    }
+    const assigneeId = bulkAssignAssignee
+      ? bulkAssignAssignee.id || (bulkAssignAssignee as { _id?: string })._id || ''
+      : null
+    if (bulkAssignAssignee && !assigneeId) {
+      toast.error('Invalid assignee selection')
+      return
+    }
+    try {
+      const res = await bulkAssignCases({ caseIds, assignedTo: assigneeId }).unwrap()
+      toast.success(res.message || 'Assignments updated')
+      setRowSelectionModel([])
+      setBulkAssignOpen(false)
+      setBulkAssignAssignee(null)
+      refetchCases()
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      const msg = et?.data?.error ?? et?.data?.message ?? 'Bulk assign failed'
+      if (et?.status === 403) toast.error("You don't have permission to bulk assign cases")
+      else toast.error(msg)
     }
   }
 
@@ -969,6 +1077,19 @@ export default function CasesPage() {
                 Export
               </Button>
             )}
+            {canShowAssignedTo && !isDeletedView && (
+              <Button
+                variant="outlined"
+                startIcon={<UserCog size={18} />}
+                disabled={rowSelectionModel.length === 0}
+                onClick={() => {
+                  setBulkAssignAssignee(null)
+                  setBulkAssignOpen(true)
+                }}
+              >
+                Bulk assign{rowSelectionModel.length > 0 ? ` (${rowSelectionModel.length})` : ''}
+              </Button>
+            )}
             {canCreate && viewTab === 'active' && (
               <Button
                 variant="contained"
@@ -1180,12 +1301,43 @@ export default function CasesPage() {
               paginationModel={isDeletedView ? deletedPaginationModel : paginationModel}
               onPaginationModelChange={isDeletedView ? setDeletedPaginationModel : setPaginationModel}
               pageSizeOptions={[5, 10, 25, 50]}
+              checkboxSelection={canShowAssignedTo && !isDeletedView}
+              rowSelectionModel={rowSelectionModel}
+              onRowSelectionModelChange={setRowSelectionModel}
               disableRowSelectionOnClick
               sx={{ '& .MuiDataGrid-cell:focus': { outline: 'none' } }}
             />
           )}
         </Box>
         </Card>
+
+        <Dialog open={bulkAssignOpen} onClose={() => !bulkAssigning && setBulkAssignOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Bulk assign cases</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {rowSelectionModel.length} case{rowSelectionModel.length === 1 ? '' : 's'} selected (current page only when using checkboxes with server paging). Choose an assignee, or clear the field and apply to remove assignee for all selected.
+            </Typography>
+            {canShowAssignedTo && (
+              <Autocomplete
+                options={caseAssignableOptions}
+                getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
+                value={bulkAssignAssignee}
+                onChange={(_, v) => setBulkAssignAssignee(v)}
+                renderInput={(params) => <TextField {...params} label="Assign to" placeholder="Leave empty to unassign" />}
+                isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || (v as { _id?: string })?._id)}
+                loading={assignableLoading}
+              />
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => !bulkAssigning && setBulkAssignOpen(false)} disabled={bulkAssigning}>
+              Cancel
+            </Button>
+            <Button variant="contained" onClick={handleBulkAssign} disabled={bulkAssigning || rowSelectionModel.length === 0}>
+              {bulkAssigning ? 'Applying…' : 'Apply'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Create Modal */}
         <Dialog
@@ -1258,7 +1410,9 @@ export default function CasesPage() {
                         setAssignableSearchInput(v ? getAssignableOptionLabel(v, currentUser?.id) : '')
                       }}
                       inputValue={assignableSearchInput}
-                      onInputChange={(_, v) => setAssignableSearchInput(v)}
+                      onInputChange={(_, v, reason) => {
+                        if (reason === 'input' || reason === 'clear') setAssignableSearchInput(v)
+                      }}
                       loading={assignableLoading}
                       renderInput={(params) => (
                         <TextField {...params} label="Assigned To" placeholder="Search by name or email..." />
@@ -1272,10 +1426,17 @@ export default function CasesPage() {
                   <Grid item xs={12}>
                     <Autocomplete
                       multiple
-                      options={clientsOptions}
+                      options={mergedClientsOptions}
                       getOptionLabel={(opt) => getClientDisplayName(opt)}
-                      value={clientsOptions.filter((c) => (createForm.clients ?? []).includes(c.id || (c as { _id?: string })._id || ''))}
-                      onChange={(_, v) => setCreateForm((p) => ({ ...p, clients: v.map((c) => c.id || (c as { _id?: string })._id || '').slice(0, p.clientCount ?? 1) }))}
+                      value={createSelectedClients}
+                      onChange={(_, v) => {
+                        cacheClients(v as Client[])
+                        setCreateForm((p) => ({ ...p, clients: (v as Client[]).map((c) => c.id || (c as { _id?: string })._id || '').filter(Boolean).slice(0, p.clientCount ?? 1) }))
+                      }}
+                      inputValue={clientSearchInput}
+                      onInputChange={(_, v, reason) => {
+                        if (reason === 'input' || reason === 'clear') setClientSearchInput(v)
+                      }}
                       ListboxProps={linkedClientsListboxProps}
                       componentsProps={{
                         popper: { sx: { zIndex: (theme) => theme.zIndex.modal + 1 } },
@@ -1875,7 +2036,9 @@ export default function CasesPage() {
                           setAssignableSearchInput(v ? getAssignableOptionLabel(v, currentUser?.id) : '')
                         }}
                         inputValue={assignableSearchInput}
-                        onInputChange={(_, v) => setAssignableSearchInput(v)}
+                        onInputChange={(_, v, reason) => {
+                          if (reason === 'input' || reason === 'clear') setAssignableSearchInput(v)
+                        }}
                         loading={assignableLoading}
                         renderInput={(params) => (
                           <TextField {...params} label="Assigned To" placeholder="Search by name or email..." />
@@ -1889,10 +2052,17 @@ export default function CasesPage() {
                     <Grid item xs={12}>
                       <Autocomplete
                         multiple
-                        options={clientsOptions}
+                        options={mergedClientsOptions}
                         getOptionLabel={(opt) => getClientDisplayName(opt)}
-                        value={clientsOptions.filter((c) => (editForm.clients ?? []).includes(c.id || (c as { _id?: string })._id || ''))}
-                        onChange={(_, v) => setEditForm((p) => ({ ...p, clients: v.map((c) => c.id || (c as { _id?: string })._id || '').slice(0, p.clientCount ?? 1) }))}
+                        value={editSelectedClients}
+                        onChange={(_, v) => {
+                          cacheClients(v as Client[])
+                          setEditForm((p) => ({ ...p, clients: (v as Client[]).map((c) => c.id || (c as { _id?: string })._id || '').filter(Boolean).slice(0, p.clientCount ?? 1) }))
+                        }}
+                        inputValue={clientSearchInput}
+                        onInputChange={(_, v, reason) => {
+                          if (reason === 'input' || reason === 'clear') setClientSearchInput(v)
+                        }}
                         ListboxProps={linkedClientsListboxProps}
                         componentsProps={{
                           popper: { sx: { zIndex: (theme) => theme.zIndex.modal + 1 } },
