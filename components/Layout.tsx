@@ -35,6 +35,7 @@ import CaseSnapLoader from './CaseSnapLoader'
 import { useLazyGetNotificationsQuery } from '@/redux/api/notificationsApi'
 import type { Notification as ApiNotification } from '@/redux/api/notificationsApi'
 import { useGetOnboardingStatusQuery } from '@/redux/api/onboardingApi'
+import { shouldShowAssigneeHeaderBadge } from '@/utils/permissions'
 
 const APP_BACKEND_URL =
   process.env.NEXT_PUBLIC_APP_BACKEND_URL || 'https://casesnapbackend.onrender.com/'
@@ -216,6 +217,7 @@ export default function Layout({ children }: LayoutProps) {
     }
   }
   const subscriptionPlanDisplay = getSubscriptionPlanDisplayName(user?.subscriptionPlan)
+  const showAssigneeBadge = shouldShowAssigneeHeaderBadge(user?.role, user?.assigneePermissions)
   
   // Load modules from cache first, then refresh from API
   useEffect(() => {
@@ -224,7 +226,7 @@ export default function Layout({ children }: LayoutProps) {
     const loadCachedModules = (): boolean => {
       if (typeof window === 'undefined') return false
       try {
-        const cached = localStorage.getItem(modulesCacheKey)
+        const cached = sessionStorage.getItem(modulesCacheKey)
         if (!cached) return false
 
         const parsed: ModulesCache = JSON.parse(cached)
@@ -234,7 +236,7 @@ export default function Layout({ children }: LayoutProps) {
           Date.now() - parsed.cachedAt < MODULES_CACHE_TTL_MS
 
         if (!isValidCache) {
-          localStorage.removeItem(modulesCacheKey)
+          sessionStorage.removeItem(modulesCacheKey)
           return false
         }
 
@@ -254,7 +256,7 @@ export default function Layout({ children }: LayoutProps) {
           data: modulesData,
           cachedAt: Date.now(),
         }
-        localStorage.setItem(modulesCacheKey, JSON.stringify(cachePayload))
+        sessionStorage.setItem(modulesCacheKey, JSON.stringify(cachePayload))
       } catch (error) {
         console.warn('Failed to write module cache:', error)
       }
@@ -647,9 +649,20 @@ export default function Layout({ children }: LayoutProps) {
 
             {/* Right side header items */}
             <div className="flex items-center space-x-2 sm:space-x-4">
-              {/* Theme Toggle */}
-              <ThemeToggle size="sm" />
-              
+              {/* Theme toggle + assignee (assignee stays aligned with header controls, not profile block) */}
+              <div className="flex shrink-0 items-center gap-2">
+                <ThemeToggle size="sm" />
+                {showAssigneeBadge && (
+                  <span
+                    className="inline-flex h-9 items-center gap-1 rounded-lg border border-yellow-500/35 bg-yellow-500/10 px-2 text-[10px] font-semibold uppercase leading-none tracking-wide text-yellow-700 shadow-sm dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-400 sm:gap-1.5 sm:px-2.5 sm:text-[11px]"
+                    title="You are an assignee"
+                  >
+                    <UserCheck className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden />
+                    <span className="whitespace-nowrap">Assignee</span>
+                  </span>
+                )}
+              </div>
+
               {/* Notifications */}
               <div className="relative" ref={notificationRef}>
                 <button 
@@ -750,9 +763,9 @@ export default function Layout({ children }: LayoutProps) {
               </div>
 
               {/* User menu */}
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                <div className="h-7 w-7 sm:h-8 sm:w-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                  <span className="text-xs sm:text-sm font-medium text-gray-900">
+              <div className="flex min-w-0 items-center space-x-2 sm:space-x-3">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yellow-500 sm:h-8 sm:w-8">
+                  <span className="text-xs font-medium text-gray-900 sm:text-sm">
                     {(() => {
                       if (user?.name) return user.name.charAt(0).toUpperCase()
                       if (user?.firstName) return user.firstName.charAt(0).toUpperCase()
@@ -762,8 +775,8 @@ export default function Layout({ children }: LayoutProps) {
                     })()}
                   </span>
                 </div>
-                <div className="hidden sm:block">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                <div className="hidden min-w-0 flex-1 flex-col items-stretch text-left sm:flex">
+                  <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
                     {(() => {
                       if (user?.name) return user.name
                       if (user?.firstName && user?.lastName) return `${user.firstName} ${user.lastName}`
@@ -772,11 +785,14 @@ export default function Layout({ children }: LayoutProps) {
                       return 'Admin User'
                     })()}
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="truncate text-xs text-gray-500 dark:text-gray-400">
                     {user?.email || 'admin@example.com'}
                   </p>
                   {user && (
-                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-0.5 font-medium" title="Subscription plan">
+                    <p
+                      className="mt-1 truncate text-xs font-medium text-yellow-600 dark:text-yellow-400"
+                      title="Subscription plan"
+                    >
                       Plan: {subscriptionPlanDisplay}
                     </p>
                   )}

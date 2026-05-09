@@ -58,8 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check for existing auth token on mount
     const checkAuth = () => {
       try {
-        const token = localStorage.getItem('authToken') || localStorage.getItem('token')
-        const userData = localStorage.getItem('userData')
+        const token = sessionStorage.getItem('authToken') || sessionStorage.getItem('token')
+        const userData = sessionStorage.getItem('userData')
         
         // Only require token and userData - organizationData is optional
         if (token && userData) {
@@ -72,19 +72,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(parsedUser)
             } else {
               // Invalid token, clear everything
-              localStorage.removeItem('authToken')
-              localStorage.removeItem('token')
-              localStorage.removeItem('userData')
-              localStorage.removeItem('organizationData')
+              sessionStorage.removeItem('authToken')
+              sessionStorage.removeItem('token')
+              sessionStorage.removeItem('userData')
+              sessionStorage.removeItem('organizationData')
               setUser(null)
             }
           } catch (error) {
             // Invalid user data, clear it
             console.error('Error parsing user data:', error)
-            localStorage.removeItem('authToken')
-            localStorage.removeItem('token')
-            localStorage.removeItem('userData')
-            localStorage.removeItem('organizationData')
+            sessionStorage.removeItem('authToken')
+            sessionStorage.removeItem('token')
+            sessionStorage.removeItem('userData')
+            sessionStorage.removeItem('organizationData')
             setUser(null)
           }
         } else {
@@ -92,8 +92,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null)
         }
       } catch (error) {
-        // localStorage not available (SSR or disabled)
-        console.log('localStorage not available:', error)
+        // sessionStorage not available (SSR or disabled)
+        console.log('sessionStorage not available:', error)
         setUser(null)
       } finally {
         setIsLoading(false)
@@ -106,10 +106,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // Check if we already have real API data in localStorage
+      // Check if we already have real API data in sessionStorage
       try {
-        const authToken = localStorage.getItem('authToken')
-        const userData = localStorage.getItem('userData')
+        const authToken = sessionStorage.getItem('authToken')
+        const userData = sessionStorage.getItem('userData')
         
         if (authToken && userData) {
           // We have real API data, use it
@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Get organization data if available
       let organizationInfo = {}
       try {
-        const organizationData = localStorage.getItem('organizationData')
+        const organizationData = sessionStorage.getItem('organizationData')
         
         if (organizationData) {
           try {
@@ -147,8 +147,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (error) {
-        // localStorage not available
-        console.log('localStorage not available during login')
+        // sessionStorage not available
+        console.log('sessionStorage not available during login')
       }
 
       // Mock successful login (fallback)
@@ -162,11 +162,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Store auth data
       try {
-        localStorage.setItem('authToken', 'mock-jwt-token')
-        localStorage.setItem('userData', JSON.stringify(mockUser))
+        sessionStorage.setItem('authToken', 'mock-jwt-token')
+        sessionStorage.setItem('userData', JSON.stringify(mockUser))
       } catch (error) {
-        // localStorage not available, continue without storing
-        console.log('localStorage not available for storing auth data')
+        // sessionStorage not available, continue without storing
+        console.log('sessionStorage not available for storing auth data')
       }
       
       setUser(mockUser)
@@ -178,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     const token = typeof window !== 'undefined'
-      ? localStorage.getItem('authToken') || localStorage.getItem('token')
+      ? sessionStorage.getItem('authToken') || sessionStorage.getItem('token')
       : null
 
     if (token) {
@@ -200,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       clearAuthStorage()
     } catch (error) {
-      console.warn('localStorage not available during logout', error)
+      console.warn('sessionStorage not available during logout', error)
     }
     setUser(null)
 

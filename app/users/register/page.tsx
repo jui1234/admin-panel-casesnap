@@ -35,6 +35,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import ThemeToggle from '@/components/ThemeToggle'
 import { useAuth } from '@/contexts/AuthContext'
+import { clearAuthStorage } from '@/lib/clearAuthStorage'
 import { useCompleteUserRegistrationMutation, useGetUserByTokenQuery } from '@/redux/api/userApi'
 import { useGetRoleByIdQuery } from '@/redux/api/rolesApi'
 import toast from 'react-hot-toast'
@@ -529,18 +530,10 @@ export default function UserRegisterPage() {
       return
     }
     
-    // Clear all authentication data from localStorage BEFORE making the API call
+    // Clear all authentication data from sessionStorage BEFORE making the API call
     // This ensures no existing session data interferes with the registration
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('authToken')
-      localStorage.removeItem('token')
-      localStorage.removeItem('userData')
-      localStorage.removeItem('organizationData')
-      // Clear any other potential auth-related keys
-      localStorage.removeItem('user')
-      localStorage.removeItem('organization')
-      localStorage.removeItem('role')
-      localStorage.removeItem('permissions')
+      clearAuthStorage()
     }
     
     setIsSubmitting(true)
@@ -565,18 +558,9 @@ export default function UserRegisterPage() {
       
       toast.success(response.message || 'Registration completed successfully! Your account is pending approval. You will be notified once approved.')
       
-      // Clear all authentication data from localStorage again after successful registration
+      // Clear auth session for this tab only (do not wipe cross-tab preferences in localStorage)
       if (typeof window !== 'undefined') {
-        localStorage.clear() // Clear all localStorage
-        // Also explicitly remove common keys
-        localStorage.removeItem('authToken')
-        localStorage.removeItem('token')
-        localStorage.removeItem('userData')
-        localStorage.removeItem('organizationData')
-        localStorage.removeItem('user')
-        localStorage.removeItem('organization')
-        localStorage.removeItem('role')
-        localStorage.removeItem('permissions')
+        clearAuthStorage()
       }
       
       // Reset form after success

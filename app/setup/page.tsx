@@ -490,9 +490,9 @@ export default function SetupPage() {
 
       // Store organization data locally
       try {
-        localStorage.setItem('organizationData', JSON.stringify(organizationData))
+        sessionStorage.setItem('organizationData', JSON.stringify(organizationData))
       } catch (error) {
-        console.log('localStorage not available, continuing without storing')
+        console.log('sessionStorage not available, continuing without storing')
       }
 
       // Now call login API with the same email and password
@@ -506,8 +506,8 @@ export default function SetupPage() {
 
         if (loginResult.success) {
           // Store token from login response
-          localStorage.setItem('authToken', loginResult.token)
-          localStorage.setItem('token', loginResult.token)
+          sessionStorage.setItem('authToken', loginResult.token)
+          sessionStorage.setItem('token', loginResult.token)
 
           // Store user data from login response
           const userName = loginResult.user.name || 
@@ -529,11 +529,11 @@ export default function SetupPage() {
             organizationId: loginResult.user.organizationId || loginResult.user.organization?._id,
             organizationName: loginResult.user.organization?.companyName
           }
-          localStorage.setItem('userData', JSON.stringify(userData))
+          sessionStorage.setItem('userData', JSON.stringify(userData))
 
           // Store organization data from login response if available
           if (loginResult.user?.organization) {
-            localStorage.setItem('organizationData', JSON.stringify(loginResult.user.organization))
+            sessionStorage.setItem('organizationData', JSON.stringify(loginResult.user.organization))
           }
 
           store.dispatch(onboardingApi.endpoints.getOnboardingStatus.initiate(undefined, { forceRefetch: true }))

@@ -58,7 +58,7 @@ export default function LoginPage() {
       const modulesResponse: SidebarModulesResponse = await response.json()
       const modulesData = Array.isArray(modulesResponse?.data) ? modulesResponse.data : []
       const cacheKey = `${MODULES_CACHE_KEY_PREFIX}:${cacheScope}`
-      localStorage.setItem(cacheKey, JSON.stringify({
+      sessionStorage.setItem(cacheKey, JSON.stringify({
         data: modulesData,
         cachedAt: Date.now(),
       }))
@@ -77,7 +77,7 @@ export default function LoginPage() {
   useEffect(() => {
     // Check if organization data exists
     try {
-      const orgData = localStorage.getItem('organizationData')
+      const orgData = sessionStorage.getItem('organizationData')
       if (orgData) {
         try {
           setOrganizationData(JSON.parse(orgData))
@@ -86,8 +86,8 @@ export default function LoginPage() {
         }
       }
     } catch (error) {
-      // localStorage not available
-      console.log('localStorage not available')
+      // sessionStorage not available
+      console.log('sessionStorage not available')
     }
 
     // Check for URL parameters to pre-fill email
@@ -119,9 +119,9 @@ export default function LoginPage() {
       const result = await loginMutation({ email, password }).unwrap()
 
       if (result.success) {
-        // Save token + organization in localStorage with correct keys for AuthContext
-        localStorage.setItem('authToken', result.token)
-        localStorage.setItem('token', result.token) // Keep both for compatibility
+        // Save token + organization in sessionStorage with correct keys for AuthContext
+        sessionStorage.setItem('authToken', result.token)
+        sessionStorage.setItem('token', result.token) // Keep both for compatibility
         
         // Store user data in the format expected by AuthContext
         // Construct name from firstName and lastName if name is not available
@@ -144,13 +144,13 @@ export default function LoginPage() {
           organizationId: result.user.organizationId || result.user.organization?._id,
           organizationName: result.user.organization?.companyName
         }
-        localStorage.setItem('userData', JSON.stringify(userData))
+        sessionStorage.setItem('userData', JSON.stringify(userData))
         const cacheScope = userData.organizationId || userData.id || 'default'
         void warmSidebarModulesCache(cacheScope)
         
         // Store organization data
         if (result.user?.organization) {
-          localStorage.setItem('organizationData', JSON.stringify(result.user.organization))
+          sessionStorage.setItem('organizationData', JSON.stringify(result.user.organization))
           setOrganizationData(result.user.organization)
         }
         

@@ -91,6 +91,56 @@ export function canAssignee(userRole: UserRole, moduleName: string): boolean {
   return hasAction(userRole, moduleName, 'assignee')
 }
 
+function normalizeRoleLabel(role: UserRole): string {
+  if (!role) return ''
+  if (typeof role === 'string') return role.trim()
+  return ((role as { name?: string }).name ?? '').trim()
+}
+
+/** Broad admin / super-admin titles — not labeled as assignee from module permissions alone. */
+function isAdminLikeRoleName(role: UserRole): boolean {
+  const n = normalizeRoleLabel(role).toLowerCase().replace(/\s+/g, ' ')
+  return (
+    n === 'admin' ||
+    n === 'super-admin' ||
+    n === 'super_admin' ||
+    n === 'superadmin' ||
+    n === 'super admin'
+  )
+}
+
+/**
+ * True when this user should be surfaced as an "assignee" in the UI: role title contains
+ * assignee, or custom role has `assignee` action on cases/clients (excludes admin-like role names).
+ */
+export function isAssigneeFacingUser(userRole: UserRole): boolean {
+  if (!userRole) return false
+  if (/assignee/i.test(normalizeRoleLabel(userRole))) return true
+  if (typeof userRole !== 'object' || !Array.isArray(userRole.permissions)) return false
+  if (isAdminLikeRoleName(userRole)) return false
+  return canAssignee(userRole, 'case') || canAssignee(userRole, 'client')
+}
+
+/** Same shape as login `assigneePermissions` — backend flags who participates in client/case assignment. */
+export type AssigneePermissionsFlags = {
+  canAssignClient?: boolean
+  canAssignCase?: boolean
+}
+
+/**
+ * Header / profile “Assignee” indicator. Uses the same signals as cases & clients
+ * (`assigneePermissions` from login) plus role-based `isAssigneeFacingUser`.
+ */
+export function shouldShowAssigneeHeaderBadge(
+  role: UserRole,
+  assigneePermissions?: AssigneePermissionsFlags | null
+): boolean {
+  if (assigneePermissions?.canAssignClient === true || assigneePermissions?.canAssignCase === true) {
+    return true
+  }
+  return isAssigneeFacingUser(role)
+}
+
 export function getModulePermissions(
   userRole: UserRole,
   moduleName: string
