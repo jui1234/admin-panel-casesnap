@@ -1187,7 +1187,7 @@ export default function CasesPage() {
                 }}
               />
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            {/* <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth size="small">
                 <InputLabel shrink>Case type</InputLabel>
                 <Select
@@ -1205,7 +1205,7 @@ export default function CasesPage() {
                   ))}
                 </Select>
               </FormControl>
-            </Grid>
+            </Grid> */}
             <Grid item xs={12} sm={6} md={5} />
           </Grid>
         </Box>
