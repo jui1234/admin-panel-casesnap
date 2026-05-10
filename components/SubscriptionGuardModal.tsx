@@ -16,7 +16,7 @@ interface UserSubscriptionData {
 const getStoredUserSubscription = (): UserSubscriptionData => {
   if (typeof window === 'undefined') return {}
   try {
-    const raw = localStorage.getItem('userData')
+    const raw = sessionStorage.getItem('userData')
     if (!raw) return {}
     const parsed = JSON.parse(raw) as UserSubscriptionData
     return {

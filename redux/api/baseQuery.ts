@@ -22,7 +22,7 @@ const baseQuery = fetchBaseQuery({
   prepareHeaders: (headers, { endpoint }) => {
     const publicEndpoints = new Set(['completeUserRegistration', 'getUserByToken'])
     if (typeof window !== 'undefined' && !publicEndpoints.has(endpoint)) {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token')
+      const token = sessionStorage.getItem('authToken') || sessionStorage.getItem('token')
       if (token) {
         headers.set('authorization', `Bearer ${token}`)
       }

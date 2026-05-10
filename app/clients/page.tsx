@@ -470,7 +470,7 @@ export default function ClientsPage() {
         await new Promise((r) => setTimeout(r, 100))
         const formData = new FormData()
         formData.append('file', aadharFile)
-        const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || localStorage.getItem('token') : ''
+        const token = typeof window !== 'undefined' ? sessionStorage.getItem('authToken') || sessionStorage.getItem('token') : ''
         const uploadRes = await fetch(UPLOAD_API_URL, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
@@ -532,7 +532,7 @@ export default function ClientsPage() {
         await new Promise((r) => setTimeout(r, 100))
         const formData = new FormData()
         formData.append('file', aadharEditFile)
-        const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || localStorage.getItem('token') : ''
+        const token = typeof window !== 'undefined' ? sessionStorage.getItem('authToken') || sessionStorage.getItem('token') : ''
         const uploadRes = await fetch(UPLOAD_API_URL, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },

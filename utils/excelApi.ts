@@ -11,7 +11,7 @@ function getBackendBaseUrl(): string {
 
 function getToken(): string {
   if (typeof window === 'undefined') return ''
-  return localStorage.getItem('authToken') || localStorage.getItem('token') || ''
+  return sessionStorage.getItem('authToken') || sessionStorage.getItem('token') || ''
 }
 
 async function fetchAuthed(input: string, init?: RequestInit): Promise<Response> {
