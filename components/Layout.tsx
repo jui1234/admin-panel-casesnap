@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { 
@@ -35,7 +35,7 @@ import CaseSnapLoader from './CaseSnapLoader'
 import { useLazyGetNotificationsQuery } from '@/redux/api/notificationsApi'
 import type { Notification as ApiNotification } from '@/redux/api/notificationsApi'
 import { useGetOnboardingStatusQuery } from '@/redux/api/onboardingApi'
-import { shouldShowAssigneeHeaderBadge } from '@/utils/permissions'
+import { getAssigneeHeaderLabel, getAssigneeScopeFromModules } from '@/utils/permissions'
 
 const APP_BACKEND_URL =
   process.env.NEXT_PUBLIC_APP_BACKEND_URL || 'https://casesnapbackend.onrender.com/'
@@ -49,6 +49,9 @@ interface Module {
   name: string
   displayName: string
   description: string
+  /** Effective permissions for the current user (from GET `/api/modules`). */
+  actions?: string[]
+  permissions?: string[]
 }
 
 interface ModulesResponse {
@@ -140,7 +143,8 @@ export default function Layout({ children }: LayoutProps) {
   const pathname = usePathname()
   const { theme } = useTheme()
   const { logout, user } = useAuth()
-  const modulesCacheKey = `${MODULES_CACHE_KEY_PREFIX}:${user?.organizationId || user?.id || 'default'}`
+  // v2: cache entries include per-user `actions` from `/api/modules` (used for assignee badge).
+  const modulesCacheKey = `${MODULES_CACHE_KEY_PREFIX}:v2:${user?.organizationId || user?.id || 'default'}`
 
   const { data: onboarding } = useGetOnboardingStatusQuery(undefined, {
     skip: !user,
@@ -217,7 +221,19 @@ export default function Layout({ children }: LayoutProps) {
     }
   }
   const subscriptionPlanDisplay = getSubscriptionPlanDisplayName(user?.subscriptionPlan)
-  const showAssigneeBadge = shouldShowAssigneeHeaderBadge(user?.role, user?.assigneePermissions)
+  const assigneeHeaderScope = useMemo(() => getAssigneeScopeFromModules(modules), [modules])
+  const assigneeHeaderLabel = assigneeHeaderScope
+    ? getAssigneeHeaderLabel(assigneeHeaderScope)
+    : ''
+  const assigneeHeaderTitle = assigneeHeaderScope
+    ? assigneeHeaderScope === 'case'
+      ? 'You can be assigned to cases'
+      : assigneeHeaderScope === 'client'
+        ? 'You can be assigned to clients'
+        : assigneeHeaderScope === 'both'
+          ? 'You can be assigned to cases and clients'
+          : 'You are an assignee'
+    : ''
   
   // Load modules from cache first, then refresh from API
   useEffect(() => {
@@ -271,10 +287,15 @@ export default function Layout({ children }: LayoutProps) {
       try {
         // Remove trailing slash if present
         const backendUrl = APP_BACKEND_URL.replace(/\/$/, '')
+        const token =
+          typeof window !== 'undefined'
+            ? sessionStorage.getItem('authToken') || sessionStorage.getItem('token') || ''
+            : ''
         const response = await fetch(`${backendUrl}/api/modules`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         })
         if (response.ok) {
@@ -652,13 +673,13 @@ export default function Layout({ children }: LayoutProps) {
               {/* Theme toggle + assignee (assignee stays aligned with header controls, not profile block) */}
               <div className="flex shrink-0 items-center gap-2">
                 <ThemeToggle size="sm" />
-                {showAssigneeBadge && (
+                {user && assigneeHeaderScope && (
                   <span
-                    className="inline-flex h-9 items-center gap-1 rounded-lg border border-yellow-500/35 bg-yellow-500/10 px-2 text-[10px] font-semibold uppercase leading-none tracking-wide text-yellow-700 shadow-sm dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-400 sm:gap-1.5 sm:px-2.5 sm:text-[11px]"
-                    title="You are an assignee"
+                    className="inline-flex h-9 max-w-[min(100%,14rem)] items-center gap-1 rounded-lg border border-yellow-500/35 bg-yellow-500/10 px-1.5 text-[9px] font-semibold uppercase leading-none tracking-wide text-yellow-700 shadow-sm dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-400 sm:max-w-none sm:gap-1.5 sm:px-2.5 sm:text-[11px]"
+                    title={assigneeHeaderTitle}
                   >
                     <UserCheck className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden />
-                    <span className="whitespace-nowrap">Assignee</span>
+                    <span className="whitespace-nowrap">{assigneeHeaderLabel}</span>
                   </span>
                 )}
               </div>
