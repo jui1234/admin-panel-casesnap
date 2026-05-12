@@ -141,6 +141,93 @@ export function shouldShowAssigneeHeaderBadge(
   return isAssigneeFacingUser(role)
 }
 
+/** Narrow assignee type for header copy — login flags first, then role module `assignee` actions, else generic. */
+export type AssigneeHeaderScope = 'case' | 'client' | 'both' | 'generic'
+
+/**
+ * When `shouldShowAssigneeHeaderBadge` is true, returns how assignment applies (cases, clients, or both).
+ * Returns null when the user should not be shown as an assignee.
+ */
+export function getAssigneeHeaderScope(
+  role: UserRole,
+  assigneePermissions?: AssigneePermissionsFlags | null
+): AssigneeHeaderScope | null {
+  if (!shouldShowAssigneeHeaderBadge(role, assigneePermissions)) return null
+
+  const apiCase = assigneePermissions?.canAssignCase === true
+  const apiClient = assigneePermissions?.canAssignClient === true
+  if (apiCase || apiClient) {
+    if (apiCase && apiClient) return 'both'
+    if (apiCase) return 'case'
+    return 'client'
+  }
+
+  const roleCase = canAssignee(role, 'case')
+  const roleClient = canAssignee(role, 'client')
+  if (roleCase && roleClient) return 'both'
+  if (roleCase) return 'case'
+  if (roleClient) return 'client'
+
+  return 'generic'
+}
+
+export function getAssigneeHeaderLabel(scope: AssigneeHeaderScope): string {
+  switch (scope) {
+    case 'case':
+      return 'Assignee for cases'
+    case 'client':
+      return 'Assignee for client'
+    case 'both':
+    case 'generic':
+    default:
+      return 'Assignee'
+  }
+}
+
+/** One row from GET `/api/modules` — may include effective actions for the signed-in user. */
+export type ModuleWithActions = { name: string; actions?: string[]; permissions?: string[] }
+
+function moduleEffectiveActions(m: ModuleWithActions): string[] {
+  const a = m.actions
+  const p = m.permissions
+  if (Array.isArray(a) && a.length > 0) return a
+  if (Array.isArray(p) && p.length > 0) return p
+  return Array.isArray(a) ? a : []
+}
+
+function actionsIncludeAssignee(actions: string[] | undefined): boolean {
+  if (!Array.isArray(actions)) return false
+  return actions.some((a) => String(a).toLowerCase() === 'assignee')
+}
+
+/**
+ * Assignee scope from `/api/modules`: `assignee` in `actions` for case/cases and/or client/clients.
+ * Returns null when neither module grants assignee (badge should be hidden).
+ */
+export function getAssigneeScopeFromModules(
+  modules: ModuleWithActions[] | null | undefined
+): AssigneeHeaderScope | null {
+  if (!Array.isArray(modules) || modules.length === 0) return null
+
+  const caseNames = new Set(normalizeModuleName('case'))
+  const clientNames = new Set(normalizeModuleName('client'))
+
+  let caseAssignee = false
+  let clientAssignee = false
+
+  for (const m of modules) {
+    if (!m?.name || !actionsIncludeAssignee(moduleEffectiveActions(m))) continue
+    const key = m.name.toLowerCase().trim()
+    if (caseNames.has(key)) caseAssignee = true
+    else if (clientNames.has(key)) clientAssignee = true
+  }
+
+  if (!caseAssignee && !clientAssignee) return null
+  if (caseAssignee && clientAssignee) return 'both'
+  if (caseAssignee) return 'case'
+  return 'client'
+}
+
 export function getModulePermissions(
   userRole: UserRole,
   moduleName: string

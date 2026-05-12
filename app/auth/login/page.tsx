@@ -43,13 +43,19 @@ export default function LoginPage() {
   // RTK Query mutation
   const [loginMutation, { isLoading, error: loginError }] = useLoginMutation()
 
-  const warmSidebarModulesCache = async (cacheScope: string) => {
+  const warmSidebarModulesCache = async (cacheScope: string, bearerToken?: string) => {
     try {
       const backendUrl = APP_BACKEND_URL.replace(/\/$/, '')
+      const token =
+        bearerToken ||
+        (typeof window !== 'undefined'
+          ? sessionStorage.getItem('authToken') || sessionStorage.getItem('token') || ''
+          : '')
       const response = await fetch(`${backendUrl}/api/modules`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       })
 
@@ -57,7 +63,7 @@ export default function LoginPage() {
 
       const modulesResponse: SidebarModulesResponse = await response.json()
       const modulesData = Array.isArray(modulesResponse?.data) ? modulesResponse.data : []
-      const cacheKey = `${MODULES_CACHE_KEY_PREFIX}:${cacheScope}`
+      const cacheKey = `${MODULES_CACHE_KEY_PREFIX}:v2:${cacheScope}`
       sessionStorage.setItem(cacheKey, JSON.stringify({
         data: modulesData,
         cachedAt: Date.now(),
@@ -146,7 +152,7 @@ export default function LoginPage() {
         }
         sessionStorage.setItem('userData', JSON.stringify(userData))
         const cacheScope = userData.organizationId || userData.id || 'default'
-        void warmSidebarModulesCache(cacheScope)
+        void warmSidebarModulesCache(cacheScope, result.token)
         
         // Store organization data
         if (result.user?.organization) {
