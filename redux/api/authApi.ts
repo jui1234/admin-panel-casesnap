@@ -20,7 +20,8 @@ export interface ResetPasswordRequest {
 export interface ChangePasswordRequest {
   currentPassword: string
   newPassword: string
-  confirmPassword: string
+  /** Optional; if omitted, backend may only validate current + new. */
+  confirmPassword?: string
 }
 
 export interface AuthMessageResponse {
@@ -186,10 +187,16 @@ export const authApi = createApi({
     }),
 
     changePassword: builder.mutation<AuthMessageResponse, ChangePasswordRequest>({
-      query: (body) => ({
+      query: ({ currentPassword, newPassword, confirmPassword }) => ({
         url: 'api/auth/change-password',
         method: 'PUT',
-        body,
+        body: {
+          currentPassword,
+          newPassword,
+          ...(confirmPassword !== undefined && confirmPassword !== ''
+            ? { confirmPassword }
+            : {}),
+        },
       }),
     }),
   }),

@@ -1,18 +1,44 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Settings, Save, User, Shield, Bell, Globe, Database, Key, Check, ArrowUp } from 'lucide-react'
+import { Settings, Save, User, Shield, Bell, Globe, Database, Key, Check, ArrowUp, Eye, EyeOff } from 'lucide-react'
 import Head from 'next/head'
+import * as yup from 'yup'
 import { useAuth } from '@/contexts/AuthContext'
 import { useChangePasswordMutation } from '@/redux/api/authApi'
 import toast from 'react-hot-toast'
 
+type PasswordFormErrors = Partial<Record<'currentPassword' | 'newPassword' | 'confirmPassword', string>>
+
+const changePasswordFormSchema = yup.object({
+  currentPassword: yup.string().trim().required('Current password is required'),
+  newPassword: yup.string().trim().required('New password is required'),
+  confirmPassword: yup
+    .string()
+    .trim()
+    .test(
+      'matches-new-password',
+      'New password and confirm password must match',
+      function (value) {
+        const raw = (this.parent as { newPassword?: string }).newPassword
+        const np = typeof raw === 'string' ? raw.trim() : ''
+        const v = typeof value === 'string' ? value.trim() : ''
+        if (!v) return true
+        return v === np
+      }
+    ),
+})
+
 export default function SettingsPage() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const [changePassword, { isLoading: isChangingPassword }] = useChangePasswordMutation()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [passwordErrors, setPasswordErrors] = useState<PasswordFormErrors>({})
 
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
@@ -90,23 +116,64 @@ export default function SettingsPage() {
   const isFreeTrial = currentPlan === 'free'
 
   const handleChangePassword = async () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      toast.error('Please fill all password fields.')
-      return
+    setPasswordErrors({})
+    try {
+      await changePasswordFormSchema.validate(
+        { currentPassword, newPassword, confirmPassword },
+        { abortEarly: false }
+      )
+    } catch (e: unknown) {
+      if (e instanceof yup.ValidationError) {
+        const next: PasswordFormErrors = {}
+        if (e.inner.length > 0) {
+          for (const err of e.inner) {
+            const p = err.path as keyof PasswordFormErrors | undefined
+            if (p && next[p] === undefined) next[p] = err.message
+          }
+        } else if (e.path) {
+          next[e.path as keyof PasswordFormErrors] = e.message
+        }
+        setPasswordErrors(next)
+        return
+      }
+      throw e
     }
-    if (newPassword !== confirmPassword) {
-      toast.error('New password and confirm password must match.')
+
+    const token =
+      typeof window !== 'undefined'
+        ? sessionStorage.getItem('authToken') || sessionStorage.getItem('token')
+        : null
+    if (!token) {
+      toast.error('You are not signed in. Please log in again.')
       return
     }
 
     try {
-      const result = await changePassword({ currentPassword, newPassword, confirmPassword }).unwrap()
-      toast.success(result?.message || 'Password changed successfully.')
+      const payload: { currentPassword: string; newPassword: string; confirmPassword?: string } = {
+        currentPassword,
+        newPassword,
+      }
+      if (confirmPassword.trim()) {
+        payload.confirmPassword = confirmPassword
+      }
+      await changePassword(payload).unwrap()
+      toast.success('Signed out. Sign in with your new password.')
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-    } catch (err: any) {
-      const errorMessage = err?.data?.error || err?.data?.message || 'Failed to change password.'
+      setPasswordErrors({})
+      await logout()
+    } catch (err: unknown) {
+      const data = err && typeof err === 'object' && 'data' in err ? (err as { data?: unknown }).data : undefined
+      let errorMessage = 'Failed to change password.'
+      if (typeof data === 'string') {
+        errorMessage = data
+      } else if (data && typeof data === 'object') {
+        const o = data as { error?: unknown; message?: unknown }
+        if (typeof o.error === 'string') errorMessage = o.error
+        else if (typeof o.message === 'string') errorMessage = o.message
+        else if (Array.isArray(o.message)) errorMessage = o.message.join(', ')
+      }
       toast.error(errorMessage)
     }
   }
@@ -209,33 +276,115 @@ export default function SettingsPage() {
                 <div className="space-y-3 sm:space-y-4">
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current Password</label>
-                    <input
-                      type="password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder="Enter current password"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showCurrentPassword ? 'text' : 'password'}
+                        value={currentPassword}
+                        onChange={(e) => {
+                          setCurrentPassword(e.target.value)
+                          if (passwordErrors.currentPassword) {
+                            setPasswordErrors((prev) => ({ ...prev, currentPassword: undefined }))
+                          }
+                        }}
+                        placeholder="Enter current password"
+                        autoComplete="current-password"
+                        aria-invalid={!!passwordErrors.currentPassword}
+                        className={`w-full pl-3 pr-10 py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200 ${
+                          passwordErrors.currentPassword
+                            ? 'border-red-500 dark:border-red-500'
+                            : 'border-gray-300 dark:border-gray-600'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPassword((v) => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500"
+                        aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+                      >
+                        {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {passwordErrors.currentPassword ? (
+                      <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                        {passwordErrors.currentPassword}
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New Password</label>
-                    <input
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Enter new password"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => {
+                          setNewPassword(e.target.value)
+                          if (passwordErrors.newPassword || passwordErrors.confirmPassword) {
+                            setPasswordErrors((prev) => ({
+                              ...prev,
+                              newPassword: undefined,
+                              confirmPassword: undefined,
+                            }))
+                          }
+                        }}
+                        placeholder="Enter new password"
+                        autoComplete="new-password"
+                        aria-invalid={!!passwordErrors.newPassword}
+                        className={`w-full pl-3 pr-10 py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200 ${
+                          passwordErrors.newPassword
+                            ? 'border-red-500 dark:border-red-500'
+                            : 'border-gray-300 dark:border-gray-600'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword((v) => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500"
+                        aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {passwordErrors.newPassword ? (
+                      <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                        {passwordErrors.newPassword}
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm New Password</label>
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Confirm new password"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value)
+                          if (passwordErrors.confirmPassword) {
+                            setPasswordErrors((prev) => ({ ...prev, confirmPassword: undefined }))
+                          }
+                        }}
+                        placeholder="Confirm new password"
+                        autoComplete="new-password"
+                        aria-invalid={!!passwordErrors.confirmPassword}
+                        className={`w-full pl-3 pr-10 py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-colors duration-200 ${
+                          passwordErrors.confirmPassword
+                            ? 'border-red-500 dark:border-red-500'
+                            : 'border-gray-300 dark:border-gray-600'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((v) => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500"
+                        aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {passwordErrors.confirmPassword ? (
+                      <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                        {passwordErrors.confirmPassword}
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <button
@@ -247,7 +396,7 @@ export default function SettingsPage() {
                       {isChangingPassword ? 'Changing...' : 'Change Password'}
                     </button>
                   </div>
-                  <div className="flex items-center">
+                  {/* <div className="flex items-center">
                     <input
                       id="two-factor"
                       type="checkbox"
@@ -258,7 +407,7 @@ export default function SettingsPage() {
                     <label htmlFor="two-factor" className="ml-2 block text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                       Enable two-factor authentication
                     </label>
-                  </div>
+                  </div> */}
                 </div>
               </div>
             </div>
