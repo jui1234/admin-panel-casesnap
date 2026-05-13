@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   Building,
@@ -145,6 +145,7 @@ function getAssignableOptionLabel(opt: AssignableOption, currentUserId?: string)
 
 export default function ClientsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const dispatch = useDispatch()
   const { user: currentUser } = useAuth()
   const { data: onboarding } = useGetOnboardingStatusQuery(undefined, { skip: !currentUser })
@@ -177,6 +178,19 @@ export default function ClientsPage() {
   useEffect(() => {
     if (viewTab === 'deleted') setDeletedPaginationModel((p) => ({ ...p, page: 0 }))
   }, [viewTab])
+
+  /** Open client from notification link: /clients?open=<clientId> */
+  useEffect(() => {
+    const raw = searchParams.get('open')
+    if (!raw?.trim()) return
+    const id = raw.trim()
+    if (!id) return
+    setViewId(id)
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('open')
+    const qs = params.toString()
+    router.replace(qs ? `/clients?${qs}` : '/clients', { scroll: false })
+  }, [searchParams, router])
 
   const [assignableSearchInput, setAssignableSearchInput] = useState('')
   const [assignableSearchDebounced, setAssignableSearchDebounced] = useState('')

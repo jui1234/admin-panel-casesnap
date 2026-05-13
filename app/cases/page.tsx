@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   FolderOpen,
@@ -116,6 +116,13 @@ function getClientDisplayName(c: { fullName?: string; firstName?: string; lastNa
   return c.fullName || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || '—'
 }
 
+function isCaseUnassigned(assignedTo: CaseType['assignedTo']): boolean {
+  if (assignedTo == null || assignedTo === '') return true
+  if (typeof assignedTo === 'string') return assignedTo.trim() === ''
+  const id = (assignedTo as { id?: string; _id?: string }).id || (assignedTo as { _id?: string })._id
+  return !id
+}
+
 type AssignableOption = User & { _id?: string }
 type CaseAssigneeOption = CaseAssignee & { _id?: string }
 
@@ -175,6 +182,7 @@ function caseStageToRequest(s: CaseStage): AddCaseStageRequest {
 
 export default function CasesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const dispatch = useDispatch()
   const { user: currentUser } = useAuth()
   const { data: onboarding } = useGetOnboardingStatusQuery(undefined, { skip: !currentUser })
@@ -198,6 +206,10 @@ export default function CasesPage() {
   const [editModalPendingRows, setEditModalPendingRows] = useState<AddCaseStageRequest[]>([])
   const [stageTargetCaseId, setStageTargetCaseId] = useState<string | null>(null)
   const [viewId, setViewId] = useState<string | null>(null)
+  /** Set when opening a case from a notification (`?fromNotification=1`); enables inline assign if unassigned. */
+  const [caseViewFromNotification, setCaseViewFromNotification] = useState(false)
+  const [notificationAssignPick, setNotificationAssignPick] = useState<AssignableOption | null>(null)
+  const [notificationAssignSearch, setNotificationAssignSearch] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteCase, setDeleteCase] = useState<CaseType | null>(null)
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
@@ -218,6 +230,27 @@ export default function CasesPage() {
   useEffect(() => {
     setPaginationModel((p) => ({ ...p, page: 0 }))
   }, [debouncedCaseNumber, caseTypeFilter])
+
+  /** Open case from link: `/cases?open=<id>`; optional `fromNotification=1` for notification assignee flow. */
+  useEffect(() => {
+    const raw = searchParams.get('open')
+    if (!raw?.trim()) return
+    const id = raw.trim()
+    if (!id) return
+    const fromNotification =
+      searchParams.get('fromNotification') === '1' || searchParams.get('fromNotification') === 'true'
+    setViewId(id)
+    setCaseViewFromNotification(fromNotification)
+    if (!fromNotification) {
+      setNotificationAssignPick(null)
+      setNotificationAssignSearch('')
+    }
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('open')
+    params.delete('fromNotification')
+    const qs = params.toString()
+    router.replace(qs ? `/cases?${qs}` : '/cases', { scroll: false })
+  }, [searchParams, router])
 
   const [assignableSearchInput, setAssignableSearchInput] = useState('')
   const [assignableSearchDebounced, setAssignableSearchDebounced] = useState('')
@@ -395,9 +428,9 @@ export default function CasesPage() {
         updatedAt: (u as AssignableOption).updatedAt ?? '',
       })
     }
-    if (editId && singleCase?.assignedTo) pushRef(singleCase.assignedTo)
+    if ((editId || viewId) && singleCase?.assignedTo) pushRef(singleCase.assignedTo)
     return list
-  }, [assignableOptions, editId, singleCase?.assignedTo])
+  }, [assignableOptions, editId, viewId, singleCase?.assignedTo])
 
   const confirmedByOptions = useMemo((): CaseAssigneeOption[] => {
     return (caseAssigneesData?.data ?? []).map((u) => ({ ...u, _id: u._id || u.id }))
@@ -811,10 +844,45 @@ export default function CasesPage() {
   }
 
   const openView = (id: string) => {
+    setCaseViewFromNotification(false)
+    setNotificationAssignPick(null)
+    setNotificationAssignSearch('')
     setViewId(id)
     setOpenAddStage(false)
     resetStageForm()
     closeMenu()
+  }
+
+  const showNotificationInlineAssign =
+    !!caseViewFromNotification &&
+    canShowAssignedTo &&
+    !!viewId &&
+    !!singleCase &&
+    !singleCase.deletedAt &&
+    isCaseUnassigned(singleCase.assignedTo)
+
+  const handleAssignFromNotificationView = async () => {
+    const cid = viewId || singleCase?.id || (singleCase as { _id?: string } | undefined)?._id
+    if (!cid || !notificationAssignPick) {
+      toast.error('Select someone to assign this case to.')
+      return
+    }
+    const assigneeId = notificationAssignPick.id || notificationAssignPick._id
+    if (!assigneeId) return
+    try {
+      await updateCase({ caseId: cid, data: { assignedTo: assigneeId } }).unwrap()
+      toast.success('Case assigned')
+      setNotificationAssignPick(null)
+      setNotificationAssignSearch('')
+      setCaseViewFromNotification(false)
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      toast.error(
+        et?.status === 403
+          ? "You don't have permission to assign this case"
+          : (et?.data?.error ?? et?.data?.message ?? 'Assign failed')
+      )
+    }
   }
   const openEdit = (id: string) => {
     setEditId(id)
@@ -1650,10 +1718,13 @@ export default function CasesPage() {
           open={!!viewId}
           onClose={() => {
             setViewId(null)
+            setCaseViewFromNotification(false)
+            setNotificationAssignPick(null)
+            setNotificationAssignSearch('')
             setOpenAddStage(false)
             resetStageForm()
           }}
-          maxWidth="sm"
+          maxWidth={showNotificationInlineAssign ? 'md' : 'sm'}
           fullWidth
         >
           <DialogTitle>
@@ -1663,6 +1734,9 @@ export default function CasesPage() {
               <IconButton
                 onClick={() => {
                   setViewId(null)
+                  setCaseViewFromNotification(false)
+                  setNotificationAssignPick(null)
+                  setNotificationAssignSearch('')
                   setOpenAddStage(false)
                   resetStageForm()
                 }}
@@ -1682,9 +1756,50 @@ export default function CasesPage() {
                 <Grid item xs={12}><Typography variant="caption" color="text.secondary">Party Name</Typography><Typography variant="body1">{singleCase.partyName || '—'}</Typography></Grid>
                 <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Court Name</Typography><Typography variant="body1">{singleCase.courtName || '—'}</Typography></Grid>
                 <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Court Premises</Typography><Typography variant="body1">{singleCase.courtPremises || '—'}</Typography></Grid>
-                {(canRead || canShowAssignedTo) && (
-                  <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Assigned To</Typography><Typography variant="body1">{getAssignedToName(singleCase.assignedTo)}</Typography></Grid>
-                )}
+                {(canRead || canShowAssignedTo) &&
+                  (showNotificationInlineAssign ? (
+                    <Grid item xs={12}>
+                      <Typography variant="caption" color="text.secondary">Assigned To</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1 }}>
+                        No one is assigned yet. Choose who should own this case.
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { sm: 'flex-start' } }}>
+                        <Autocomplete
+                          sx={{ flex: 1, minWidth: 0 }}
+                          componentsProps={autocompletePopperInDialog}
+                          options={caseAssignableOptions}
+                          getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
+                          value={notificationAssignPick}
+                          onChange={(_, v) => {
+                            setNotificationAssignPick(v)
+                            setNotificationAssignSearch(v ? getAssignableOptionLabel(v, currentUser?.id) : '')
+                          }}
+                          inputValue={notificationAssignSearch}
+                          onInputChange={(_, v, reason) => {
+                            if (reason === 'input' || reason === 'clear') setNotificationAssignSearch(v)
+                          }}
+                          loading={assignableLoading}
+                          renderInput={(params) => (
+                            <TextField {...params} label="Assign to" placeholder="Search by name or email..." />
+                          )}
+                          isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || (v as { _id?: string })?._id)}
+                        />
+                        <Button
+                          variant="contained"
+                          onClick={() => void handleAssignFromNotificationView()}
+                          disabled={updating || !notificationAssignPick}
+                          sx={{ flexShrink: 0, alignSelf: { xs: 'stretch', sm: 'center' } }}
+                        >
+                          {updating ? 'Saving…' : 'Assign'}
+                        </Button>
+                      </Box>
+                    </Grid>
+                  ) : (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="text.secondary">Assigned To</Typography>
+                      <Typography variant="body1">{getAssignedToName(singleCase.assignedTo)}</Typography>
+                    </Grid>
+                  ))}
                 {canShowAssignedTo && (
                   <Grid item xs={12}><Typography variant="caption" color="text.secondary">Linked Clients</Typography><Typography variant="body1">{getLinkedClientsLineForDetail(singleCase)}</Typography></Grid>
                 )}
@@ -1758,11 +1873,14 @@ export default function CasesPage() {
           </DialogContent>
           <DialogActions>
             {singleCase?.deletedAt && canUpdate && (
-              <Button variant="contained" color="success" startIcon={<RotateCcw size={16} />} onClick={async () => { if (singleCase && (await handleRestore(singleCase))) setViewId(null) }} disabled={restoring}>Restore</Button>
+              <Button variant="contained" color="success" startIcon={<RotateCcw size={16} />} onClick={async () => { if (singleCase && (await handleRestore(singleCase))) { setViewId(null); setCaseViewFromNotification(false); setNotificationAssignPick(null); setNotificationAssignSearch('') } }} disabled={restoring}>Restore</Button>
             )}
             <Button
               onClick={() => {
                 setViewId(null)
+                setCaseViewFromNotification(false)
+                setNotificationAssignPick(null)
+                setNotificationAssignSearch('')
                 setOpenAddStage(false)
                 resetStageForm()
               }}

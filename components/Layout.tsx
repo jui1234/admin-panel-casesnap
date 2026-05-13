@@ -121,12 +121,13 @@ function formatNotificationTime(createdAt: string): string {
   }
 }
 
-/** Build link from relatedEntityType and relatedEntityId (e.g. /clients/client_abc) */
+/** Deep-link to list pages: opens view dialog via ?open= (no /cases/[id] route exists). */
 function getNotificationLink(relatedEntityType?: string, relatedEntityId?: string): string | null {
   if (!relatedEntityId || !relatedEntityType) return null
   const type = relatedEntityType.toLowerCase()
-  if (type === 'client') return `/clients/${relatedEntityId}`
-  if (type === 'case') return `/cases/${relatedEntityId}`
+  const id = encodeURIComponent(relatedEntityId)
+  if (type === 'client' || type === 'clients') return `/clients?open=${id}`
+  if (type === 'case' || type === 'cases') return `/cases?open=${id}&fromNotification=1`
   return null
 }
 
