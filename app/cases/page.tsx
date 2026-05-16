@@ -192,6 +192,7 @@ export default function CasesPage() {
   const [caseNumberSearch, setCaseNumberSearch] = useState('')
   const [debouncedCaseNumber, setDebouncedCaseNumber] = useState('')
   const [caseTypeFilter, setCaseTypeFilter] = useState<string>('')
+  const [assignmentFilter, setAssignmentFilter] = useState<'assigned' | 'unassigned' | ''>('')
   const [viewTab, setViewTab] = useState<'active' | 'archived' | 'deleted'>('active')
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
   const [deletedPaginationModel, setDeletedPaginationModel] = useState({ page: 0, pageSize: 10 })
@@ -229,7 +230,7 @@ export default function CasesPage() {
 
   useEffect(() => {
     setPaginationModel((p) => ({ ...p, page: 0 }))
-  }, [debouncedCaseNumber, caseTypeFilter])
+  }, [debouncedCaseNumber, caseTypeFilter, assignmentFilter])
 
   /** Open case from link: `/cases?open=<id>`; optional `fromNotification=1` for notification assignee flow. */
   useEffect(() => {
@@ -326,7 +327,7 @@ export default function CasesPage() {
 
   useEffect(() => {
     setRowSelectionModel([])
-  }, [viewTab, debouncedCaseNumber, caseTypeFilter, paginationModel.page, paginationModel.pageSize, deletedPaginationModel.page, deletedPaginationModel.pageSize])
+  }, [viewTab, debouncedCaseNumber, caseTypeFilter, assignmentFilter, paginationModel.page, paginationModel.pageSize, deletedPaginationModel.page, deletedPaginationModel.pageSize])
 
   const isDeletedView = viewTab === 'deleted'
   const casesParams = useMemo((): GetCasesRequest => {
@@ -342,8 +343,9 @@ export default function CasesPage() {
     const ct = caseTypeFilter?.trim()
     if (cn) p.caseNumber = cn
     if (ct) p.caseType = ct
+    if (assignmentFilter) p.assignmentFilter = assignmentFilter
     return p
-  }, [isDeletedView, paginationModel.page, paginationModel.pageSize, viewTab, debouncedCaseNumber, caseTypeFilter])
+  }, [isDeletedView, paginationModel.page, paginationModel.pageSize, viewTab, debouncedCaseNumber, caseTypeFilter, assignmentFilter])
 
   const {
     data: casesRes,
@@ -1274,7 +1276,23 @@ export default function CasesPage() {
                 </Select>
               </FormControl>
             </Grid> */}
-            <Grid item xs={12} sm={6} md={5} />
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth size="small">
+                <InputLabel shrink>Assignment</InputLabel>
+                <Select
+                  value={assignmentFilter}
+                  label="Assignment"
+                  onChange={(e) => setAssignmentFilter(e.target.value as 'assigned' | 'unassigned' | '')}
+                  displayEmpty
+                  renderValue={(v) => (v === 'assigned' ? 'Assigned' : v === 'unassigned' ? 'Unassigned' : 'All cases')}
+                >
+                  <MenuItem value=""><em>All cases</em></MenuItem>
+                  <MenuItem value="assigned">Assigned</MenuItem>
+                  <MenuItem value="unassigned">Unassigned</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2} />
           </Grid>
         </Box>
 

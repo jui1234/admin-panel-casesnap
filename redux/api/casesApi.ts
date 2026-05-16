@@ -124,6 +124,7 @@ export interface GetCasesRequest {
   limit?: number
   status?: 'active' | 'archived'
   assignedTo?: string
+  assignmentFilter?: 'assigned' | 'unassigned'
   search?: string
   caseType?: string
   caseNumber?: string
@@ -257,6 +258,7 @@ export const casesApi = createApi({
           if (p.limit != null) q.limit = p.limit
           if (p.status) q.status = p.status
           if (p.assignedTo) q.assignedTo = p.assignedTo
+          if (p.assignmentFilter) q.assignmentFilter = p.assignmentFilter
           if (p.search) q.search = p.search
           if (p.caseType) q.caseType = p.caseType
           if (p.caseNumber) q.caseNumber = p.caseNumber
