@@ -66,6 +66,8 @@ export interface CreateClientResponse {
   warning?: string
 }
 
+export type AssignmentFilter = 'assigned' | 'unassigned'
+
 export interface GetClientsRequest {
   page?: number
   limit?: number
@@ -75,6 +77,7 @@ export interface GetClientsRequest {
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
   includeDeleted?: boolean
+  assignmentFilter?: AssignmentFilter
 }
 
 export interface GetClientsResponse {
@@ -187,6 +190,7 @@ export const clientsApi = createApi({
           if (p.sortBy) q.sortBy = p.sortBy
           if (p.sortOrder) q.sortOrder = p.sortOrder
           if (p.includeDeleted != null) q.includeDeleted = p.includeDeleted ? 'true' : 'false'
+          if (p.assignmentFilter) q.assignmentFilter = p.assignmentFilter
         }
         return { url: 'api/clients', method: 'GET', params: Object.keys(q).length ? q : undefined }
       },
