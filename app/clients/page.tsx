@@ -56,6 +56,8 @@ import {
   Autocomplete,
   Tabs,
   Tab,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material'
 
 const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), {
@@ -73,6 +75,7 @@ import {
   useBulkAssignClientsMutation,
   type Client,
   type ClientStatus,
+  type AssignmentFilter,
   type CreateClientRequest,
   type UpdateClientRequest,
 } from '@/redux/api/clientsApi'
@@ -157,6 +160,7 @@ export default function ClientsPage() {
   const [viewTab, setViewTab] = useState<'active' | 'archived' | 'deleted'>('active')
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
   const [deletedPaginationModel, setDeletedPaginationModel] = useState({ page: 0, pageSize: 10 })
+  const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter | 'all'>('all')
 
   const [openCreate, setOpenCreate] = useState(false)
   const [openExcelImport, setOpenExcelImport] = useState(false)
@@ -178,6 +182,10 @@ export default function ClientsPage() {
   useEffect(() => {
     if (viewTab === 'deleted') setDeletedPaginationModel((p) => ({ ...p, page: 0 }))
   }, [viewTab])
+
+  useEffect(() => {
+    setPaginationModel((p) => ({ ...p, page: 0 }))
+  }, [assignmentFilter])
 
   /** Open client from notification link: /clients?open=<clientId> */
   useEffect(() => {
@@ -228,6 +236,7 @@ export default function ClientsPage() {
     sortBy: 'createdAt',
     sortOrder: 'desc' as const,
     includeDeleted: isDeletedView ? true : undefined,
+    assignmentFilter: (!isDeletedView && assignmentFilter !== 'all') ? assignmentFilter : undefined,
   }
 
   const {
@@ -950,7 +959,11 @@ export default function ClientsPage() {
                   startIcon={<Download size={18} />}
                   onClick={async () => {
                     try {
-                      await downloadExcelFile('/api/clients/excel/export', 'clients-export.xlsx')
+                      const exportPath =
+                        assignmentFilter !== 'all'
+                          ? `/api/clients/excel/export?assignmentFilter=${assignmentFilter}`
+                          : '/api/clients/excel/export'
+                      await downloadExcelFile(exportPath, 'clients-export.xlsx')
                     } catch (e) {
                       toast.error(e instanceof Error ? e.message : 'Export failed')
                     }
@@ -1048,7 +1061,21 @@ export default function ClientsPage() {
                   }}
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={8} />
+              {canShowAssignedTo && !isDeletedView && (
+                <Grid item xs={12} sm={6} md={8} sx={{ display: 'flex', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={assignmentFilter}
+                    onChange={(_, val) => { if (val !== null) setAssignmentFilter(val) }}
+                    aria-label="Assignment filter"
+                  >
+                    <ToggleButton value="all">All</ToggleButton>
+                    <ToggleButton value="assigned">Assigned</ToggleButton>
+                    <ToggleButton value="unassigned">Unassigned</ToggleButton>
+                  </ToggleButtonGroup>
+                </Grid>
+              )}
             </Grid>
           </Box>
 

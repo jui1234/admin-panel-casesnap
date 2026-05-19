@@ -57,6 +57,8 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material'
 import {
   useGetCasesQuery,
@@ -192,7 +194,7 @@ export default function CasesPage() {
   const [caseNumberSearch, setCaseNumberSearch] = useState('')
   const [debouncedCaseNumber, setDebouncedCaseNumber] = useState('')
   const [caseTypeFilter, setCaseTypeFilter] = useState<string>('')
-  const [assignmentFilter, setAssignmentFilter] = useState<'assigned' | 'unassigned' | ''>('')
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
   const [viewTab, setViewTab] = useState<'active' | 'archived' | 'deleted'>('active')
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
   const [deletedPaginationModel, setDeletedPaginationModel] = useState({ page: 0, pageSize: 10 })
@@ -343,7 +345,7 @@ export default function CasesPage() {
     const ct = caseTypeFilter?.trim()
     if (cn) p.caseNumber = cn
     if (ct) p.caseType = ct
-    if (assignmentFilter) p.assignmentFilter = assignmentFilter
+    if (assignmentFilter !== 'all') p.assignmentFilter = assignmentFilter as 'assigned' | 'unassigned'
     return p
   }, [isDeletedView, paginationModel.page, paginationModel.pageSize, viewTab, debouncedCaseNumber, caseTypeFilter, assignmentFilter])
 
@@ -1276,23 +1278,21 @@ export default function CasesPage() {
                 </Select>
               </FormControl>
             </Grid> */}
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel shrink>Assignment</InputLabel>
-                <Select
+            {canShowAssignedTo && !isDeletedView && (
+              <Grid item xs={12} sm={6} md={8} sx={{ display: 'flex', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
                   value={assignmentFilter}
-                  label="Assignment"
-                  onChange={(e) => setAssignmentFilter(e.target.value as 'assigned' | 'unassigned' | '')}
-                  displayEmpty
-                  renderValue={(v) => (v === 'assigned' ? 'Assigned' : v === 'unassigned' ? 'Unassigned' : 'All cases')}
+                  onChange={(_, val) => { if (val !== null) setAssignmentFilter(val) }}
+                  aria-label="Assignment filter"
                 >
-                  <MenuItem value=""><em>All cases</em></MenuItem>
-                  <MenuItem value="assigned">Assigned</MenuItem>
-                  <MenuItem value="unassigned">Unassigned</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2} />
+                  <ToggleButton value="all">All</ToggleButton>
+                  <ToggleButton value="assigned">Assigned</ToggleButton>
+                  <ToggleButton value="unassigned">Unassigned</ToggleButton>
+                </ToggleButtonGroup>
+              </Grid>
+            )}
           </Grid>
         </Box>
 
