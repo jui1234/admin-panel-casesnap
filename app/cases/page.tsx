@@ -220,6 +220,7 @@ export default function CasesPage() {
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([])
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
   const [bulkAssignAssignee, setBulkAssignAssignee] = useState<AssignableOption | null>(null)
+  const [unsavedStageConfirmOpen, setUnsavedStageConfirmOpen] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedCaseNumber(caseNumberSearch), 400)
@@ -352,6 +353,7 @@ export default function CasesPage() {
   const {
     data: casesRes,
     isLoading: casesLoading,
+    isFetching: casesFetching,
     error: casesError,
     refetch: refetchCases,
   } = useGetCasesQuery(casesParams)
@@ -609,6 +611,96 @@ export default function CasesPage() {
 
   const handleEditSubmit = async () => {
     if (!editId || !canUpdate) return
+    const e: Record<string, string> = {}
+    const payload: UpdateCaseRequest = { ...editForm }
+    const cc = payload.clientCount ?? 1
+    const cl = payload.clients ?? []
+    if (cl.length > cc) e.clients = `Cannot link more than ${cc} client(s)`
+    setEditErrors(e)
+    if (Object.keys(e).length) return
+
+    const hasUnsavedForm = showEditStages && !editStageRowId && !!(
+      stageForm.stageName.trim() || stageForm.todaySummary.trim() || stageForm.nextDate ||
+      stageForm.nextDatePurpose.trim() || stageForm.nextDatePreparation.trim() || stageForm.confirmedBy
+    )
+    if (hasUnsavedForm || editModalPendingRows.length > 0) {
+      setUnsavedStageConfirmOpen(true)
+      return
+    }
+
+    if (!canShowAssignedTo) {
+      delete payload.assignedTo
+      delete payload.clientCount
+      delete payload.clients
+    }
+    try {
+      await updateCase({ caseId: editId, data: payload }).unwrap()
+      toast.success('Case updated')
+      setEditId(null)
+      setEditForm({})
+      resetEditStageSection()
+      refetchCases()
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      toast.error(et?.status === 403 ? "You don't have permission" : (et?.data?.error ?? et?.data?.message ?? 'Update failed'))
+    }
+  }
+
+  const handleUnsavedStageConfirmYes = async () => {
+    if (!editId || !canUpdate) return
+    setUnsavedStageConfirmOpen(false)
+
+    const hasUnsavedForm = showEditStages && !editStageRowId && !!(
+      stageForm.stageName.trim() || stageForm.todaySummary.trim() || stageForm.nextDate ||
+      stageForm.nextDatePurpose.trim() || stageForm.nextDatePreparation.trim() || stageForm.confirmedBy
+    )
+
+    let stagesToSave = [...editModalPendingRows]
+    if (hasUnsavedForm) {
+      if (!validateStageForm()) return
+      stagesToSave = [...stagesToSave, {
+        stageName: stageForm.stageName.trim(),
+        todaySummary: stageForm.todaySummary.trim(),
+        nextDate: stageForm.nextDate,
+        nextDatePurpose: stageForm.nextDatePurpose.trim(),
+        nextDatePreparation: stageForm.nextDatePreparation.trim(),
+        confirmedBy: stageForm.confirmedBy,
+      }]
+    }
+
+    const e: Record<string, string> = {}
+    const payload: UpdateCaseRequest = { ...editForm }
+    const cc = payload.clientCount ?? 1
+    const cl = payload.clients ?? []
+    if (cl.length > cc) e.clients = `Cannot link more than ${cc} client(s)`
+    setEditErrors(e)
+    if (Object.keys(e).length) return
+    if (!canShowAssignedTo) {
+      delete payload.assignedTo
+      delete payload.clientCount
+      delete payload.clients
+    }
+    const caseId = editId
+    try {
+      await updateCase({ caseId, data: payload }).unwrap()
+      if (stagesToSave.length > 0) {
+        await addCaseStage({ caseId, data: stagesToSave.length === 1 ? stagesToSave[0] : stagesToSave }).unwrap()
+      }
+      toast.success('Case and stage saved')
+      setEditId(null)
+      setEditForm({})
+      resetEditStageSection()
+      refetchCases()
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      toast.error(et?.status === 403 ? "You don't have permission" : (et?.data?.error ?? et?.data?.message ?? 'Update failed'))
+    }
+  }
+
+  const handleUnsavedStageConfirmNo = async () => {
+    if (!editId || !canUpdate) return
+    setUnsavedStageConfirmOpen(false)
+
     const e: Record<string, string> = {}
     const payload: UpdateCaseRequest = { ...editForm }
     const cc = payload.clientCount ?? 1
@@ -1315,7 +1407,7 @@ export default function CasesPage() {
 
         <Card sx={{ p: 0 }}>
         <Box sx={{ height: 600, width: '100%' }}>
-          {casesLoading ? (
+          {(casesLoading || casesFetching) ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
               <CircularProgress />
             </Box>
@@ -2516,6 +2608,28 @@ export default function CasesPage() {
               Cancel
             </Button>
             <Button variant="contained" onClick={handleEditSubmit} disabled={updating}>Save</Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Unsaved Stage Confirmation */}
+        <Dialog open={unsavedStageConfirmOpen} onClose={() => setUnsavedStageConfirmOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle>Unsaved Stage Data</DialogTitle>
+          <DialogContent>
+            <Typography variant="body1">
+              You have unsaved stage information. Do you want to save the stage along with the case?
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Select <strong>Yes, Save Stage</strong> to save both the case and the stage. Select <strong>No, Skip Stage</strong> to save only the case details.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setUnsavedStageConfirmOpen(false)}>Go Back</Button>
+            <Button onClick={handleUnsavedStageConfirmNo} disabled={updating || addingStage}>
+              No, Skip Stage
+            </Button>
+            <Button variant="contained" onClick={handleUnsavedStageConfirmYes} disabled={updating || addingStage}>
+              {(updating || addingStage) ? 'Saving…' : 'Yes, Save Stage'}
+            </Button>
           </DialogActions>
         </Dialog>
 

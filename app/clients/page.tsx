@@ -242,6 +242,7 @@ export default function ClientsPage() {
   const {
     data: clientsRes,
     isLoading: clientsLoading,
+    isFetching: clientsFetching,
     error: clientsError,
     refetch: refetchClients,
   } = useGetClientsQuery(clientsParams)
@@ -1098,7 +1099,7 @@ export default function ClientsPage() {
 
           <Card>
             <Box sx={{ height: 600, width: '100%' }}>
-              {clientsLoading ? (
+              {(clientsLoading || clientsFetching) ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                   <CircularProgress />
                 </Box>
