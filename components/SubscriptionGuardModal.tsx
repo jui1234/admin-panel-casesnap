@@ -48,6 +48,9 @@ export default function SubscriptionGuardModal() {
   const pathname = usePathname()
   const [blockedMessage, setBlockedMessage] = useState('')
   const [blockedExpiresAt, setBlockedExpiresAt] = useState<string | undefined>(undefined)
+  const [warningMessage, setWarningMessage] = useState('')
+  const [warningExpiresAt, setWarningExpiresAt] = useState<string | undefined>(undefined)
+  const [dismissedWarning, setDismissedWarning] = useState(false)
 
   const isPublicRoute = useMemo(
     () =>
@@ -80,9 +83,29 @@ export default function SubscriptionGuardModal() {
     if (isBlockedByStatus || isBlockedByDate) {
       setBlockedMessage(isBlockedByDate ? statusToMessage('expired') : statusToMessage(status))
       setBlockedExpiresAt(expiresAt)
+      // clear any expiring-soon warning if user is already blocked
+      setWarningMessage('')
+      setWarningExpiresAt(undefined)
     } else {
       setBlockedMessage('')
       setBlockedExpiresAt(undefined)
+
+      // Show expiring-soon warning if subscription expires within next X days
+      const EXPIRING_SOON_DAYS = 7
+      const now = Date.now()
+      if (expiresAt) {
+        const ts = Date.parse(expiresAt)
+        if (!Number.isNaN(ts)) {
+          const daysLeft = (ts - now) / (1000 * 60 * 60 * 24)
+          if (daysLeft > 0 && daysLeft <= EXPIRING_SOON_DAYS) {
+            setWarningMessage(`Your subscription will expire in ${Math.ceil(daysLeft)} day${Math.ceil(daysLeft) > 1 ? 's' : ''}. Please renew soon.`)
+            setWarningExpiresAt(expiresAt)
+          } else {
+            setWarningMessage('')
+            setWarningExpiresAt(undefined)
+          }
+        }
+      }
     }
   }, [isAuthenticated, isPublicRoute, pathname, user?.subscriptionStatus, user?.subscriptionExpiresAt])
 
@@ -99,8 +122,10 @@ export default function SubscriptionGuardModal() {
   }, [])
 
   const show = !isLoading && isAuthenticated && !isPublicRoute && !!blockedMessage
-  if (!show) return null
+  const showWarning = !isLoading && isAuthenticated && !isPublicRoute && !!warningMessage && !blockedMessage && !dismissedWarning
 
+  if (!show && !showWarning) return null
+   if(show){
   return (
     <div className="fixed inset-0 z-[3000] bg-black/60 backdrop-blur-[1px] flex items-center justify-center p-4">
       <div className="w-full max-w-lg rounded-xl bg-white dark:bg-gray-900 border border-red-200 dark:border-red-900 shadow-2xl p-6">
@@ -138,4 +163,42 @@ export default function SubscriptionGuardModal() {
       </div>
     </div>
   )
+}
+
+  // Non-blocking expiring-soon warning popup
+  if (showWarning) {
+    return (
+      <div className="fixed bottom-6 right-6 z-[3000] w-full max-w-sm rounded-xl bg-yellow-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 shadow-lg p-4">
+        <div className="flex items-start gap-3">
+          <div className="rounded-full bg-amber-100 dark:bg-amber-900/40 p-2">
+            <CalendarClock className="h-5 w-5 text-amber-700 dark:text-amber-300" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Subscription Expiring Soon</h3>
+            <p className="mt-1 text-xs text-gray-700 dark:text-gray-300">{warningMessage}</p>
+            {warningExpiresAt && (
+              <div className="mt-2 inline-flex items-center gap-2 rounded-md bg-amber-100 dark:bg-amber-900/10 px-3 py-1 text-xs text-amber-700 dark:text-amber-300">
+                <CalendarClock className="h-4 w-4" />
+                Expires at: {new Date(warningExpiresAt).toLocaleString()}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => router.push('/settings')}
+              className="rounded-md bg-yellow-500 px-3 py-1 text-xs font-medium text-gray-900 hover:bg-yellow-600"
+            >
+              Renew
+            </button>
+            <button
+              onClick={() => setDismissedWarning(true)}
+              className="rounded-md px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 }
