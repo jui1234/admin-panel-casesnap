@@ -26,6 +26,7 @@ import {
   Package,
   KeyRound,
   FolderOpen,
+  CreditCard,
   Upload,
   Briefcase,
   CalendarClock,
@@ -100,6 +101,7 @@ const staticTopNavigation = [
 
 const staticBottomNavigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
+   { name: 'Subscription', href: '/subscription', icon: CreditCard },
 ]
 
 // Maps every backend notification type to an icon component

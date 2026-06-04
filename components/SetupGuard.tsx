@@ -22,6 +22,7 @@ function isPublicPath(pathname: string | null) {
     '/blog',
     '/employees/register',
     '/users/register',
+    '/subscription'
   ]
   return prefixes.some((p) => pathname.startsWith(p))
 }

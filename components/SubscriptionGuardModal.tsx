@@ -58,9 +58,12 @@ export default function SubscriptionGuardModal() {
       pathname.startsWith('/setup') ||
       pathname.startsWith('/get-started') ||
       pathname.startsWith('/users/register') ||
-      pathname.startsWith('/employees/register'),
+      pathname.startsWith('/employees/register') ||
+      pathname.startsWith('/subscription'),
     [pathname]
   )
+
+  const isSubscriptionPage = pathname.startsWith('/subscription')
 
   useEffect(() => {
     if (!isAuthenticated || isPublicRoute) {
