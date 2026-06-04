@@ -18,6 +18,7 @@ const protectedPaths = [
   '/reports',
   '/analytics',
   '/settings',
+  '/subscription',
 ]
 
 function isProtectedPath(pathname: string) {

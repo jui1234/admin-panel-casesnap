@@ -55,9 +55,12 @@ export default function SubscriptionGuardModal() {
       pathname.startsWith('/setup') ||
       pathname.startsWith('/get-started') ||
       pathname.startsWith('/users/register') ||
-      pathname.startsWith('/employees/register'),
+      pathname.startsWith('/employees/register') ||
+      pathname.startsWith('/subscription'),
     [pathname]
   )
+
+  const isSubscriptionPage = pathname.startsWith('/subscription')
 
   useEffect(() => {
     if (!isAuthenticated || isPublicRoute) {
@@ -98,7 +101,7 @@ export default function SubscriptionGuardModal() {
     return () => window.removeEventListener(SUBSCRIPTION_BLOCK_EVENT, onBlocked as EventListener)
   }, [])
 
-  const show = !isLoading && isAuthenticated && !isPublicRoute && !!blockedMessage
+  const show = !isLoading && isAuthenticated && !isPublicRoute &&  !isSubscriptionPage && !!blockedMessage
   if (!show) return null
 
   return (

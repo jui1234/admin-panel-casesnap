@@ -25,7 +25,8 @@ import {
   UserCog,
   Package,
   KeyRound,
-  FolderOpen
+  FolderOpen,
+  CreditCard
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -87,6 +88,7 @@ const staticTopNavigation = [
 
 const staticBottomNavigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
+   { name: 'Subscription', href: '/subscription', icon: CreditCard },
 ]
 
 const NOTIFICATION_TYPE_ICON: Record<string, typeof CheckCircle> = {
