@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   Building,
@@ -22,10 +22,11 @@ import {
   Download,
   Trash2,
   Calendar,
+  UserCog,
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
-import type { GridColDef } from '@mui/x-data-grid'
+import type { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import {
   Box,
   Button,
@@ -55,6 +56,8 @@ import {
   Autocomplete,
   Tabs,
   Tab,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material'
 
 const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), {
@@ -69,8 +72,10 @@ import {
   useRestoreClientMutation,
   useArchiveClientMutation,
   useUnarchiveClientMutation,
+  useBulkAssignClientsMutation,
   type Client,
   type ClientStatus,
+  type AssignmentFilter,
   type CreateClientRequest,
   type UpdateClientRequest,
 } from '@/redux/api/clientsApi'
@@ -143,6 +148,7 @@ function getAssignableOptionLabel(opt: AssignableOption, currentUserId?: string)
 
 export default function ClientsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const dispatch = useDispatch()
   const { user: currentUser } = useAuth()
   const { data: onboarding } = useGetOnboardingStatusQuery(undefined, { skip: !currentUser })
@@ -154,6 +160,7 @@ export default function ClientsPage() {
   const [viewTab, setViewTab] = useState<'active' | 'archived' | 'deleted'>('active')
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
   const [deletedPaginationModel, setDeletedPaginationModel] = useState({ page: 0, pageSize: 10 })
+  const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter | 'all'>('all')
 
   const [openCreate, setOpenCreate] = useState(false)
   const [openExcelImport, setOpenExcelImport] = useState(false)
@@ -163,6 +170,9 @@ export default function ClientsPage() {
   const [deleteClient, setDeleteClient] = useState<Client | null>(null)
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [menuClient, setMenuClient] = useState<Client | null>(null)
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([])
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
+  const [bulkAssignAssignee, setBulkAssignAssignee] = useState<AssignableOption | null>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 500)
@@ -172,6 +182,23 @@ export default function ClientsPage() {
   useEffect(() => {
     if (viewTab === 'deleted') setDeletedPaginationModel((p) => ({ ...p, page: 0 }))
   }, [viewTab])
+
+  useEffect(() => {
+    setPaginationModel((p) => ({ ...p, page: 0 }))
+  }, [assignmentFilter])
+
+  /** Open client from notification link: /clients?open=<clientId> */
+  useEffect(() => {
+    const raw = searchParams.get('open')
+    if (!raw?.trim()) return
+    const id = raw.trim()
+    if (!id) return
+    setViewId(id)
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('open')
+    const qs = params.toString()
+    router.replace(qs ? `/clients?${qs}` : '/clients', { scroll: false })
+  }, [searchParams, router])
 
   const [assignableSearchInput, setAssignableSearchInput] = useState('')
   const [assignableSearchDebounced, setAssignableSearchDebounced] = useState('')
@@ -189,6 +216,14 @@ export default function ClientsPage() {
     if (openCreate || editId) setAssignableSearchInput('')
   }, [openCreate, editId])
 
+  useEffect(() => {
+    if (bulkAssignOpen) setAssignableSearchInput('')
+  }, [bulkAssignOpen])
+
+  useEffect(() => {
+    setRowSelectionModel([])
+  }, [viewTab, debouncedSearch, paginationModel.page, paginationModel.pageSize, deletedPaginationModel.page, deletedPaginationModel.pageSize])
+
   const isDeletedView = viewTab === 'deleted'
   const status: ClientStatus | undefined =
     isDeletedView ? undefined : viewTab === 'active' ? 'active' : viewTab === 'archived' ? 'archived' : undefined
@@ -201,14 +236,18 @@ export default function ClientsPage() {
     sortBy: 'createdAt',
     sortOrder: 'desc' as const,
     includeDeleted: isDeletedView ? true : undefined,
+    assignmentFilter: (!isDeletedView && assignmentFilter !== 'all') ? assignmentFilter : undefined,
   }
 
   const {
     data: clientsRes,
     isLoading: clientsLoading,
+    isFetching: clientsFetching,
     error: clientsError,
     refetch: refetchClients,
   } = useGetClientsQuery(clientsParams)
+
+  const [bulkAssignClients, { isLoading: bulkAssigning }] = useBulkAssignClientsMutation()
 
   const rawClients = clientsRes?.data ?? []
   const deletedClients = rawClients.filter((c) => c.deletedAt != null)
@@ -455,7 +494,7 @@ export default function ClientsPage() {
         await new Promise((r) => setTimeout(r, 100))
         const formData = new FormData()
         formData.append('file', aadharFile)
-        const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || localStorage.getItem('token') : ''
+        const token = typeof window !== 'undefined' ? sessionStorage.getItem('authToken') || sessionStorage.getItem('token') : ''
         const uploadRes = await fetch(UPLOAD_API_URL, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
@@ -517,7 +556,7 @@ export default function ClientsPage() {
         await new Promise((r) => setTimeout(r, 100))
         const formData = new FormData()
         formData.append('file', aadharEditFile)
-        const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') || localStorage.getItem('token') : ''
+        const token = typeof window !== 'undefined' ? sessionStorage.getItem('authToken') || sessionStorage.getItem('token') : ''
         const uploadRes = await fetch(UPLOAD_API_URL, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
@@ -591,6 +630,37 @@ export default function ClientsPage() {
     } catch (err: unknown) {
       const et = err as { status?: number; data?: { error?: string; message?: string } }
       toast.error(et?.status === 403 ? "You don't have permission to restore this client" : (et?.data?.error ?? et?.data?.message ?? 'Restore failed'))
+    }
+  }
+
+  const handleBulkAssign = async () => {
+    if (!canShowAssignedTo) {
+      toast.error("You don't have permission to assign clients")
+      return
+    }
+    const clientIds = rowSelectionModel.map(String).filter(Boolean)
+    if (clientIds.length === 0) {
+      toast.error('Select at least one client')
+      return
+    }
+    const assigneeId = bulkAssignAssignee
+      ? bulkAssignAssignee.id || (bulkAssignAssignee as { _id?: string })._id || ''
+      : null
+    if (bulkAssignAssignee && !assigneeId) {
+      toast.error('Invalid assignee selection')
+      return
+    }
+    try {
+      const res = await bulkAssignClients({ clientIds, assignedTo: assigneeId }).unwrap()
+      toast.success(res.message || 'Assignments updated')
+      setRowSelectionModel([])
+      setBulkAssignOpen(false)
+      setBulkAssignAssignee(null)
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      const msg = et?.data?.error ?? et?.data?.message ?? 'Bulk assign failed'
+      if (et?.status === 403) toast.error("You don't have permission to bulk assign clients")
+      else toast.error(msg)
     }
   }
 
@@ -890,13 +960,30 @@ export default function ClientsPage() {
                   startIcon={<Download size={18} />}
                   onClick={async () => {
                     try {
-                      await downloadExcelFile('/api/clients/excel/export', 'clients-export.xlsx')
+                      const exportPath =
+                        assignmentFilter !== 'all'
+                          ? `/api/clients/excel/export?assignmentFilter=${assignmentFilter}`
+                          : '/api/clients/excel/export'
+                      await downloadExcelFile(exportPath, 'clients-export.xlsx')
                     } catch (e) {
                       toast.error(e instanceof Error ? e.message : 'Export failed')
                     }
                   }}
                 >
                   Export
+                </Button>
+              )}
+              {canShowAssignedTo && !isDeletedView && (
+                <Button
+                  variant="outlined"
+                  startIcon={<UserCog size={18} />}
+                  disabled={rowSelectionModel.length === 0}
+                  onClick={() => {
+                    setBulkAssignAssignee(null)
+                    setBulkAssignOpen(true)
+                  }}
+                >
+                  Bulk assign{rowSelectionModel.length > 0 ? ` (${rowSelectionModel.length})` : ''}
                 </Button>
               )}
               {canCreate && viewTab === 'active' && (
@@ -975,7 +1062,21 @@ export default function ClientsPage() {
                   }}
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={8} />
+              {canShowAssignedTo && !isDeletedView && (
+                <Grid item xs={12} sm={6} md={8} sx={{ display: 'flex', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={assignmentFilter}
+                    onChange={(_, val) => { if (val !== null) setAssignmentFilter(val) }}
+                    aria-label="Assignment filter"
+                  >
+                    <ToggleButton value="all">All</ToggleButton>
+                    <ToggleButton value="assigned">Assigned</ToggleButton>
+                    <ToggleButton value="unassigned">Unassigned</ToggleButton>
+                  </ToggleButtonGroup>
+                </Grid>
+              )}
             </Grid>
           </Box>
 
@@ -998,7 +1099,7 @@ export default function ClientsPage() {
 
           <Card>
             <Box sx={{ height: 600, width: '100%' }}>
-              {clientsLoading ? (
+              {(clientsLoading || clientsFetching) ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                   <CircularProgress />
                 </Box>
@@ -1068,6 +1169,9 @@ export default function ClientsPage() {
                   paginationModel={isDeletedView ? deletedPaginationModel : paginationModel}
                   onPaginationModelChange={isDeletedView ? setDeletedPaginationModel : setPaginationModel}
                   pageSizeOptions={[5, 10, 25, 50]}
+                  checkboxSelection={canShowAssignedTo && !isDeletedView}
+                  rowSelectionModel={rowSelectionModel}
+                  onRowSelectionModelChange={setRowSelectionModel}
                   disableRowSelectionOnClick
                   sx={{ '& .MuiDataGrid-cell:focus': { outline: 'none' } }}
                 />
@@ -1075,6 +1179,34 @@ export default function ClientsPage() {
             </Box>
           </Card>
         </Box>
+
+        <Dialog open={bulkAssignOpen} onClose={() => !bulkAssigning && setBulkAssignOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Bulk assign clients</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {rowSelectionModel.length} client{rowSelectionModel.length === 1 ? '' : 's'} selected (current page only when using checkboxes with server paging). Choose an assignee, or clear the field and apply to remove assignee for all selected.
+            </Typography>
+            {canShowAssignedTo && (
+              <Autocomplete
+                options={assignableOptions}
+                getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
+                value={bulkAssignAssignee}
+                onChange={(_, v) => setBulkAssignAssignee(v)}
+                renderInput={(params) => <TextField {...params} label="Assign to" placeholder="Leave empty to unassign" />}
+                isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || (v as { _id?: string })?._id)}
+                loading={assignableLoading}
+              />
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => !bulkAssigning && setBulkAssignOpen(false)} disabled={bulkAssigning}>
+              Cancel
+            </Button>
+            <Button variant="contained" onClick={handleBulkAssign} disabled={bulkAssigning || rowSelectionModel.length === 0}>
+              {bulkAssigning ? 'Applying…' : 'Apply'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Create Client Modal */}
         <Dialog open={openCreate} onClose={() => !aadharUploading && setOpenCreate(false)} maxWidth="md" fullWidth>

@@ -23,10 +23,10 @@ export default function GetStartedPage() {
   useEffect(() => {
     // Check if organization already exists
     try {
-      const organizationData = localStorage.getItem('organizationData')
+      const organizationData = sessionStorage.getItem('organizationData')
       setHasOrganization(!!organizationData)
     } catch (error) {
-      // localStorage not available
+      // sessionStorage not available
       setHasOrganization(false)
     }
   }, [])
@@ -34,15 +34,15 @@ export default function GetStartedPage() {
   // Auto-redirect if organization exists and user is authenticated
   useEffect(() => {
     try {
-      const authToken = localStorage.getItem('authToken')
-      const organizationData = localStorage.getItem('organizationData')
+      const authToken = sessionStorage.getItem('authToken')
+      const organizationData = sessionStorage.getItem('organizationData')
       
       if (authToken && organizationData) {
         // User is authenticated and organization exists, redirect to cases
         router.replace('/dashboard')
       }
     } catch (error) {
-      // localStorage not available, continue normally
+      // sessionStorage not available, continue normally
     }
   }, [router])
 

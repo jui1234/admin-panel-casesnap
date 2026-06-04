@@ -11,9 +11,9 @@ export default function DashboardPage() {
   const [organizationData, setOrganizationData] = useState<any>(null)
 
   useEffect(() => {
-    // Load organization data from localStorage
+    // Load organization data from sessionStorage
     try {
-      const orgData = localStorage.getItem('organizationData')
+      const orgData = sessionStorage.getItem('organizationData')
       if (orgData) {
         setOrganizationData(JSON.parse(orgData))
       }

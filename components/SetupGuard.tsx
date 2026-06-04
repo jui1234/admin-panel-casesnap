@@ -29,7 +29,7 @@ function isPublicPath(pathname: string | null) {
 
 function hasAuthToken() {
   if (typeof window === 'undefined') return false
-  const t = localStorage.getItem('authToken') || localStorage.getItem('token')
+  const t = sessionStorage.getItem('authToken') || sessionStorage.getItem('token')
   return !!t && t.length > 0
 }
 

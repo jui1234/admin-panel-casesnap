@@ -1,6 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQueryWithSubscriptionGuard } from './baseQuery'
 import { decryptResponseIfNeeded } from '@/utils/responseDecryption'
+import { clientsApi } from './clientsApi'
 
 export const COURT_NAMES = [
   'Supreme Court',
@@ -123,6 +124,7 @@ export interface GetCasesRequest {
   limit?: number
   status?: 'active' | 'archived'
   assignedTo?: string
+  assignmentFilter?: 'assigned' | 'unassigned'
   search?: string
   caseType?: string
   caseNumber?: string
@@ -179,6 +181,30 @@ export interface GetCaseAssigneesResponse {
   data: CaseAssignee[]
 }
 
+/** POST /api/cases/bulk-assign — Mode A: many cases → one assignee (or null to unassign). */
+export interface BulkAssignCasesModeARequest {
+  caseIds: string[]
+  assignedTo?: string | null
+}
+
+export interface BulkAssignCaseGroup {
+  caseIds: string[]
+  assignedTo?: string | null
+}
+
+/** POST /api/cases/bulk-assign — Mode B: several batches in one request. */
+export interface BulkAssignCasesModeBRequest {
+  groups: BulkAssignCaseGroup[]
+}
+
+export type BulkAssignCasesRequest = BulkAssignCasesModeARequest | BulkAssignCasesModeBRequest
+
+export interface BulkAssignCasesResponse {
+  success: boolean
+  message?: string
+  data?: unknown
+}
+
 export interface AddCaseStageRequest {
   stageName: string
   todaySummary: string
@@ -232,6 +258,7 @@ export const casesApi = createApi({
           if (p.limit != null) q.limit = p.limit
           if (p.status) q.status = p.status
           if (p.assignedTo) q.assignedTo = p.assignedTo
+          if (p.assignmentFilter) q.assignmentFilter = p.assignmentFilter
           if (p.search) q.search = p.search
           if (p.caseType) q.caseType = p.caseType
           if (p.caseNumber) q.caseNumber = p.caseNumber
@@ -251,6 +278,14 @@ export const casesApi = createApi({
               { type: 'Cases', id: 'LIST' },
             ]
           : [{ type: 'Cases', id: 'LIST' }],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled
+          dispatch(clientsApi.util.invalidateTags([{ type: 'Clients', id: 'LIST' }]))
+        } catch {
+          /* list failed — skip */
+        }
+      },
     }),
 
     getCaseById: builder.query<GetCaseResponse, { caseId: string }>({
@@ -355,6 +390,18 @@ export const casesApi = createApi({
       },
       invalidatesTags: (r, e, { caseId }) => [{ type: 'Cases', id: caseId }, { type: 'Cases', id: 'LIST' }],
     }),
+
+    bulkAssignCases: builder.mutation<BulkAssignCasesResponse, BulkAssignCasesRequest>({
+      query: (body) => ({
+        url: 'api/cases/bulk-assign',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: async (response: BulkAssignCasesResponse & { encrypted?: boolean; iv?: string; authTag?: string }) => {
+        return await decryptResponseIfNeeded(response)
+      },
+      invalidatesTags: ['Cases'],
+    }),
   }),
 })
 
@@ -373,4 +420,5 @@ export const {
   useAddCaseStageMutation,
   useUpdateCaseStageMutation,
   useConfirmCaseStageMutation,
+  useBulkAssignCasesMutation,
 } = casesApi

@@ -1,23 +1,31 @@
 import { createApi } from '@reduxjs/toolkit/query/react'
 import { baseQueryWithSubscriptionGuard } from './baseQuery'
 
-export type NotificationType = 'success' | 'info' | 'warning' | 'error' | 'client' | 'case'
+export type NotificationType =
+  | 'success' | 'info' | 'warning' | 'error'
+  | 'client' | 'case'
+  | 'client_created' | 'client_assigned' | 'client_bulk_imported'
+  | 'case_created' | 'case_assigned' | 'case_bulk_imported'
+  | 'case_stage_needs_confirmation'
+  | 'case_stage_reminder_5_days' | 'case_stage_reminder_2_days' | 'case_stage_reminder_1_day'
+  | 'case_stage_followup_after_date'
 
 export interface Notification {
-  id: string
+  /** MongoDB _id from the backend */
+  _id?: string
+  /** Some responses may map _id → id */
+  id?: string
   type: NotificationType
   title: string
   message: string
   read: boolean
+  readAt?: string | null
   createdAt: string
-  /** e.g. client_abc – use with relatedEntityType to link to /clients/client_abc */
   relatedEntityId?: string
-  /** e.g. "client" | "case" – used to build link: /clients/:id or /cases/:id */
   relatedEntityType?: string
 }
 
 export interface GetNotificationsRequest {
-  /** true = only read, false = only unread. Omit = all */
   read?: boolean
   page?: number
   limit?: number
@@ -28,8 +36,12 @@ export interface GetNotificationsResponse {
   data: Notification[]
   count?: number
   total?: number
-  /** Use this for the notification badge */
   unreadCount?: number
+}
+
+export interface UnreadCountResponse {
+  success: boolean
+  unreadCount: number
 }
 
 export interface MarkNotificationReadResponse {
@@ -40,9 +52,9 @@ export interface MarkNotificationReadResponse {
 export const notificationsApi = createApi({
   reducerPath: 'notificationsApi',
   baseQuery: baseQueryWithSubscriptionGuard,
-  tagTypes: ['Notifications'],
+  tagTypes: ['Notifications', 'UnreadCount'],
   endpoints: (builder) => ({
-    /** GET /api/notifications. Use ?read=false for unread only. Use data for list, unreadCount for badge. */
+    /** GET /api/notifications */
     getNotifications: builder.query<GetNotificationsResponse, GetNotificationsRequest | void>({
       query: (params) => {
         const q: Record<string, string | number | boolean> = {}
@@ -60,29 +72,38 @@ export const notificationsApi = createApi({
       providesTags: (result) =>
         result?.data
           ? [
-              ...result.data.map((n) => ({ type: 'Notifications' as const, id: n.id })),
+              ...result.data.map((n) => ({ type: 'Notifications' as const, id: n._id || n.id })),
               { type: 'Notifications', id: 'LIST' },
             ]
           : [{ type: 'Notifications', id: 'LIST' }],
     }),
+
+    /** GET /api/notifications/unread-count */
+    getUnreadCount: builder.query<UnreadCountResponse, void>({
+      query: () => ({ url: 'api/notifications/unread-count', method: 'GET' }),
+      providesTags: [{ type: 'UnreadCount', id: 'BADGE' }],
+    }),
+
     /** PATCH /api/notifications/:id/read */
     markNotificationAsRead: builder.mutation<MarkNotificationReadResponse, { notificationId: string }>({
       query: ({ notificationId }) => ({
         url: `api/notifications/${notificationId}/read`,
         method: 'PATCH',
       }),
-      invalidatesTags: (result, error, { notificationId }) => [
+      invalidatesTags: (_r, _e, { notificationId }) => [
         { type: 'Notifications', id: notificationId },
         { type: 'Notifications', id: 'LIST' },
+        { type: 'UnreadCount', id: 'BADGE' },
       ],
     }),
+
     /** PATCH /api/notifications/read-all */
     markAllNotificationsAsRead: builder.mutation<MarkNotificationReadResponse, void>({
-      query: () => ({
-        url: 'api/notifications/read-all',
-        method: 'PATCH',
-      }),
-      invalidatesTags: [{ type: 'Notifications', id: 'LIST' }],
+      query: () => ({ url: 'api/notifications/read-all', method: 'PATCH' }),
+      invalidatesTags: [
+        { type: 'Notifications', id: 'LIST' },
+        { type: 'UnreadCount', id: 'BADGE' },
+      ],
     }),
   }),
 })
@@ -90,6 +111,7 @@ export const notificationsApi = createApi({
 export const {
   useGetNotificationsQuery,
   useLazyGetNotificationsQuery,
+  useGetUnreadCountQuery,
   useMarkNotificationAsReadMutation,
   useMarkAllNotificationsAsReadMutation,
 } = notificationsApi

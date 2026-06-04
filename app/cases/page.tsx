@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   FolderOpen,
   Plus,
   ListPlus,
   Search,
+  UserCog,
   Eye,
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -24,7 +25,7 @@ import {
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
-import type { GridColDef } from '@mui/x-data-grid'
+import type { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import {
   Box,
   Button,
@@ -56,6 +57,8 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material'
 import {
   useGetCasesQuery,
@@ -70,7 +73,7 @@ import {
   useAddCaseStageMutation,
   useUpdateCaseStageMutation,
   useConfirmCaseStageMutation,
-  COURT_NAMES,
+  useBulkAssignCasesMutation,
   COURT_PREMISES,
   CASE_TYPES,
   type CaseStage,
@@ -81,13 +84,22 @@ import {
   type AddCaseStageRequest,
   type GetCasesRequest,
 } from '@/redux/api/casesApi'
-import { useGetClientsQuery } from '@/redux/api/clientsApi'
+import { useGetClientsQuery, type Client } from '@/redux/api/clientsApi'
 import { useGetAssignableUsersQuery, type User } from '@/redux/api/userApi'
 import { useGetOnboardingStatusQuery, onboardingApi } from '@/redux/api/onboardingApi'
 import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
 import ExcelImportDialog from '@/components/ExcelImportDialog'
 import { downloadExcelFile } from '@/utils/excelApi'
+import { extractLinkedClientIdsFromCase } from '@/utils/caseClientIds'
+
+/** Court premises dropdown lists template values plus any value already stored (import / legacy). */
+function premisesMenuIncludingValue(value?: string | null): string[] {
+  const set = new Set<string>([...COURT_PREMISES])
+  const v = value?.trim()
+  if (v) set.add(v)
+  return Array.from(set)
+}
 
 const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), {
   ssr: false,
@@ -104,6 +116,13 @@ function getClientDisplayName(c: { fullName?: string; firstName?: string; lastNa
   if (!c) return '—'
   if (typeof c === 'string') return c
   return c.fullName || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || '—'
+}
+
+function isCaseUnassigned(assignedTo: CaseType['assignedTo']): boolean {
+  if (assignedTo == null || assignedTo === '') return true
+  if (typeof assignedTo === 'string') return assignedTo.trim() === ''
+  const id = (assignedTo as { id?: string; _id?: string }).id || (assignedTo as { _id?: string })._id
+  return !id
 }
 
 type AssignableOption = User & { _id?: string }
@@ -124,6 +143,16 @@ function getConfirmedByName(v: string | { firstName?: string; lastName?: string;
 function getCaseStageId(s: CaseStage): string | undefined {
   return s.id || s._id
 }
+
+/** Keeps single-select Autocomplete listboxes in-dialog; multi-select Linked Clients uses portal + ListboxProps to avoid backdrop closes. */
+const autocompletePopperInDialog = { popper: { disablePortal: true } as const }
+
+/** Prevents focus moving to the list before click, which can confuse `Dialog` + portaled listbox (backdrop click / close). */
+const linkedClientsListboxProps = {
+  onMouseDown: (e: { preventDefault: () => void }) => {
+    e.preventDefault()
+  },
+} as const
 
 function getStageConfirmedByUserId(s: CaseStage): string | undefined {
   const v = s.confirmedBy
@@ -155,6 +184,7 @@ function caseStageToRequest(s: CaseStage): AddCaseStageRequest {
 
 export default function CasesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const dispatch = useDispatch()
   const { user: currentUser } = useAuth()
   const { data: onboarding } = useGetOnboardingStatusQuery(undefined, { skip: !currentUser })
@@ -164,6 +194,7 @@ export default function CasesPage() {
   const [caseNumberSearch, setCaseNumberSearch] = useState('')
   const [debouncedCaseNumber, setDebouncedCaseNumber] = useState('')
   const [caseTypeFilter, setCaseTypeFilter] = useState<string>('')
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
   const [viewTab, setViewTab] = useState<'active' | 'archived' | 'deleted'>('active')
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
   const [deletedPaginationModel, setDeletedPaginationModel] = useState({ page: 0, pageSize: 10 })
@@ -178,10 +209,18 @@ export default function CasesPage() {
   const [editModalPendingRows, setEditModalPendingRows] = useState<AddCaseStageRequest[]>([])
   const [stageTargetCaseId, setStageTargetCaseId] = useState<string | null>(null)
   const [viewId, setViewId] = useState<string | null>(null)
+  /** Set when opening a case from a notification (`?fromNotification=1`); enables inline assign if unassigned. */
+  const [caseViewFromNotification, setCaseViewFromNotification] = useState(false)
+  const [notificationAssignPick, setNotificationAssignPick] = useState<AssignableOption | null>(null)
+  const [notificationAssignSearch, setNotificationAssignSearch] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteCase, setDeleteCase] = useState<CaseType | null>(null)
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [menuCase, setMenuCase] = useState<CaseType | null>(null)
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([])
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
+  const [bulkAssignAssignee, setBulkAssignAssignee] = useState<AssignableOption | null>(null)
+  const [unsavedStageConfirmOpen, setUnsavedStageConfirmOpen] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedCaseNumber(caseNumberSearch), 400)
@@ -194,7 +233,28 @@ export default function CasesPage() {
 
   useEffect(() => {
     setPaginationModel((p) => ({ ...p, page: 0 }))
-  }, [debouncedCaseNumber, caseTypeFilter])
+  }, [debouncedCaseNumber, caseTypeFilter, assignmentFilter])
+
+  /** Open case from link: `/cases?open=<id>`; optional `fromNotification=1` for notification assignee flow. */
+  useEffect(() => {
+    const raw = searchParams.get('open')
+    if (!raw?.trim()) return
+    const id = raw.trim()
+    if (!id) return
+    const fromNotification =
+      searchParams.get('fromNotification') === '1' || searchParams.get('fromNotification') === 'true'
+    setViewId(id)
+    setCaseViewFromNotification(fromNotification)
+    if (!fromNotification) {
+      setNotificationAssignPick(null)
+      setNotificationAssignSearch('')
+    }
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('open')
+    params.delete('fromNotification')
+    const qs = params.toString()
+    router.replace(qs ? `/cases?${qs}` : '/cases', { scroll: false })
+  }, [searchParams, router])
 
   const [assignableSearchInput, setAssignableSearchInput] = useState('')
   const [assignableSearchDebounced, setAssignableSearchDebounced] = useState('')
@@ -203,16 +263,55 @@ export default function CasesPage() {
     return () => clearTimeout(t)
   }, [assignableSearchInput])
 
-  const { data: assignableData } = useGetAssignableUsersQuery(
+  const [clientSearchInput, setClientSearchInput] = useState('')
+  const [clientSearchDebounced, setClientSearchDebounced] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setClientSearchDebounced(clientSearchInput), 400)
+    return () => clearTimeout(t)
+  }, [clientSearchInput])
+
+  const { data: assignableData, isFetching: assignableLoading } = useGetAssignableUsersQuery(
     canShowAssignedTo ? { search: assignableSearchDebounced || undefined, limit: 50 } : undefined,
     { skip: !canShowAssignedTo }
   )
 
   const { data: clientsData } = useGetClientsQuery(
-    canShowAssignedTo ? { status: 'active', limit: 200 } : undefined,
-    { skip: !canShowAssignedTo }
+    canShowAssignedTo ? { status: 'active', limit: 50, search: clientSearchDebounced || undefined } : undefined,
+    { skip: !canShowAssignedTo },
   )
   const clientsOptions = clientsData?.data ?? []
+
+  const [selectedClientCache, setSelectedClientCache] = useState<Record<string, Client>>({})
+  const cacheClients = (list: Client[]) => {
+    if (!list || list.length === 0) return
+    setSelectedClientCache((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const c of list) {
+        const id = c.id || (c as { _id?: string })._id
+        if (!id) continue
+        if (!next[id]) {
+          next[id] = c
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }
+
+  const getSelectedClientsForIds = (ids: string[] | undefined): Client[] => {
+    if (!ids || ids.length === 0) return []
+    const byId: Record<string, Client> = {}
+    for (const c of clientsOptions) {
+      const id = c.id || (c as { _id?: string })._id
+      if (id) byId[id] = c
+    }
+    return ids
+      .map((id) => byId[id] || selectedClientCache[id])
+      .filter(Boolean) as Client[]
+  }
+
+  // Selected client resolution is computed after create/edit form state declarations.
   const { data: caseAssigneesData, isLoading: caseAssigneesLoading } = useGetCaseAssigneesQuery(undefined, {
     skip: !openAddStage && !showCreateStages && !(!!editId && showEditStages),
   })
@@ -220,6 +319,18 @@ export default function CasesPage() {
   useEffect(() => {
     if (openCreate || editId) setAssignableSearchInput('')
   }, [openCreate, editId])
+
+  useEffect(() => {
+    if (openCreate || editId) setClientSearchInput('')
+  }, [openCreate, editId])
+
+  useEffect(() => {
+    if (bulkAssignOpen) setAssignableSearchInput('')
+  }, [bulkAssignOpen])
+
+  useEffect(() => {
+    setRowSelectionModel([])
+  }, [viewTab, debouncedCaseNumber, caseTypeFilter, assignmentFilter, paginationModel.page, paginationModel.pageSize, deletedPaginationModel.page, deletedPaginationModel.pageSize])
 
   const isDeletedView = viewTab === 'deleted'
   const casesParams = useMemo((): GetCasesRequest => {
@@ -235,12 +346,14 @@ export default function CasesPage() {
     const ct = caseTypeFilter?.trim()
     if (cn) p.caseNumber = cn
     if (ct) p.caseType = ct
+    if (assignmentFilter !== 'all') p.assignmentFilter = assignmentFilter as 'assigned' | 'unassigned'
     return p
-  }, [isDeletedView, paginationModel.page, paginationModel.pageSize, viewTab, debouncedCaseNumber, caseTypeFilter])
+  }, [isDeletedView, paginationModel.page, paginationModel.pageSize, viewTab, debouncedCaseNumber, caseTypeFilter, assignmentFilter])
 
   const {
     data: casesRes,
     isLoading: casesLoading,
+    isFetching: casesFetching,
     error: casesError,
     refetch: refetchCases,
   } = useGetCasesQuery(casesParams)
@@ -267,6 +380,14 @@ export default function CasesPage() {
     { skip: !viewId && !editId }
   )
   const singleCase = singleRes?.data
+
+  /** True when the case advertises multiple clients but GET did not return any link field we can read (common after spreadsheet import). */
+  const linkedClientsHydrationGap = useMemo(() => {
+    if (!singleCase || !editId) return false
+    const extracted = extractLinkedClientIdsFromCase(singleCase as unknown as Record<string, unknown>)
+    const hasLegacyList = Array.isArray(singleCase.clients) && singleCase.clients.length > 0
+    return !hasLegacyList && extracted.length === 0 && (singleCase.clientCount ?? 0) >= 2
+  }, [singleCase, editId])
 
   const assignableOptions = useMemo((): AssignableOption[] => {
     if (!canShowAssignedTo) return []
@@ -296,6 +417,27 @@ export default function CasesPage() {
     return list
   }, [canShowAssignedTo, currentUser, assignableData?.data])
 
+  /** Ensures the case's current assignee appears in the list even if they are outside the latest search page. */
+  const caseAssignableOptions = useMemo((): AssignableOption[] => {
+    const list: AssignableOption[] = [...assignableOptions]
+    const seen = new Set(list.map((x) => x.id || x._id).filter(Boolean) as string[])
+    const pushRef = (u: CaseType['assignedTo']) => {
+      if (!u || typeof u !== 'object') return
+      const id = (u as { id?: string; _id?: string }).id || (u as { _id?: string })._id
+      if (!id || seen.has(id)) return
+      seen.add(id)
+      list.push({
+        ...(u as AssignableOption),
+        role: (u as AssignableOption).role ?? ('' as User['role']),
+        status: (u as AssignableOption).status ?? 'approved',
+        createdAt: (u as AssignableOption).createdAt ?? '',
+        updatedAt: (u as AssignableOption).updatedAt ?? '',
+      })
+    }
+    if ((editId || viewId) && singleCase?.assignedTo) pushRef(singleCase.assignedTo)
+    return list
+  }, [assignableOptions, editId, viewId, singleCase?.assignedTo])
+
   const confirmedByOptions = useMemo((): CaseAssigneeOption[] => {
     return (caseAssigneesData?.data ?? []).map((u) => ({ ...u, _id: u._id || u.id }))
   }, [caseAssigneesData?.data])
@@ -309,6 +451,7 @@ export default function CasesPage() {
   const [restoreCaseFn, { isLoading: restoring }] = useRestoreCaseMutation()
   const [archiveCaseFn] = useArchiveCaseMutation()
   const [unarchiveCaseFn] = useUnarchiveCaseMutation()
+  const [bulkAssignCases, { isLoading: bulkAssigning }] = useBulkAssignCasesMutation()
 
   useEffect(() => {
     if (!casesLoading && casesError && 'status' in casesError) {
@@ -346,6 +489,25 @@ export default function CasesPage() {
 
   const [editForm, setEditForm] = useState<UpdateCaseRequest>({})
   const [editErrors, setEditErrors] = useState<Record<string, string>>({})
+
+  const createSelectedClients = useMemo(
+    () => getSelectedClientsForIds((createForm.clients ?? []).slice(0, createForm.clientCount ?? 1)),
+    [createForm.clients, createForm.clientCount, clientsOptions, selectedClientCache]
+  )
+  const editSelectedClients = useMemo(
+    () => getSelectedClientsForIds((editForm.clients ?? []).slice(0, editForm.clientCount ?? 1)),
+    [editForm.clients, editForm.clientCount, clientsOptions, selectedClientCache]
+  )
+
+  const mergedClientsOptions = useMemo(() => {
+    const map = new Map<string, Client>()
+    for (const c of [...createSelectedClients, ...editSelectedClients, ...clientsOptions]) {
+      const id = c.id || (c as { _id?: string })._id
+      if (!id) continue
+      if (!map.has(id)) map.set(id, c)
+    }
+    return Array.from(map.values())
+  }, [clientsOptions, createSelectedClients, editSelectedClients])
 
   const resetCreateForm = () => {
     setCreateForm({
@@ -449,6 +611,96 @@ export default function CasesPage() {
 
   const handleEditSubmit = async () => {
     if (!editId || !canUpdate) return
+    const e: Record<string, string> = {}
+    const payload: UpdateCaseRequest = { ...editForm }
+    const cc = payload.clientCount ?? 1
+    const cl = payload.clients ?? []
+    if (cl.length > cc) e.clients = `Cannot link more than ${cc} client(s)`
+    setEditErrors(e)
+    if (Object.keys(e).length) return
+
+    const hasUnsavedForm = showEditStages && !editStageRowId && !!(
+      stageForm.stageName.trim() || stageForm.todaySummary.trim() || stageForm.nextDate ||
+      stageForm.nextDatePurpose.trim() || stageForm.nextDatePreparation.trim() || stageForm.confirmedBy
+    )
+    if (hasUnsavedForm || editModalPendingRows.length > 0) {
+      setUnsavedStageConfirmOpen(true)
+      return
+    }
+
+    if (!canShowAssignedTo) {
+      delete payload.assignedTo
+      delete payload.clientCount
+      delete payload.clients
+    }
+    try {
+      await updateCase({ caseId: editId, data: payload }).unwrap()
+      toast.success('Case updated')
+      setEditId(null)
+      setEditForm({})
+      resetEditStageSection()
+      refetchCases()
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      toast.error(et?.status === 403 ? "You don't have permission" : (et?.data?.error ?? et?.data?.message ?? 'Update failed'))
+    }
+  }
+
+  const handleUnsavedStageConfirmYes = async () => {
+    if (!editId || !canUpdate) return
+    setUnsavedStageConfirmOpen(false)
+
+    const hasUnsavedForm = showEditStages && !editStageRowId && !!(
+      stageForm.stageName.trim() || stageForm.todaySummary.trim() || stageForm.nextDate ||
+      stageForm.nextDatePurpose.trim() || stageForm.nextDatePreparation.trim() || stageForm.confirmedBy
+    )
+
+    let stagesToSave = [...editModalPendingRows]
+    if (hasUnsavedForm) {
+      if (!validateStageForm()) return
+      stagesToSave = [...stagesToSave, {
+        stageName: stageForm.stageName.trim(),
+        todaySummary: stageForm.todaySummary.trim(),
+        nextDate: stageForm.nextDate,
+        nextDatePurpose: stageForm.nextDatePurpose.trim(),
+        nextDatePreparation: stageForm.nextDatePreparation.trim(),
+        confirmedBy: stageForm.confirmedBy,
+      }]
+    }
+
+    const e: Record<string, string> = {}
+    const payload: UpdateCaseRequest = { ...editForm }
+    const cc = payload.clientCount ?? 1
+    const cl = payload.clients ?? []
+    if (cl.length > cc) e.clients = `Cannot link more than ${cc} client(s)`
+    setEditErrors(e)
+    if (Object.keys(e).length) return
+    if (!canShowAssignedTo) {
+      delete payload.assignedTo
+      delete payload.clientCount
+      delete payload.clients
+    }
+    const caseId = editId
+    try {
+      await updateCase({ caseId, data: payload }).unwrap()
+      if (stagesToSave.length > 0) {
+        await addCaseStage({ caseId, data: stagesToSave.length === 1 ? stagesToSave[0] : stagesToSave }).unwrap()
+      }
+      toast.success('Case and stage saved')
+      setEditId(null)
+      setEditForm({})
+      resetEditStageSection()
+      refetchCases()
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      toast.error(et?.status === 403 ? "You don't have permission" : (et?.data?.error ?? et?.data?.message ?? 'Update failed'))
+    }
+  }
+
+  const handleUnsavedStageConfirmNo = async () => {
+    if (!editId || !canUpdate) return
+    setUnsavedStageConfirmOpen(false)
+
     const e: Record<string, string> = {}
     const payload: UpdateCaseRequest = { ...editForm }
     const cc = payload.clientCount ?? 1
@@ -596,6 +848,38 @@ export default function CasesPage() {
     }
   }
 
+  const handleBulkAssign = async () => {
+    if (!canShowAssignedTo) {
+      toast.error("You don't have permission to assign cases")
+      return
+    }
+    const caseIds = rowSelectionModel.map(String).filter(Boolean)
+    if (caseIds.length === 0) {
+      toast.error('Select at least one case')
+      return
+    }
+    const assigneeId = bulkAssignAssignee
+      ? bulkAssignAssignee.id || (bulkAssignAssignee as { _id?: string })._id || ''
+      : null
+    if (bulkAssignAssignee && !assigneeId) {
+      toast.error('Invalid assignee selection')
+      return
+    }
+    try {
+      const res = await bulkAssignCases({ caseIds, assignedTo: assigneeId }).unwrap()
+      toast.success(res.message || 'Assignments updated')
+      setRowSelectionModel([])
+      setBulkAssignOpen(false)
+      setBulkAssignAssignee(null)
+      refetchCases()
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      const msg = et?.data?.error ?? et?.data?.message ?? 'Bulk assign failed'
+      if (et?.status === 403) toast.error("You don't have permission to bulk assign cases")
+      else toast.error(msg)
+    }
+  }
+
   const handleRestore = async (c: CaseType): Promise<boolean> => {
     if (!canUpdate) return false
     const id = c.id || (c as { _id?: string })._id
@@ -656,10 +940,45 @@ export default function CasesPage() {
   }
 
   const openView = (id: string) => {
+    setCaseViewFromNotification(false)
+    setNotificationAssignPick(null)
+    setNotificationAssignSearch('')
     setViewId(id)
     setOpenAddStage(false)
     resetStageForm()
     closeMenu()
+  }
+
+  const showNotificationInlineAssign =
+    !!caseViewFromNotification &&
+    canShowAssignedTo &&
+    !!viewId &&
+    !!singleCase &&
+    !singleCase.deletedAt &&
+    isCaseUnassigned(singleCase.assignedTo)
+
+  const handleAssignFromNotificationView = async () => {
+    const cid = viewId || singleCase?.id || (singleCase as { _id?: string } | undefined)?._id
+    if (!cid || !notificationAssignPick) {
+      toast.error('Select someone to assign this case to.')
+      return
+    }
+    const assigneeId = notificationAssignPick.id || notificationAssignPick._id
+    if (!assigneeId) return
+    try {
+      await updateCase({ caseId: cid, data: { assignedTo: assigneeId } }).unwrap()
+      toast.success('Case assigned')
+      setNotificationAssignPick(null)
+      setNotificationAssignSearch('')
+      setCaseViewFromNotification(false)
+    } catch (err: unknown) {
+      const et = err as { status?: number; data?: { error?: string; message?: string } }
+      toast.error(
+        et?.status === 403
+          ? "You don't have permission to assign this case"
+          : (et?.data?.error ?? et?.data?.message ?? 'Assign failed')
+      )
+    }
   }
   const openEdit = (id: string) => {
     setEditId(id)
@@ -673,13 +992,28 @@ export default function CasesPage() {
     closeMenu()
   }
 
+  /** Avoid overwriting the edit form on every case-detail refetch (new RTK object references). */
+  const editCaseFormHydratedRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (!singleCase || !editId) return
+    if (!editId) {
+      editCaseFormHydratedRef.current = null
+      return
+    }
+    if (!singleCase) return
+    const sid = singleCase.id || (singleCase as { _id?: string })._id
+    if (!sid || sid !== editId) return
+    if (editCaseFormHydratedRef.current === editId) return
+    editCaseFormHydratedRef.current = editId
+
     const assignedId = typeof singleCase.assignedTo === 'string'
       ? singleCase.assignedTo
       : (singleCase.assignedTo?.id || (singleCase.assignedTo as { _id?: string })?._id)
-    const clientsArr = singleCase.clients ?? []
-    const clientIds = clientsArr.map((cl) => (typeof cl === 'string' ? cl : (cl as { id?: string; _id?: string }).id || (cl as { _id?: string })._id || '')).filter(Boolean)
+    const fromNestedAliases = extractLinkedClientIdsFromCase(singleCase as unknown as Record<string, unknown>)
+    const fromDeclaredClients = (singleCase.clients ?? [])
+      .map((cl) => (typeof cl === 'string' ? cl : (cl as { id?: string; _id?: string }).id || (cl as { _id?: string })._id || ''))
+      .filter(Boolean)
+    const clientIds = Array.from(new Set([...fromNestedAliases, ...fromDeclaredClients]))
     setEditForm({
       caseNumber: singleCase.caseNumber,
       caseType: singleCase.caseType,
@@ -691,7 +1025,12 @@ export default function CasesPage() {
       clients: clientIds,
       notes: singleCase.notes ?? '',
     })
-  }, [singleCase, editId])
+    if (typeof singleCase.assignedTo === 'object' && singleCase.assignedTo) {
+      setAssignableSearchInput(getAssignableOptionLabel(singleCase.assignedTo as AssignableOption, currentUser?.id))
+    } else {
+      setAssignableSearchInput('')
+    }
+  }, [singleCase, editId, currentUser?.id])
 
   const formatDeletedDate = (deletedAt: string | undefined) => {
     if (!deletedAt) return '—'
@@ -706,6 +1045,19 @@ export default function CasesPage() {
     if (!clients || !Array.isArray(clients)) return '—'
     const names = clients.slice(0, 3).map((c) => (typeof c === 'string' ? c : getClientDisplayName(c as { fullName?: string; firstName?: string; lastName?: string; email?: string })))
     return names.join(', ') + (clients.length > 3 ? ` +${clients.length - 3}` : '')
+  }
+
+  const getLinkedClientsLineForDetail = (c: CaseType | undefined): string => {
+    if (!c) return '—'
+    const fromArr = getClientsDisplay(c.clients)
+    if (fromArr !== '—') return fromArr
+    const ids = extractLinkedClientIdsFromCase(c as unknown as Record<string, unknown>)
+    if (ids.length > 0) return ids.slice(0, 5).join(', ') + (ids.length > 5 ? ` +${ids.length - 5}` : '')
+    const n = c.clientCount ?? 0
+    if (n > 0) {
+      return `${n} on this case — who they are did not come back with this response. Try Edit to link them, or refresh after import.`
+    }
+    return '—'
   }
 
   const formatShortDate = (d: string | undefined): string => {
@@ -770,10 +1122,10 @@ export default function CasesPage() {
           {
             field: 'clients',
             headerName: 'Clients',
-            width: 160,
+            width: 200,
             renderCell: (params) => (
               <Typography variant="body2" color="text.secondary">
-                {getClientsDisplay((params.row as CaseType).clients)}
+                {getLinkedClientsLineForDetail(params.row as CaseType)}
               </Typography>
             ),
           } as GridColDef,
@@ -889,6 +1241,19 @@ export default function CasesPage() {
                 Export
               </Button>
             )}
+            {canShowAssignedTo && !isDeletedView && (
+              <Button
+                variant="outlined"
+                startIcon={<UserCog size={18} />}
+                disabled={rowSelectionModel.length === 0}
+                onClick={() => {
+                  setBulkAssignAssignee(null)
+                  setBulkAssignOpen(true)
+                }}
+              >
+                Bulk assign{rowSelectionModel.length > 0 ? ` (${rowSelectionModel.length})` : ''}
+              </Button>
+            )}
             {canCreate && viewTab === 'active' && (
               <Button
                 variant="contained"
@@ -986,7 +1351,7 @@ export default function CasesPage() {
                 }}
               />
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            {/* <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth size="small">
                 <InputLabel shrink>Case type</InputLabel>
                 <Select
@@ -1004,8 +1369,22 @@ export default function CasesPage() {
                   ))}
                 </Select>
               </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6} md={5} />
+            </Grid> */}
+            {canShowAssignedTo && !isDeletedView && (
+              <Grid item xs={12} sm={6} md={8} sx={{ display: 'flex', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  value={assignmentFilter}
+                  onChange={(_, val) => { if (val !== null) setAssignmentFilter(val) }}
+                  aria-label="Assignment filter"
+                >
+                  <ToggleButton value="all">All</ToggleButton>
+                  <ToggleButton value="assigned">Assigned</ToggleButton>
+                  <ToggleButton value="unassigned">Unassigned</ToggleButton>
+                </ToggleButtonGroup>
+              </Grid>
+            )}
           </Grid>
         </Box>
 
@@ -1028,7 +1407,7 @@ export default function CasesPage() {
 
         <Card sx={{ p: 0 }}>
         <Box sx={{ height: 600, width: '100%' }}>
-          {casesLoading ? (
+          {(casesLoading || casesFetching) ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
               <CircularProgress />
             </Box>
@@ -1100,12 +1479,43 @@ export default function CasesPage() {
               paginationModel={isDeletedView ? deletedPaginationModel : paginationModel}
               onPaginationModelChange={isDeletedView ? setDeletedPaginationModel : setPaginationModel}
               pageSizeOptions={[5, 10, 25, 50]}
+              checkboxSelection={canShowAssignedTo && !isDeletedView}
+              rowSelectionModel={rowSelectionModel}
+              onRowSelectionModelChange={setRowSelectionModel}
               disableRowSelectionOnClick
               sx={{ '& .MuiDataGrid-cell:focus': { outline: 'none' } }}
             />
           )}
         </Box>
         </Card>
+
+        <Dialog open={bulkAssignOpen} onClose={() => !bulkAssigning && setBulkAssignOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Bulk assign cases</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {rowSelectionModel.length} case{rowSelectionModel.length === 1 ? '' : 's'} selected (current page only when using checkboxes with server paging). Choose an assignee, or clear the field and apply to remove assignee for all selected.
+            </Typography>
+            {canShowAssignedTo && (
+              <Autocomplete
+                options={caseAssignableOptions}
+                getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
+                value={bulkAssignAssignee}
+                onChange={(_, v) => setBulkAssignAssignee(v)}
+                renderInput={(params) => <TextField {...params} label="Assign to" placeholder="Leave empty to unassign" />}
+                isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || (v as { _id?: string })?._id)}
+                loading={assignableLoading}
+              />
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => !bulkAssigning && setBulkAssignOpen(false)} disabled={bulkAssigning}>
+              Cancel
+            </Button>
+            <Button variant="contained" onClick={handleBulkAssign} disabled={bulkAssigning || rowSelectionModel.length === 0}>
+              {bulkAssigning ? 'Applying…' : 'Apply'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Create Modal */}
         <Dialog
@@ -1119,6 +1529,8 @@ export default function CasesPage() {
           }}
           maxWidth="md"
           fullWidth
+          disableEnforceFocus
+          PaperProps={{ sx: { overflow: 'visible' } }}
         >
           <DialogTitle>Add Case</DialogTitle>
           <DialogContent>
@@ -1133,43 +1545,56 @@ export default function CasesPage() {
                 <TextField fullWidth label="Party Name *" value={createForm.partyName} onChange={(e) => setCreateForm((p) => ({ ...p, partyName: e.target.value }))} error={!!createErrors.partyName} helperText={createErrors.partyName} />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Court Premises</InputLabel>
-                  <Select
-                    value={createForm.courtName || ''}
-                    label="Court Premises"
-                    onChange={(e) => setCreateForm((p) => ({ ...p, courtName: e.target.value || undefined }))}
-                  >
-                    <MenuItem value="">—</MenuItem>
-                    {COURT_NAMES.map((cn) => (
-                      <MenuItem key={cn} value={cn}>{cn}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="Court Name"
-                  value={createForm.courtPremises || ''}
+                  value={createForm.courtName ?? ''}
                   onChange={(e) =>
                     setCreateForm((p) => ({
                       ...p,
-                      courtPremises: e.target.value.slice(0, 100) || undefined,
+                      courtName: e.target.value.slice(0, 120) || undefined,
                     }))
                   }
-                  inputProps={{ maxLength: 100 }}
+                  inputProps={{ maxLength: 120 }}
                 />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Court Premises</InputLabel>
+                  <Select
+                    value={createForm.courtPremises || ''}
+                    label="Court Premises"
+                    onChange={(e) => setCreateForm((p) => ({ ...p, courtPremises: e.target.value || undefined }))}
+                  >
+                    <MenuItem value="">—</MenuItem>
+                    {premisesMenuIncludingValue(createForm.courtPremises).map((opt) => (
+                      <MenuItem key={opt} value={opt}>
+                        {opt}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
               {canShowAssignedTo && (
                 <>
                   <Grid item xs={12} sm={6}>
                     <Autocomplete
-                      options={assignableOptions}
+                      componentsProps={autocompletePopperInDialog}
+                      options={caseAssignableOptions}
                       getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
-                      value={assignableOptions.find((o) => (o.id || o._id) === createForm.assignedTo) ?? null}
-                      onChange={(_, v) => setCreateForm((p) => ({ ...p, assignedTo: v ? (v.id || (v as { _id?: string })._id) || '' : '' }))}
-                      renderInput={(params) => <TextField {...params} label="Assigned To" />}
+                      value={caseAssignableOptions.find((o) => (o.id || o._id) === createForm.assignedTo) ?? null}
+                      onChange={(_, v) => {
+                        setCreateForm((p) => ({ ...p, assignedTo: v ? (v.id || (v as { _id?: string })._id) || '' : '' }))
+                        setAssignableSearchInput(v ? getAssignableOptionLabel(v, currentUser?.id) : '')
+                      }}
+                      inputValue={assignableSearchInput}
+                      onInputChange={(_, v, reason) => {
+                        if (reason === 'input' || reason === 'clear') setAssignableSearchInput(v)
+                      }}
+                      loading={assignableLoading}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Assigned To" placeholder="Search by name or email..." />
+                      )}
                       isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || (v as { _id?: string })?._id)}
                     />
                   </Grid>
@@ -1179,11 +1604,31 @@ export default function CasesPage() {
                   <Grid item xs={12}>
                     <Autocomplete
                       multiple
-                      options={clientsOptions}
+                      options={mergedClientsOptions}
                       getOptionLabel={(opt) => getClientDisplayName(opt)}
-                      value={clientsOptions.filter((c) => (createForm.clients ?? []).includes(c.id || (c as { _id?: string })._id || ''))}
-                      onChange={(_, v) => setCreateForm((p) => ({ ...p, clients: v.map((c) => c.id || (c as { _id?: string })._id || '').slice(0, p.clientCount ?? 1) }))}
-                      renderInput={(params) => <TextField {...params} label="Linked Clients" placeholder="Select clients" error={!!createErrors.clients} helperText={createErrors.clients} />}
+                      value={createSelectedClients}
+                      onChange={(_, v) => {
+                        cacheClients(v as Client[])
+                        setCreateForm((p) => ({ ...p, clients: (v as Client[]).map((c) => c.id || (c as { _id?: string })._id || '').filter(Boolean).slice(0, p.clientCount ?? 1) }))
+                      }}
+                      inputValue={clientSearchInput}
+                      onInputChange={(_, v, reason) => {
+                        if (reason === 'input' || reason === 'clear') setClientSearchInput(v)
+                      }}
+                      ListboxProps={linkedClientsListboxProps}
+                      componentsProps={{
+                        popper: { sx: { zIndex: (theme) => theme.zIndex.modal + 1 } },
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Linked Clients"
+                          placeholder="Select clients"
+                          error={!!createErrors.clients}
+                          helperText={createErrors.clients}
+                          InputLabelProps={{ ...params.InputLabelProps, shrink: true }}
+                        />
+                      )}
                       isOptionEqualToValue={(o, v) => (o.id || (o as { _id?: string })._id) === (v?.id || (v as { _id?: string })?._id)}
                     />
                   </Grid>
@@ -1261,6 +1706,7 @@ export default function CasesPage() {
                           <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Confirm By *</TableCell>
                           <TableCell>
                             <Autocomplete
+                              componentsProps={autocompletePopperInDialog}
                               options={confirmedByOptions}
                               loading={caseAssigneesLoading}
                               value={confirmedByOptions.find((u) => (u.id || u._id) === stageForm.confirmedBy) ?? null}
@@ -1382,10 +1828,13 @@ export default function CasesPage() {
           open={!!viewId}
           onClose={() => {
             setViewId(null)
+            setCaseViewFromNotification(false)
+            setNotificationAssignPick(null)
+            setNotificationAssignSearch('')
             setOpenAddStage(false)
             resetStageForm()
           }}
-          maxWidth="sm"
+          maxWidth={showNotificationInlineAssign ? 'md' : 'sm'}
           fullWidth
         >
           <DialogTitle>
@@ -1395,6 +1844,9 @@ export default function CasesPage() {
               <IconButton
                 onClick={() => {
                   setViewId(null)
+                  setCaseViewFromNotification(false)
+                  setNotificationAssignPick(null)
+                  setNotificationAssignSearch('')
                   setOpenAddStage(false)
                   resetStageForm()
                 }}
@@ -1414,11 +1866,52 @@ export default function CasesPage() {
                 <Grid item xs={12}><Typography variant="caption" color="text.secondary">Party Name</Typography><Typography variant="body1">{singleCase.partyName || '—'}</Typography></Grid>
                 <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Court Name</Typography><Typography variant="body1">{singleCase.courtName || '—'}</Typography></Grid>
                 <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Court Premises</Typography><Typography variant="body1">{singleCase.courtPremises || '—'}</Typography></Grid>
-                {(canRead || canShowAssignedTo) && (
-                  <Grid item xs={12} sm={6}><Typography variant="caption" color="text.secondary">Assigned To</Typography><Typography variant="body1">{getAssignedToName(singleCase.assignedTo)}</Typography></Grid>
-                )}
+                {(canRead || canShowAssignedTo) &&
+                  (showNotificationInlineAssign ? (
+                    <Grid item xs={12}>
+                      <Typography variant="caption" color="text.secondary">Assigned To</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1 }}>
+                        No one is assigned yet. Choose who should own this case.
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { sm: 'flex-start' } }}>
+                        <Autocomplete
+                          sx={{ flex: 1, minWidth: 0 }}
+                          componentsProps={autocompletePopperInDialog}
+                          options={caseAssignableOptions}
+                          getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
+                          value={notificationAssignPick}
+                          onChange={(_, v) => {
+                            setNotificationAssignPick(v)
+                            setNotificationAssignSearch(v ? getAssignableOptionLabel(v, currentUser?.id) : '')
+                          }}
+                          inputValue={notificationAssignSearch}
+                          onInputChange={(_, v, reason) => {
+                            if (reason === 'input' || reason === 'clear') setNotificationAssignSearch(v)
+                          }}
+                          loading={assignableLoading}
+                          renderInput={(params) => (
+                            <TextField {...params} label="Assign to" placeholder="Search by name or email..." />
+                          )}
+                          isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || (v as { _id?: string })?._id)}
+                        />
+                        <Button
+                          variant="contained"
+                          onClick={() => void handleAssignFromNotificationView()}
+                          disabled={updating || !notificationAssignPick}
+                          sx={{ flexShrink: 0, alignSelf: { xs: 'stretch', sm: 'center' } }}
+                        >
+                          {updating ? 'Saving…' : 'Assign'}
+                        </Button>
+                      </Box>
+                    </Grid>
+                  ) : (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="caption" color="text.secondary">Assigned To</Typography>
+                      <Typography variant="body1">{getAssignedToName(singleCase.assignedTo)}</Typography>
+                    </Grid>
+                  ))}
                 {canShowAssignedTo && (
-                  <Grid item xs={12}><Typography variant="caption" color="text.secondary">Linked Clients</Typography><Typography variant="body1">{getClientsDisplay(singleCase.clients)}</Typography></Grid>
+                  <Grid item xs={12}><Typography variant="caption" color="text.secondary">Linked Clients</Typography><Typography variant="body1">{getLinkedClientsLineForDetail(singleCase)}</Typography></Grid>
                 )}
                 {singleCase.notes && <Grid item xs={12}><Typography variant="caption" color="text.secondary">Notes</Typography><Typography variant="body1">{singleCase.notes}</Typography></Grid>}
                 <Grid item xs={12}>
@@ -1490,11 +1983,14 @@ export default function CasesPage() {
           </DialogContent>
           <DialogActions>
             {singleCase?.deletedAt && canUpdate && (
-              <Button variant="contained" color="success" startIcon={<RotateCcw size={16} />} onClick={async () => { if (singleCase && (await handleRestore(singleCase))) setViewId(null) }} disabled={restoring}>Restore</Button>
+              <Button variant="contained" color="success" startIcon={<RotateCcw size={16} />} onClick={async () => { if (singleCase && (await handleRestore(singleCase))) { setViewId(null); setCaseViewFromNotification(false); setNotificationAssignPick(null); setNotificationAssignSearch('') } }} disabled={restoring}>Restore</Button>
             )}
             <Button
               onClick={() => {
                 setViewId(null)
+                setCaseViewFromNotification(false)
+                setNotificationAssignPick(null)
+                setNotificationAssignSearch('')
                 setOpenAddStage(false)
                 resetStageForm()
               }}
@@ -1514,6 +2010,8 @@ export default function CasesPage() {
           }}
           maxWidth="md"
           fullWidth
+          disableEnforceFocus
+          PaperProps={{ sx: { overflow: 'visible' } }}
         >
           <DialogTitle>
             <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -1582,6 +2080,7 @@ export default function CasesPage() {
                     <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Confirm By *</TableCell>
                     <TableCell>
                       <Autocomplete
+                        componentsProps={autocompletePopperInDialog}
                         options={confirmedByOptions}
                         loading={caseAssigneesLoading}
                         value={confirmedByOptions.find((u) => (u.id || u._id) === stageForm.confirmedBy) ?? null}
@@ -1703,6 +2202,8 @@ export default function CasesPage() {
           }}
           maxWidth="md"
           fullWidth
+          disableEnforceFocus
+          PaperProps={{ sx: { overflow: 'visible' } }}
         >
           <DialogTitle>Edit Case</DialogTitle>
           <DialogContent>
@@ -1720,41 +2221,56 @@ export default function CasesPage() {
                   <TextField fullWidth label="Party Name *" value={editForm.partyName ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, partyName: e.target.value }))} />
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Court Premises</InputLabel>
-                    <Select
-                      value={editForm.courtName ?? ''}
-                      label="Court Premises"
-                      onChange={(e) => setEditForm((p) => ({ ...p, courtName: e.target.value || undefined }))}
-                    >
-                      <MenuItem value="">—</MenuItem>
-                      {COURT_NAMES.map((cn) => <MenuItem key={cn} value={cn}>{cn}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
                     label="Court Name"
-                    value={editForm.courtPremises ?? ''}
+                    value={editForm.courtName ?? ''}
                     onChange={(e) =>
                       setEditForm((p) => ({
                         ...p,
-                        courtPremises: e.target.value.slice(0, 100) || undefined,
+                        courtName: e.target.value.slice(0, 120) || undefined,
                       }))
                     }
-                    inputProps={{ maxLength: 100 }}
+                    inputProps={{ maxLength: 120 }}
                   />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Court Premises</InputLabel>
+                    <Select
+                      value={editForm.courtPremises ?? ''}
+                      label="Court Premises"
+                      onChange={(e) => setEditForm((p) => ({ ...p, courtPremises: e.target.value || undefined }))}
+                    >
+                      <MenuItem value="">—</MenuItem>
+                      {premisesMenuIncludingValue(editForm.courtPremises).map((opt) => (
+                        <MenuItem key={opt} value={opt}>
+                          {opt}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                 </Grid>
                 {canShowAssignedTo && (
                   <>
                     <Grid item xs={12} sm={6}>
                       <Autocomplete
-                        options={assignableOptions}
+                        componentsProps={autocompletePopperInDialog}
+                        options={caseAssignableOptions}
                         getOptionLabel={(opt) => getAssignableOptionLabel(opt, currentUser?.id)}
-                        value={assignableOptions.find((o) => (o.id || o._id) === editForm.assignedTo) ?? null}
-                        onChange={(_, v) => setEditForm((p) => ({ ...p, assignedTo: v ? (v.id || (v as { _id?: string })._id) || '' : '' }))}
-                        renderInput={(params) => <TextField {...params} label="Assigned To" />}
+                        value={caseAssignableOptions.find((o) => (o.id || o._id) === editForm.assignedTo) ?? null}
+                        onChange={(_, v) => {
+                          setEditForm((p) => ({ ...p, assignedTo: v ? (v.id || (v as { _id?: string })._id) || '' : '' }))
+                          setAssignableSearchInput(v ? getAssignableOptionLabel(v, currentUser?.id) : '')
+                        }}
+                        inputValue={assignableSearchInput}
+                        onInputChange={(_, v, reason) => {
+                          if (reason === 'input' || reason === 'clear') setAssignableSearchInput(v)
+                        }}
+                        loading={assignableLoading}
+                        renderInput={(params) => (
+                          <TextField {...params} label="Assigned To" placeholder="Search by name or email..." />
+                        )}
                         isOptionEqualToValue={(o, v) => (o.id || o._id) === (v?.id || (v as { _id?: string })?._id)}
                       />
                     </Grid>
@@ -1764,14 +2280,43 @@ export default function CasesPage() {
                     <Grid item xs={12}>
                       <Autocomplete
                         multiple
-                        options={clientsOptions}
+                        options={mergedClientsOptions}
                         getOptionLabel={(opt) => getClientDisplayName(opt)}
-                        value={clientsOptions.filter((c) => (editForm.clients ?? []).includes(c.id || (c as { _id?: string })._id || ''))}
-                        onChange={(_, v) => setEditForm((p) => ({ ...p, clients: v.map((c) => c.id || (c as { _id?: string })._id || '').slice(0, p.clientCount ?? 1) }))}
-                        renderInput={(params) => <TextField {...params} label="Linked Clients" error={!!editErrors.clients} helperText={editErrors.clients} />}
+                        value={editSelectedClients}
+                        onChange={(_, v) => {
+                          cacheClients(v as Client[])
+                          setEditForm((p) => ({ ...p, clients: (v as Client[]).map((c) => c.id || (c as { _id?: string })._id || '').filter(Boolean).slice(0, p.clientCount ?? 1) }))
+                        }}
+                        inputValue={clientSearchInput}
+                        onInputChange={(_, v, reason) => {
+                          if (reason === 'input' || reason === 'clear') setClientSearchInput(v)
+                        }}
+                        ListboxProps={linkedClientsListboxProps}
+                        componentsProps={{
+                          popper: { sx: { zIndex: (theme) => theme.zIndex.modal + 1 } },
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Linked Clients"
+                            placeholder="Search clients"
+                            error={!!editErrors.clients}
+                            helperText={editErrors.clients}
+                            InputLabelProps={{ ...params.InputLabelProps, shrink: true }}
+                          />
+                        )}
                         isOptionEqualToValue={(o, v) => (o.id || (o as { _id?: string })._id) === (v?.id || (v as { _id?: string })?._id)}
                       />
                     </Grid>
+                    {linkedClientsHydrationGap && (
+                      <Grid item xs={12}>
+                        <Alert severity="info" sx={{ py: 1 }}>
+                          <Typography variant="body2">
+                            This case is set up for more than one person, but nothing filled in above—usually that means the server did not send the linked people for this record (spreadsheet imports often hit that gap). Pick the right people here to fix it, or ask your team to attach client links on the case after import.
+                          </Typography>
+                        </Alert>
+                      </Grid>
+                    )}
                   </>
                 )}
                 <Grid item xs={12}>
@@ -1928,6 +2473,7 @@ export default function CasesPage() {
                                 <TableCell sx={{ width: 180, color: 'text.secondary', fontWeight: 600 }}>Confirm By *</TableCell>
                                 <TableCell>
                                   <Autocomplete
+                                    componentsProps={autocompletePopperInDialog}
                                     options={confirmedByOptions}
                                     loading={caseAssigneesLoading}
                                     value={confirmedByOptions.find((u) => (u.id || u._id) === stageForm.confirmedBy) ?? null}
@@ -2062,6 +2608,28 @@ export default function CasesPage() {
               Cancel
             </Button>
             <Button variant="contained" onClick={handleEditSubmit} disabled={updating}>Save</Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Unsaved Stage Confirmation */}
+        <Dialog open={unsavedStageConfirmOpen} onClose={() => setUnsavedStageConfirmOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle>Unsaved Stage Data</DialogTitle>
+          <DialogContent>
+            <Typography variant="body1">
+              You have unsaved stage information. Do you want to save the stage along with the case?
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Select <strong>Yes, Save Stage</strong> to save both the case and the stage. Select <strong>No, Skip Stage</strong> to save only the case details.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setUnsavedStageConfirmOpen(false)}>Go Back</Button>
+            <Button onClick={handleUnsavedStageConfirmNo} disabled={updating || addingStage}>
+              No, Skip Stage
+            </Button>
+            <Button variant="contained" onClick={handleUnsavedStageConfirmYes} disabled={updating || addingStage}>
+              {(updating || addingStage) ? 'Saving…' : 'Yes, Save Stage'}
+            </Button>
           </DialogActions>
         </Dialog>
 
