@@ -284,6 +284,10 @@ export default function Layout({ children }: LayoutProps) {
   }
   const isSuperAdminUser = isSuperAdmin(user?.role)
 
+  const bottomNavigation = staticBottomNavigation.filter(item =>
+    item.name !== 'Subscription' || isSuperAdminUser
+  )
+
   const getSubscriptionPlanDisplayName = (plan?: string): string => {
     switch (plan) {
       case 'free':
@@ -458,7 +462,7 @@ export default function Layout({ children }: LayoutProps) {
   const topNavigation = [
     ...staticTopNavigation,
     ...dynamicNavigation,
-    ...staticBottomNavigation
+    ...bottomNavigation
   ]
   const prefetchKey = topNavigation.map((item) => item.href).join('|')
 

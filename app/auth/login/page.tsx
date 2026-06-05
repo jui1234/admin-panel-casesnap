@@ -39,6 +39,7 @@ export default function LoginPage() {
   const { theme } = useTheme()
   const { login, isAuthenticated, isLoading: authLoading } = useAuth()
   const isDark = theme === 'dark'
+  const isSubscriptionError = error && /subscription|expired|inactive|cancelled|renew/i.test(error)
   
   // RTK Query mutation
   const [loginMutation, { isLoading, error: loginError }] = useLoginMutation()
@@ -303,6 +304,18 @@ export default function LoginPage() {
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
                 <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+                {isSubscriptionError && (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => router.push('/subscription')}
+                      className="inline-flex items-center gap-2 rounded-md bg-yellow-500 px-3 py-2 text-sm font-medium text-gray-900 hover:bg-yellow-600 transition-colors"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      Manage Subscription
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
