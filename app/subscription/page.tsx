@@ -12,7 +12,19 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function SubscriptionPage() {
-  const { user } = useAuth()
+  const { user, isAuthenticated, isLoading } = useAuth()
+
+  const isSuperAdmin = useMemo(() => {
+    if (!user) return false
+    const roleName = typeof user.role === 'string' ? user.role : user.role?.name
+    return roleName === 'super-admin' || roleName === 'SUPER_ADMIN'
+  }, [user])
+
+  const accessMessage = !isAuthenticated
+    ? 'Please sign in as a Super Admin to manage subscriptions.'
+    : !isSuperAdmin
+    ? 'Subscription management is only available to Super Admin users.'
+    : undefined
 
   const subscription = useMemo(() => {
     const status = user?.subscriptionStatus || 'expired'
@@ -103,17 +115,39 @@ export default function SubscriptionPage() {
           </p>
         </div>
 
-        {/* Expired Banner */}
-        {isExpired && (
+        {accessMessage ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-5">
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-3">
+                <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0" />
+                <div>
+                  <h2 className="font-semibold text-red-700 dark:text-red-300">
+                    Access Restricted
+                  </h2>
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                    {accessMessage}
+                  </p>
+                </div>
+              </div>
+
+              {!isAuthenticated && (
+                <a
+                  href="/auth/login"
+                  className="inline-flex items-center justify-center rounded-lg bg-yellow-500 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-yellow-600 transition-colors"
+                >
+                  Sign in to continue
+                </a>
+              )}
+            </div>
+          </div>
+        ) : (
           <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-5">
             <div className="flex gap-3">
               <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0" />
-
               <div>
                 <h2 className="font-semibold text-red-700 dark:text-red-300">
                   Subscription Expired
                 </h2>
-
                 <p className="mt-1 text-sm text-red-600 dark:text-red-400">
                   Your subscription is no longer active. Renew or upgrade your
                   plan to continue using CaseSnap.
