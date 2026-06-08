@@ -283,9 +283,19 @@ export default function Layout({ children }: LayoutProps) {
     return roleName === 'super-admin' || roleName === 'SUPER_ADMIN'
   }
   const isSuperAdminUser = isSuperAdmin(user?.role)
+  const [canManageTemp, setCanManageTemp] = useState(false)
+
+  useEffect(() => {
+    try {
+      const v = typeof window !== 'undefined' && sessionStorage.getItem('canManageSubscriptionTemp') === '1'
+      setCanManageTemp(!!v)
+    } catch {
+      setCanManageTemp(false)
+    }
+  }, [])
 
   const bottomNavigation = staticBottomNavigation.filter(item =>
-    item.name !== 'Subscription' || isSuperAdminUser
+    item.name !== 'Subscription' || isSuperAdminUser || canManageTemp || (!!user && !!(user as any).canManageSubscription)
   )
 
   const getSubscriptionPlanDisplayName = (plan?: string): string => {

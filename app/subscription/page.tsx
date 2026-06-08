@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import Head from 'next/head'
+import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   Check,
@@ -20,11 +21,26 @@ export default function SubscriptionPage() {
     return roleName === 'super-admin' || roleName === 'SUPER_ADMIN'
   }, [user])
 
+  const router = useRouter()
+
+  // Temporary flag written by login flow when backend allows managing subscription
+  const canManageTemp = typeof window !== 'undefined' && sessionStorage.getItem('canManageSubscriptionTemp') === '1'
+
+  const allowedToView = canManageTemp || isSuperAdmin || (!!user && !!(user as any).canManageSubscription)
+
   const accessMessage = !isAuthenticated
-    ? 'Please sign in as a Super Admin to manage subscriptions.'
-    : !isSuperAdmin
-    ? 'Subscription management is only available to Super Admin users.'
+    ? 'Please sign in to continue.'
+    : !allowedToView
+    ? 'Subscription management is not available for your account.'
     : undefined
+
+  // Redirect to 403 for authenticated users who are not allowed
+  // Allow unauthenticated users who have canManageTemp (they can view renewal flow)
+  if (!isAuthenticated && !canManageTemp) {
+    // let unauthenticated users continue to see sign-in CTA in UI
+  } else if (isAuthenticated && !allowedToView) {
+    router.replace('/403')
+  }
 
   const subscription = useMemo(() => {
     const status = user?.subscriptionStatus || 'expired'

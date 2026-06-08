@@ -34,6 +34,7 @@ interface User {
   subscriptionPlan?: string  // Valid values: "free", "base", "popular"
   subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'expired'
   subscriptionExpiresAt?: string
+  canManageSubscription?: boolean
   assigneePermissions?: AssigneePermissions  // From login; controls Assigned To for client/cases
   organizationId?: string
   organizationName?: string

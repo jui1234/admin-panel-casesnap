@@ -32,6 +32,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [canManageSubscription, setCanManageSubscription] = useState(false)
   const [organizationData, setOrganizationData] = useState<any>(null)
   const [isRedirecting, setIsRedirecting] = useState(false)
   const router = useRouter()
@@ -137,7 +138,9 @@ export default function LoginPage() {
             ? `${result.user.firstName} ${result.user.lastName}`.trim()
             : result.user.firstName || result.user.lastName || result.user.email.split('@')[0])
         
-        const userData = {
+        const canManage = (result as any).canManageSubscription ?? ((result.user as any)?.canManageSubscription ?? false)
+
+        const userData: any = {
           id: result.user.id,
           email: result.user.email,
           name: userName,
@@ -152,6 +155,11 @@ export default function LoginPage() {
           organizationName: result.user.organization?.companyName
         }
         sessionStorage.setItem('userData', JSON.stringify(userData))
+        // Persist explicit flag for UI flows
+        try {
+          if (canManage) sessionStorage.setItem('canManageSubscriptionTemp', '1')
+          else sessionStorage.removeItem('canManageSubscriptionTemp')
+        } catch {}
         const cacheScope = userData.organizationId || userData.id || 'default'
         void warmSidebarModulesCache(cacheScope, result.token)
         
@@ -189,6 +197,14 @@ export default function LoginPage() {
         }
       }
       
+      // Extract canManageSubscription flag from backend error response
+      const canManage = !!(err?.data && (err.data.canManageSubscription === true))
+      setCanManageSubscription(canManage)
+      try {
+        if (canManage) sessionStorage.setItem('canManageSubscriptionTemp', '1')
+        else sessionStorage.removeItem('canManageSubscriptionTemp')
+      } catch {}
+
       setError(errorMessage)
       toast.error(errorMessage)
       setIsRedirecting(false)
@@ -304,7 +320,7 @@ export default function LoginPage() {
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
                 <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
-                {isSubscriptionError && (
+                {isSubscriptionError && canManageSubscription && (
                   <div className="mt-3">
                     <button
                       type="button"
