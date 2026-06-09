@@ -78,7 +78,14 @@ export default function LoginPage() {
   // Redirect to cases if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.replace('/dashboard')
+      const canManageTemp =
+        typeof window !== 'undefined' &&
+        sessionStorage.getItem('canManageSubscriptionTemp') === '1'
+      if (canManageTemp) {
+        router.replace('/subscription')
+      } else {
+        router.replace('/dashboard')
+      }
     }
   }, [isAuthenticated, authLoading, router])
 
@@ -125,67 +132,98 @@ export default function LoginPage() {
 
     try {
       const result = await loginMutation({ email, password }).unwrap()
+      const rawErrorMessage = result?.error || 'Login failed. Please try again.'
+      let errorMessage = rawErrorMessage
+      const isSubscriptionResponse = /subscription|expired|inactive|cancelled|renew/i.test(errorMessage)
+      const canManage = !!((result as any).canManageSubscription ?? ((result.user as any)?.canManageSubscription ?? false))
+
+      const userName = result.user.name ||
+        (result.user.firstName && result.user.lastName
+          ? `${result.user.firstName} ${result.user.lastName}`.trim()
+          : result.user.firstName || result.user.lastName || result.user.email.split('@')[0])
+
+      const userData: any = {
+        id: result.user.id,
+        email: result.user.email,
+        name: userName,
+        firstName: result.user.firstName,
+        lastName: result.user.lastName,
+        role: result.user.role,
+        subscriptionPlan: result.user.subscriptionPlan,
+        subscriptionStatus: result.user.subscriptionStatus,
+        subscriptionExpiresAt: result.user.subscriptionExpiresAt,
+        canManageSubscription: canManage,
+        assigneePermissions: result.user.assigneePermissions ?? undefined,
+        organizationId: result.user.organizationId || result.user.organization?._id,
+        organizationName: result.user.organization?.companyName,
+      }
 
       if (result.success) {
-        // Save token + organization in sessionStorage with correct keys for AuthContext
         sessionStorage.setItem('authToken', result.token)
-        sessionStorage.setItem('token', result.token) // Keep both for compatibility
-        
-        // Store user data in the format expected by AuthContext
-        // Construct name from firstName and lastName if name is not available
-        const userName = result.user.name || 
-          (result.user.firstName && result.user.lastName 
-            ? `${result.user.firstName} ${result.user.lastName}`.trim()
-            : result.user.firstName || result.user.lastName || result.user.email.split('@')[0])
-        
-        const canManage = (result as any).canManageSubscription ?? ((result.user as any)?.canManageSubscription ?? false)
-
-        const userData: any = {
-          id: result.user.id,
-          email: result.user.email,
-          name: userName,
-          firstName: result.user.firstName,
-          lastName: result.user.lastName,
-          role: result.user.role, // Can be string or Role object
-          subscriptionPlan: result.user.subscriptionPlan, // Store subscription plan
-          subscriptionStatus: result.user.subscriptionStatus,
-          subscriptionExpiresAt: result.user.subscriptionExpiresAt,
-          assigneePermissions: result.user.assigneePermissions ?? undefined, // Store from login; used for Assigned To (client/cases)
-          organizationId: result.user.organizationId || result.user.organization?._id,
-          organizationName: result.user.organization?.companyName
-        }
+        sessionStorage.setItem('token', result.token)
         sessionStorage.setItem('userData', JSON.stringify(userData))
-        // Persist explicit flag for UI flows
+
         try {
-          if (canManage) sessionStorage.setItem('canManageSubscriptionTemp', '1')
-          else sessionStorage.removeItem('canManageSubscriptionTemp')
+          if (canManage) {
+            sessionStorage.setItem('canManageSubscriptionTemp', '1')
+          } else {
+            sessionStorage.removeItem('canManageSubscriptionTemp')
+          }
         } catch {}
+
         const cacheScope = userData.organizationId || userData.id || 'default'
         void warmSidebarModulesCache(cacheScope, result.token)
-        
-        // Store organization data
+
         if (result.user?.organization) {
           sessionStorage.setItem('organizationData', JSON.stringify(result.user.organization))
           setOrganizationData(result.user.organization)
         }
-        
+
         toast.success('Login successful!')
-
         store.dispatch(onboardingApi.endpoints.getOnboardingStatus.initiate(undefined, { forceRefetch: true }))
-
-        // Set redirecting state
         setIsRedirecting(true)
-
-        // Use AuthContext login to update the state properly
-        const loginSuccess = await login(email, password)
-
-        router.replace('/dashboard')
+        await login(email, password)
+        if (canManage) {
+          router.replace('/subscription')
+        } else {
+          router.replace('/dashboard')
+        }
+        return
       }
+
+      if (canManage && isSubscriptionResponse) {
+        sessionStorage.setItem('authToken', result.token)
+        sessionStorage.setItem('token', result.token)
+        sessionStorage.setItem('userData', JSON.stringify(userData))
+
+        try {
+          sessionStorage.setItem('canManageSubscriptionTemp', '1')
+        } catch {}
+
+        if (result.user?.organization) {
+          sessionStorage.setItem('organizationData', JSON.stringify(result.user.organization))
+          setOrganizationData(result.user.organization)
+        }
+
+        toast.error(errorMessage)
+        setError(errorMessage)
+        setCanManageSubscription(true)
+        setIsRedirecting(true)
+        await login(email, password)
+        router.replace('/subscription')
+        return
+      }
+
+      setError(errorMessage)
+      toast.error(errorMessage)
+      try {
+        sessionStorage.removeItem('canManageSubscriptionTemp')
+      } catch {}
+      setIsRedirecting(false)
     } catch (err: any) {
       const rawErrorMessage = err?.data?.error || err?.data?.message || err?.message || 'Login failed. Please try again.'
       let errorMessage = rawErrorMessage
-      
-      // Format pending approval messages to remove "admin" reference
+
       if (errorMessage.toLowerCase().includes('pending approval') || errorMessage.toLowerCase().includes('admin approval')) {
         errorMessage = 'Your status is pending. Please wait before logging in.'
       }
@@ -196,9 +234,58 @@ export default function LoginPage() {
           errorMessage = rawErrorMessage
         }
       }
-      
-      // Extract canManageSubscription flag from backend error response
-      const canManage = !!(err?.data && (err.data.canManageSubscription === true))
+
+      const errorData = err?.data as any
+      const canManage = !!(errorData && errorData.canManageSubscription === true)
+      const token = errorData?.token || errorData?.authToken || errorData?.tokenString || ''
+      const rawUser = errorData?.user
+
+      if (canManage && token) {
+        sessionStorage.setItem('authToken', token)
+        sessionStorage.setItem('token', token)
+
+        if (rawUser) {
+          const userName = rawUser.name ||
+            (rawUser.firstName && rawUser.lastName
+              ? `${rawUser.firstName} ${rawUser.lastName}`.trim()
+              : rawUser.firstName || rawUser.lastName || rawUser.email?.split('@')[0])
+
+          const userData: any = {
+            id: rawUser.id,
+            email: rawUser.email,
+            name: userName,
+            firstName: rawUser.firstName,
+            lastName: rawUser.lastName,
+            role: rawUser.role,
+            subscriptionPlan: rawUser.subscriptionPlan,
+            subscriptionStatus: rawUser.subscriptionStatus,
+            subscriptionExpiresAt: rawUser.subscriptionExpiresAt,
+            canManageSubscription: true,
+            assigneePermissions: rawUser.assigneePermissions ?? undefined,
+            organizationId: rawUser.organizationId || rawUser.organization?._id,
+            organizationName: rawUser.organization?.companyName,
+          }
+
+          sessionStorage.setItem('userData', JSON.stringify(userData))
+          if (rawUser.organization) {
+            sessionStorage.setItem('organizationData', JSON.stringify(rawUser.organization))
+            setOrganizationData(rawUser.organization)
+          }
+        }
+
+        setCanManageSubscription(true)
+        try {
+          sessionStorage.setItem('canManageSubscriptionTemp', '1')
+        } catch {}
+
+        setError(errorMessage)
+        toast.error(errorMessage)
+        setIsRedirecting(true)
+        await login(email, password)
+        router.replace('/subscription')
+        return
+      }
+
       setCanManageSubscription(canManage)
       try {
         if (canManage) sessionStorage.setItem('canManageSubscriptionTemp', '1')

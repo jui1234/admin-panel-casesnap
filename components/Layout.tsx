@@ -294,9 +294,23 @@ export default function Layout({ children }: LayoutProps) {
     }
   }, [])
 
-  const bottomNavigation = staticBottomNavigation.filter(item =>
-    item.name !== 'Subscription' || isSuperAdminUser || canManageTemp || (!!user && !!(user as any).canManageSubscription)
-  )
+  const hasSubscriptionPermission = !!user?.canManageSubscription || canManageTemp
+  const subscriptionOnlyMode = hasSubscriptionPermission && !isSuperAdminUser
+
+  useEffect(() => {
+    if (!subscriptionOnlyMode) return
+    if (typeof window === 'undefined') return
+    if (pathname !== '/subscription') {
+      router.replace('/subscription')
+    }
+  }, [subscriptionOnlyMode, pathname, router])
+
+  const bottomNavigation = staticBottomNavigation.filter(item => {
+    if (subscriptionOnlyMode) {
+      return item.name === 'Subscription'
+    }
+    return item.name !== 'Subscription' || isSuperAdminUser || canManageTemp || (!!user && !!(user as any).canManageSubscription)
+  })
 
   const getSubscriptionPlanDisplayName = (plan?: string): string => {
     switch (plan) {
@@ -469,11 +483,13 @@ export default function Layout({ children }: LayoutProps) {
     })
   
   // Build one continuous navigation list so Settings feels part of modules
-  const topNavigation = [
-    ...staticTopNavigation,
-    ...dynamicNavigation,
-    ...bottomNavigation
-  ]
+  const topNavigation = subscriptionOnlyMode
+    ? staticBottomNavigation.filter((item) => item.name === 'Subscription')
+    : [
+        ...staticTopNavigation,
+        ...dynamicNavigation,
+        ...bottomNavigation,
+      ]
   const prefetchKey = topNavigation.map((item) => item.href).join('|')
 
   const isDark = theme === 'dark'

@@ -52,6 +52,9 @@ export default function SubscriptionGuardModal() {
   const [warningExpiresAt, setWarningExpiresAt] = useState<string | undefined>(undefined)
   const [dismissedWarning, setDismissedWarning] = useState(false)
 
+  const canManageTemp = typeof window !== 'undefined' && sessionStorage.getItem('canManageSubscriptionTemp') === '1'
+  const canManageSubscription = !!user?.canManageSubscription || canManageTemp
+
   const isPublicRoute = useMemo(
     () =>
       pathname.startsWith('/auth/login') ||
@@ -66,7 +69,7 @@ export default function SubscriptionGuardModal() {
   const isSubscriptionPage = pathname.startsWith('/subscription')
 
   useEffect(() => {
-    if (!isAuthenticated || isPublicRoute) {
+    if (!isAuthenticated || isPublicRoute || canManageSubscription) {
       setBlockedMessage('')
       setBlockedExpiresAt(undefined)
       return
@@ -124,7 +127,7 @@ export default function SubscriptionGuardModal() {
     return () => window.removeEventListener(SUBSCRIPTION_BLOCK_EVENT, onBlocked as EventListener)
   }, [])
 
-  const show = !isLoading && isAuthenticated && !isPublicRoute && !!blockedMessage
+  const show = !isLoading && isAuthenticated && !isPublicRoute && !!blockedMessage && !canManageSubscription
   const showWarning = !isLoading && isAuthenticated && !isPublicRoute && !!warningMessage && !blockedMessage && !dismissedWarning
 
   if (!show && !showWarning) return null
@@ -150,7 +153,7 @@ export default function SubscriptionGuardModal() {
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             type="button"
-            onClick={() => router.push('/settings')}
+            onClick={() => router.push('/subscription')}
             className="w-full rounded-lg bg-yellow-500 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-yellow-600 transition-colors"
           >
             Go to Subscription
