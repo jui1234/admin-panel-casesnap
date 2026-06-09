@@ -55,45 +55,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
+  const fetchCurrentUser = async (token: string): Promise<User | null> => {
+    if (typeof window === 'undefined' || !token) return null
+
+    try {
+      const base = APP_BACKEND_URL.replace(/\/$/, '')
+      const response = await fetch(`${base}/api/auth/me`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        return null
+      }
+
+      const data = await response.json()
+      if (!data) return null
+
+      // If the backend wraps the user object
+      if (typeof data === 'object' && 'user' in data && data.user) {
+        return data.user as User
+      }
+
+      return data as User
+    } catch (error) {
+      console.error('Failed to fetch current user:', error)
+      return null
+    }
+  }
+
   useEffect(() => {
     // Check for existing auth token on mount
-    const checkAuth = () => {
+    const checkAuth = async () => {
       try {
         const token = sessionStorage.getItem('authToken') || sessionStorage.getItem('token')
         const userData = sessionStorage.getItem('userData')
-        
-        // Only require token and userData - organizationData is optional
+
         if (token && userData) {
           try {
             const parsedUser = JSON.parse(userData)
-            
-            // Validate token format (basic check)
-            // In production, you might want to decode and check expiration
-            if (token && token.length > 0) {
+            if (token.length > 0) {
               setUser(parsedUser)
-            } else {
-              // Invalid token, clear everything
-              sessionStorage.removeItem('authToken')
-              sessionStorage.removeItem('token')
-              sessionStorage.removeItem('userData')
-              sessionStorage.removeItem('organizationData')
-              setUser(null)
+              return
             }
           } catch (error) {
-            // Invalid user data, clear it
             console.error('Error parsing user data:', error)
-            sessionStorage.removeItem('authToken')
-            sessionStorage.removeItem('token')
-            sessionStorage.removeItem('userData')
-            sessionStorage.removeItem('organizationData')
-            setUser(null)
           }
-        } else {
-          // No valid auth data found
-          setUser(null)
         }
+
+        if (token) {
+          const recoveredUser = await fetchCurrentUser(token)
+          if (recoveredUser) {
+            try {
+              sessionStorage.setItem('userData', JSON.stringify(recoveredUser))
+            } catch (error) {
+              console.warn('Unable to persist recovered user data:', error)
+            }
+            setUser(recoveredUser)
+            return
+          }
+        }
+
+        sessionStorage.removeItem('authToken')
+        sessionStorage.removeItem('token')
+        sessionStorage.removeItem('userData')
+        sessionStorage.removeItem('organizationData')
+        setUser(null)
       } catch (error) {
-        // sessionStorage not available (SSR or disabled)
         console.log('sessionStorage not available:', error)
         setUser(null)
       } finally {
@@ -102,24 +134,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Run immediately - don't delay as it causes redirect issues
-    checkAuth()
+    void checkAuth()
   }, [])
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // Check if we already have real API data in sessionStorage
       try {
-        const authToken = sessionStorage.getItem('authToken')
+        const authToken = sessionStorage.getItem('authToken') || sessionStorage.getItem('token')
         const userData = sessionStorage.getItem('userData')
-        
+
         if (authToken && userData) {
-          // We have real API data, use it
           const parsedUser = JSON.parse(userData)
           setUser(parsedUser)
           return true
         }
+
+        if (authToken) {
+          const recoveredUser = await fetchCurrentUser(authToken)
+          if (recoveredUser) {
+            try {
+              sessionStorage.setItem('userData', JSON.stringify(recoveredUser))
+            } catch (error) {
+              console.warn('Unable to persist recovered user data:', error)
+            }
+            setUser(recoveredUser)
+            return true
+          }
+        }
       } catch (error) {
-        console.error('Error parsing stored user data:', error)
+        console.error('Error reading stored auth data:', error)
       }
 
       // Fallback: Basic validation for mock login
@@ -148,7 +191,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (error) {
-        // sessionStorage not available
         console.log('sessionStorage not available during login')
       }
 
@@ -161,12 +203,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...organizationInfo
       }
 
-      // Store auth data
       try {
         sessionStorage.setItem('authToken', 'mock-jwt-token')
         sessionStorage.setItem('userData', JSON.stringify(mockUser))
       } catch (error) {
-        // sessionStorage not available, continue without storing
         console.log('sessionStorage not available for storing auth data')
       }
       

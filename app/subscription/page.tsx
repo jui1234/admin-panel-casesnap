@@ -28,11 +28,15 @@ export default function SubscriptionPage() {
 
   const allowedToView = canManageTemp || isSuperAdmin || (!!user && !!(user as any).canManageSubscription)
 
-  const accessMessage = !isAuthenticated
-    ? 'Please sign in to continue.'
-    : !allowedToView
-    ? 'Subscription management is not available for your account.'
+  const accessMessage = !allowedToView
+    ? !isAuthenticated
+      ? 'Please sign in to continue.'
+      : 'Subscription management is not available for your account.'
     : undefined
+
+  const userName = user?.name || user?.email || 'Subscription user'
+  const userRole = typeof user?.role === 'string' ? user.role : user?.role?.name || 'Unknown role'
+  const displayUserInfo = !!user
 
   // Redirect to 403 for authenticated users who are not allowed
   // Allow unauthenticated users who have canManageTemp (they can view renewal flow)
@@ -129,6 +133,28 @@ export default function SubscriptionPage() {
           <p className="mt-2 text-gray-600 dark:text-gray-400">
             Manage your plan, billing, and subscription details.
           </p>
+
+          {(displayUserInfo || canManageTemp) && (
+            <div className="mt-5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {displayUserInfo ? 'Signed in as' : 'Subscription access token detected'}
+              </p>
+              <div className="mt-3 flex flex-col gap-1">
+                <span className="font-semibold text-gray-900 dark:text-white">{userName}</span>
+                {displayUserInfo && (
+                  <>
+                    <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Role: {userRole}</span>
+                  </>
+                )}
+                {!displayUserInfo && (
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
+                    Valid token received from backend. User details will be recovered automatically.
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {accessMessage ? (

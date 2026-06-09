@@ -37,6 +37,8 @@ export interface AssigneePermissions {
 export interface LoginResponse {
   success: boolean
   token: string
+  error?: string
+  canManageSubscription?: boolean
   user: {
     id: string
     email: string
@@ -48,6 +50,7 @@ export interface LoginResponse {
     subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'expired'
     subscriptionExpiresAt?: string
     assigneePermissions?: AssigneePermissions
+    canManageSubscription?: boolean
     organization?: {
       _id: string
       companyName: string
