@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/navigation'
 import {
@@ -10,7 +10,13 @@ import {
   CalendarClock,
   ArrowUp,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useAuth } from '@/contexts/AuthContext'
+import {
+  useGetOrganizationSubscriptionQuery,
+  useGetSubscriptionPlansQuery,
+  useAssignSubscriptionPlanMutation,
+} from '@/redux/api/subscriptionApi'
 
 export default function SubscriptionPage() {
   const { user, isAuthenticated, isLoading } = useAuth()
@@ -23,8 +29,39 @@ export default function SubscriptionPage() {
 
   const router = useRouter()
 
-  // Temporary flag written by login flow when backend allows managing subscription
-  const canManageTemp = typeof window !== 'undefined' && sessionStorage.getItem('canManageSubscriptionTemp') === '1'
+  const [assignError, setAssignError] = useState('')
+  const [canManageTemp, setCanManageTemp] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
+
+  const orgId =
+    user?.organizationId ||
+    (user as any)?.organization?._id ||
+    undefined
+
+  const {
+    data: apiPlansData,
+    isLoading: plansLoading,
+    isError: plansError,
+  } = useGetSubscriptionPlansQuery(undefined)
+
+  const {
+    data: orgSubscriptionData,
+    isLoading: orgSubscriptionLoading,
+  } = useGetOrganizationSubscriptionQuery(orgId ?? '', {
+    skip: !orgId,
+  })
+
+  const [assignSubscriptionPlan, { isLoading: assignLoading }] =
+    useAssignSubscriptionPlanMutation()
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      setCanManageTemp(sessionStorage.getItem('canManageSubscriptionTemp') === '1')
+    } catch {
+      setCanManageTemp(false)
+    }
+  }, [])
 
   const allowedToView = canManageTemp || isSuperAdmin || (!!user && !!(user as any).canManageSubscription)
 
@@ -40,61 +77,54 @@ export default function SubscriptionPage() {
 
   // Redirect to 403 for authenticated users who are not allowed
   // Allow unauthenticated users who have canManageTemp (they can view renewal flow)
-  if (!isAuthenticated && !canManageTemp) {
-    // let unauthenticated users continue to see sign-in CTA in UI
-  } else if (isAuthenticated && !allowedToView) {
-    router.replace('/403')
-  }
+  useEffect(() => {
+    if (isAuthenticated && !allowedToView) {
+      setRedirecting(true)
+      router.replace('/403')
+    }
+  }, [isAuthenticated, allowedToView, router])
 
   const subscription = useMemo(() => {
-    const status = user?.subscriptionStatus || 'expired'
-    const plan = user?.subscriptionPlan || 'free'
-    const expiresAt = user?.subscriptionExpiresAt
+    const status =
+      orgSubscriptionData?.status || user?.subscriptionStatus || 'expired'
+    const plan =
+      orgSubscriptionData?.planName || user?.subscriptionPlan || 'free'
+    const expiresAt =
+      orgSubscriptionData?.expiresAt || user?.subscriptionExpiresAt
 
     return {
       status,
       plan,
       expiresAt,
     }
-  }, [user])
+  }, [orgSubscriptionData, user])
 
-  const plans = [
-    {
-      id: 'base',
-      name: 'Basic',
-      price: '₹999/month',
-      features: [
-        '5 Employees',
-        '100 Clients',
-        '10 GB Storage',
-        'Case Management',
-        'Document Management',
-      ],
-    },
-    {
-      id: 'popular',
-      name: 'Professional',
-      price: '₹2,499/month',
-      recommended: true,
-      features: [
-        'Unlimited Employees',
-        'Unlimited Clients',
-        'Unlimited Storage',
-        'Advanced Analytics',
-        'Priority Support',
-        'Everything in Basic',
-      ],
-    },
-  ]
+  const plans = apiPlansData?.length
+    ? apiPlansData.map((plan) => ({
+        id: plan.planName,
+        billingCycle: plan.billingCycle,
+        name: plan.displayName || plan.planName,
+        price:
+          plan.price === 0
+            ? 'Free'
+            : `${plan.currency === 'INR' ? '₹' : plan.currency} ${plan.price}/${plan.billingCycle}`,
+        features: plan.features || [],
+        recommended: plan.planName === 'professional_monthly',
+      }))
+    : []
 
   const getPlanName = (plan?: string) => {
     switch (plan) {
+      case 'free':
+        return 'Free'
       case 'base':
+      case 'basic_monthly':
         return 'Basic'
       case 'popular':
+      case 'professional_monthly':
         return 'Professional'
       default:
-        return 'Free Trial'
+        return plan ? plan.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Free Trial'
     }
   }
 
@@ -103,18 +133,44 @@ export default function SubscriptionPage() {
     subscription.status === 'inactive' ||
     subscription.status === 'cancelled'
 
-  const handleChoosePlan = (planId: string) => {
-    console.log('Selected Plan:', planId)
+  const calculateExpirationDate = (planName: string, billingCycle?: string) => {
+    const expiration = new Date()
+    const cycle = billingCycle?.toLowerCase() || ''
 
-    /**
-     * Call your payment API here
-     *
-     * Example:
-     *
-     * createSubscription({
-     *   plan: planId
-     * })
-     */
+    if (planName === 'free') {
+      expiration.setDate(expiration.getDate() + 14)
+    } else if (cycle.includes('year') || cycle.includes('annual')) {
+      expiration.setFullYear(expiration.getFullYear() + 1)
+    } else {
+      expiration.setMonth(expiration.getMonth() + 1)
+    }
+
+    return expiration.toISOString()
+  }
+
+  const handleChoosePlan = async (planName: string, billingCycle?: string) => {
+    setAssignError('')
+
+    if (!orgId) {
+      toast.error('Organization ID not available')
+      return
+    }
+
+    try {
+      const response = await assignSubscriptionPlan({
+        organizationId: orgId,
+        planName,
+        expiresAt: calculateExpirationDate(billingCycle),
+        status: 'active',
+      }).unwrap()
+
+      toast.success(response.message || 'Subscription plan assigned successfully')
+    } catch (error: any) {
+      const message =
+        error?.data?.message || error?.message || 'Failed to assign subscription plan'
+      setAssignError(message)
+      toast.error(message)
+    }
   }
 
   return (
@@ -134,7 +190,7 @@ export default function SubscriptionPage() {
             Manage your plan, billing, and subscription details.
           </p>
 
-          {(displayUserInfo || canManageTemp) && (
+          {/* {(displayUserInfo || canManageTemp) && (
             <div className="mt-5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-4">
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {displayUserInfo ? 'Signed in as' : 'Subscription access token detected'}
@@ -154,7 +210,7 @@ export default function SubscriptionPage() {
                 )}
               </div>
             </div>
-          )}
+          )} */}
         </div>
 
         {accessMessage ? (
@@ -182,7 +238,7 @@ export default function SubscriptionPage() {
               )}
             </div>
           </div>
-        ) : (
+        ) : isExpired ? (
           <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-5">
             <div className="flex gap-3">
               <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0" />
@@ -197,7 +253,7 @@ export default function SubscriptionPage() {
               </div>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Current Subscription */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
@@ -294,7 +350,7 @@ export default function SubscriptionPage() {
                 </div>
 
                 <button
-                  onClick={() => handleChoosePlan(plan.id)}
+                  onClick={() => handleChoosePlan(plan.id, plan.billingCycle)}
                   className="mt-6 w-full flex items-center justify-center gap-2 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-gray-900 py-3 font-medium transition-colors"
                 >
                   <ArrowUp className="h-4 w-4" />
@@ -304,6 +360,7 @@ export default function SubscriptionPage() {
             ))}
           </div>
         </div>
+
       </div>
     </>
   )
