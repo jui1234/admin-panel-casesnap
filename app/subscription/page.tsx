@@ -32,6 +32,12 @@ export default function SubscriptionPage() {
   const [assignError, setAssignError] = useState('')
   const [canManageTemp, setCanManageTemp] = useState(false)
   const [redirecting, setRedirecting] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [pendingPlan, setPendingPlan] = useState<{
+    planName: string
+    billingCycle?: string
+    displayName: string
+  } | null>(null)
 
   const orgId =
     user?.organizationId ||
@@ -110,6 +116,7 @@ export default function SubscriptionPage() {
             : `${plan.currency === 'INR' ? '₹' : plan.currency} ${plan.price}/${plan.billingCycle}`,
         features: plan.features || [],
         recommended: plan.planName === 'professional_monthly',
+        isCurrentPlan: plan.isCurrentPlan ?? false,
       }))
     : []
 
@@ -133,22 +140,12 @@ export default function SubscriptionPage() {
     subscription.status === 'inactive' ||
     subscription.status === 'cancelled'
 
-  const calculateExpirationDate = (planName: string, billingCycle?: string) => {
-    const expiration = new Date()
-    const cycle = billingCycle?.toLowerCase() || ''
-
-    if (planName === 'free') {
-      expiration.setDate(expiration.getDate() + 14)
-    } else if (cycle.includes('year') || cycle.includes('annual')) {
-      expiration.setFullYear(expiration.getFullYear() + 1)
-    } else {
-      expiration.setMonth(expiration.getMonth() + 1)
-    }
-
-    return expiration.toISOString()
-  }
-
-  const handleChoosePlan = async (planName: string, billingCycle?: string) => {
+  const handleChoosePlan = (plan: {
+    id: string
+    billingCycle?: string
+    name: string
+    isCurrentPlan?: boolean
+  }) => {
     setAssignError('')
 
     if (!orgId) {
@@ -156,21 +153,45 @@ export default function SubscriptionPage() {
       return
     }
 
+    if (plan.isCurrentPlan) {
+      toast('This is your current active plan.')
+      return
+    }
+
+    setPendingPlan({
+      planName: plan.id,
+      billingCycle: plan.billingCycle,
+      displayName: plan.name,
+    })
+    setShowConfirmModal(true)
+  }
+
+  const confirmChoosePlan = async () => {
+    if (!orgId || !pendingPlan) return
+
+    setAssignError('')
+    setShowConfirmModal(false)
+
     try {
       const response = await assignSubscriptionPlan({
         organizationId: orgId,
-        planName,
-        expiresAt: calculateExpirationDate(billingCycle),
+        planName: pendingPlan.planName,
         status: 'active',
       }).unwrap()
 
       toast.success(response.message || 'Subscription plan assigned successfully')
+      setPendingPlan(null)
     } catch (error: any) {
       const message =
         error?.data?.message || error?.message || 'Failed to assign subscription plan'
       setAssignError(message)
       toast.error(message)
     }
+  }
+
+  const cancelChoosePlan = () => {
+    setPendingPlan(null)
+    setShowConfirmModal(false)
   }
 
   return (
@@ -310,26 +331,38 @@ export default function SubscriptionPage() {
           </h2>
 
           <div className="grid md:grid-cols-2 gap-6">
-            {plans.map((plan) => (
-              <div
-                key={plan.id}
-                className={`relative rounded-xl border p-6 shadow-sm ${
-                  plan.recommended
-                    ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10'
-                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-                }`}
-              >
-                {plan.recommended && (
-                  <div className="absolute top-4 right-4">
-                    <span className="bg-yellow-500 text-black text-xs px-3 py-1 rounded-full font-semibold">
-                      Recommended
-                    </span>
-                  </div>
-                )}
+            {plans.map((plan) => {
+              const isPlanCurrent = plan.isCurrentPlan
+              return (
+                <div
+                  key={plan.id}
+                  className={`relative rounded-xl border p-6 shadow-sm ${
+                    isPlanCurrent
+                      ? 'border-green-500 bg-green-50 dark:bg-green-900/10'
+                      : plan.recommended
+                      ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10'
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                  }`}
+                >
+                  {plan.recommended && !isPlanCurrent && (
+                    <div className="absolute top-4 right-4">
+                      <span className="bg-yellow-500 text-black text-xs px-3 py-1 rounded-full font-semibold">
+                        Recommended
+                      </span>
+                    </div>
+                  )}
 
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                  {plan.name}
-                </h3>
+                  {isPlanCurrent && (
+                    <div className="absolute top-4 right-4">
+                      <span className="bg-green-500 text-white text-xs px-3 py-1 rounded-full font-semibold">
+                        Active Plan
+                      </span>
+                    </div>
+                  )}
+
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                    {plan.name}
+                  </h3>
 
                 <p className="text-3xl font-bold mt-3 text-gray-900 dark:text-white">
                   {plan.price}
@@ -350,15 +383,68 @@ export default function SubscriptionPage() {
                 </div>
 
                 <button
-                  onClick={() => handleChoosePlan(plan.id, plan.billingCycle)}
-                  className="mt-6 w-full flex items-center justify-center gap-2 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-gray-900 py-3 font-medium transition-colors"
+                  onClick={() => handleChoosePlan(plan)}
+                  disabled={isPlanCurrent || assignLoading}
+                  className={`mt-6 w-full flex items-center justify-center gap-2 rounded-lg py-3 font-medium transition-colors ${
+                    isPlanCurrent
+                      ? 'bg-gray-300 text-gray-700 cursor-not-allowed dark:bg-gray-700 dark:text-gray-300'
+                      : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
+                  }`}
                 >
                   <ArrowUp className="h-4 w-4" />
-                  {isExpired ? 'Renew Subscription' : 'Choose Plan'}
+                  {isPlanCurrent ? 'Current Plan' : isExpired ? 'Renew Subscription' : 'Choose Plan'}
                 </button>
               </div>
-            ))}
+            )
+            })}
           </div>
+          {showConfirmModal && pendingPlan && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+              <div className="w-full max-w-xl rounded-3xl bg-white dark:bg-gray-900 p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <h3 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                      Confirm new subscription
+                    </h3>
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                      You are about to switch to the <strong>{pendingPlan.displayName}</strong> plan.
+                      This change will be deducted from your bank account and will be applied to your organization.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 dark:bg-gray-800 p-4">
+                    <p className="text-sm text-gray-700 dark:text-gray-200">
+                      Please confirm that you accept the charge and want to assign this plan.
+                    </p>
+                  </div>
+
+                  {assignError && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-4">
+                      <p className="text-sm text-red-700 dark:text-red-300">{assignError}</p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={cancelChoosePlan}
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmChoosePlan}
+                      disabled={assignLoading}
+                      className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-yellow-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {assignLoading ? 'Applying...' : 'Confirm and Apply'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
       </div>

@@ -11,6 +11,7 @@ export interface SubscriptionPlan {
   description?: string
   features?: string[]
   isActive?: boolean
+  isCurrentPlan?: boolean
 }
 
 export interface OrganizationSubscription {
@@ -24,7 +25,6 @@ export interface OrganizationSubscription {
 export interface AssignSubscriptionRequest {
   organizationId: string
   planName: string
-  expiresAt: string
   status: 'active'
 }
 
@@ -52,13 +52,16 @@ export const subscriptionApi = createApi({
     }),
 
     assignSubscriptionPlan: builder.mutation<AssignSubscriptionResponse, AssignSubscriptionRequest>({
-      query: ({ organizationId, planName, expiresAt, status }) => ({
+      query: ({ organizationId, planName, status }) => ({
         url: `api/subscriptions/organizations/${encodeURIComponent(organizationId)}/assign`,
         method: 'PUT',
-        body: { planName, expiresAt, status },
+        body: { planName, status },
       }),
       invalidatesTags: (result, error, { organizationId }) =>
-        [{ type: 'OrgSubscription' as const, id: organizationId }],
+        [
+          { type: 'OrgSubscription' as const, id: organizationId },
+          'SubscriptionPlan',
+        ],
     }),
   }),
 })
