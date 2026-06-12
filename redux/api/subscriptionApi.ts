@@ -41,7 +41,8 @@ export const subscriptionApi = createApi({
   endpoints: (builder) => ({
     getSubscriptionPlans: builder.query<SubscriptionPlan[], void>({
       query: () => 'api/subscriptions/plans',
-      transformResponse: (response: { success: boolean; count: number; data: SubscriptionPlan[] }) => response.data,
+      transformResponse: (response: { success: boolean; count: number; data?: SubscriptionPlan[] } | SubscriptionPlan[]) =>
+        Array.isArray(response) ? response : response.data || [],
       providesTags: ['SubscriptionPlan'],
     }),
 

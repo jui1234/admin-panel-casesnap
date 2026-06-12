@@ -333,6 +333,10 @@ export default function SubscriptionPage() {
           <div className="grid md:grid-cols-2 gap-6">
             {plans.map((plan) => {
               const isPlanCurrent = plan.isCurrentPlan
+               if (plan.name.toLowerCase() === 'free' && !isPlanCurrent) {
+               return null
+               }
+
               return (
                 <div
                   key={plan.id}

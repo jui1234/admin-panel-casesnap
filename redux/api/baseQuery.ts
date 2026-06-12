@@ -78,6 +78,7 @@ const shouldSkip401SessionRedirect = (args: string | FetchArgs): boolean => {
     u.includes('api/auth/reset-password') ||
     u.includes('api/auth/change-password') ||
     u.includes('api/setup/initialize') ||
+    u.includes('api/subscriptions/plans') ||
     u.includes('completeuserregistration') ||
     u.includes('getuserbytoken') ||
     // Invite registration (RTK URLs are api/users/register/:token — not the endpoint name string)
