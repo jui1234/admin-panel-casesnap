@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/navigation'
 import {
@@ -10,7 +10,13 @@ import {
   CalendarClock,
   ArrowUp,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useAuth } from '@/contexts/AuthContext'
+import {
+  useGetOrganizationSubscriptionQuery,
+  useGetSubscriptionPlansQuery,
+  useAssignSubscriptionPlanMutation,
+} from '@/redux/api/subscriptionApi'
 
 export default function SubscriptionPage() {
   const { user, isAuthenticated, isLoading } = useAuth()
@@ -23,8 +29,45 @@ export default function SubscriptionPage() {
 
   const router = useRouter()
 
-  // Temporary flag written by login flow when backend allows managing subscription
-  const canManageTemp = typeof window !== 'undefined' && sessionStorage.getItem('canManageSubscriptionTemp') === '1'
+  const [assignError, setAssignError] = useState('')
+  const [canManageTemp, setCanManageTemp] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [pendingPlan, setPendingPlan] = useState<{
+    planName: string
+    billingCycle?: string
+    displayName: string
+  } | null>(null)
+
+  const orgId =
+    user?.organizationId ||
+    (user as any)?.organization?._id ||
+    undefined
+
+  const {
+    data: apiPlansData,
+    isLoading: plansLoading,
+    isError: plansError,
+  } = useGetSubscriptionPlansQuery(undefined)
+
+  const {
+    data: orgSubscriptionData,
+    isLoading: orgSubscriptionLoading,
+  } = useGetOrganizationSubscriptionQuery(orgId ?? '', {
+    skip: !orgId,
+  })
+
+  const [assignSubscriptionPlan, { isLoading: assignLoading }] =
+    useAssignSubscriptionPlanMutation()
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      setCanManageTemp(sessionStorage.getItem('canManageSubscriptionTemp') === '1')
+    } catch {
+      setCanManageTemp(false)
+    }
+  }, [])
 
   const allowedToView = canManageTemp || isSuperAdmin || (!!user && !!(user as any).canManageSubscription)
 
@@ -40,61 +83,55 @@ export default function SubscriptionPage() {
 
   // Redirect to 403 for authenticated users who are not allowed
   // Allow unauthenticated users who have canManageTemp (they can view renewal flow)
-  if (!isAuthenticated && !canManageTemp) {
-    // let unauthenticated users continue to see sign-in CTA in UI
-  } else if (isAuthenticated && !allowedToView) {
-    router.replace('/403')
-  }
+  useEffect(() => {
+    if (isAuthenticated && !allowedToView) {
+      setRedirecting(true)
+      router.replace('/403')
+    }
+  }, [isAuthenticated, allowedToView, router])
 
   const subscription = useMemo(() => {
-    const status = user?.subscriptionStatus || 'expired'
-    const plan = user?.subscriptionPlan || 'free'
-    const expiresAt = user?.subscriptionExpiresAt
+    const status =
+      orgSubscriptionData?.status || user?.subscriptionStatus || 'expired'
+    const plan =
+      orgSubscriptionData?.planName || user?.subscriptionPlan || 'free'
+    const expiresAt =
+      orgSubscriptionData?.expiresAt || user?.subscriptionExpiresAt
 
     return {
       status,
       plan,
       expiresAt,
     }
-  }, [user])
+  }, [orgSubscriptionData, user])
 
-  const plans = [
-    {
-      id: 'base',
-      name: 'Basic',
-      price: '₹999/month',
-      features: [
-        '5 Employees',
-        '100 Clients',
-        '10 GB Storage',
-        'Case Management',
-        'Document Management',
-      ],
-    },
-    {
-      id: 'popular',
-      name: 'Professional',
-      price: '₹2,499/month',
-      recommended: true,
-      features: [
-        'Unlimited Employees',
-        'Unlimited Clients',
-        'Unlimited Storage',
-        'Advanced Analytics',
-        'Priority Support',
-        'Everything in Basic',
-      ],
-    },
-  ]
+  const plans = apiPlansData?.length
+    ? apiPlansData.map((plan) => ({
+        id: plan.planName,
+        billingCycle: plan.billingCycle,
+        name: plan.displayName || plan.planName,
+        price:
+          plan.price === 0
+            ? 'Free'
+            : `${plan.currency === 'INR' ? '₹' : plan.currency} ${plan.price}/${plan.billingCycle}`,
+        features: plan.features || [],
+        recommended: plan.planName === 'professional_monthly',
+        isCurrentPlan: plan.isCurrentPlan ?? false,
+      }))
+    : []
 
   const getPlanName = (plan?: string) => {
     switch (plan) {
+      case 'free':
+        return 'Free'
       case 'base':
+      case 'basic_monthly':
         return 'Basic'
       case 'popular':
+      case 'professional_monthly':
         return 'Professional'
       default:
-        return 'Free Trial'
+        return plan ? plan.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Free Trial'
     }
   }
 
@@ -103,18 +140,58 @@ export default function SubscriptionPage() {
     subscription.status === 'inactive' ||
     subscription.status === 'cancelled'
 
-  const handleChoosePlan = (planId: string) => {
-    console.log('Selected Plan:', planId)
+  const handleChoosePlan = (plan: {
+    id: string
+    billingCycle?: string
+    name: string
+    isCurrentPlan?: boolean
+  }) => {
+    setAssignError('')
 
-    /**
-     * Call your payment API here
-     *
-     * Example:
-     *
-     * createSubscription({
-     *   plan: planId
-     * })
-     */
+    if (!orgId) {
+      toast.error('Organization ID not available')
+      return
+    }
+
+    if (plan.isCurrentPlan) {
+      toast('This is your current active plan.')
+      return
+    }
+
+    setPendingPlan({
+      planName: plan.id,
+      billingCycle: plan.billingCycle,
+      displayName: plan.name,
+    })
+    setShowConfirmModal(true)
+  }
+
+  const confirmChoosePlan = async () => {
+    if (!orgId || !pendingPlan) return
+
+    setAssignError('')
+    setShowConfirmModal(false)
+
+    try {
+      const response = await assignSubscriptionPlan({
+        organizationId: orgId,
+        planName: pendingPlan.planName,
+        status: 'active',
+      }).unwrap()
+
+      toast.success(response.message || 'Subscription plan assigned successfully')
+      setPendingPlan(null)
+    } catch (error: any) {
+      const message =
+        error?.data?.message || error?.message || 'Failed to assign subscription plan'
+      setAssignError(message)
+      toast.error(message)
+    }
+  }
+
+  const cancelChoosePlan = () => {
+    setPendingPlan(null)
+    setShowConfirmModal(false)
   }
 
   return (
@@ -134,7 +211,7 @@ export default function SubscriptionPage() {
             Manage your plan, billing, and subscription details.
           </p>
 
-          {(displayUserInfo || canManageTemp) && (
+          {/* {(displayUserInfo || canManageTemp) && (
             <div className="mt-5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-4">
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {displayUserInfo ? 'Signed in as' : 'Subscription access token detected'}
@@ -154,7 +231,7 @@ export default function SubscriptionPage() {
                 )}
               </div>
             </div>
-          )}
+          )} */}
         </div>
 
         {accessMessage ? (
@@ -182,7 +259,7 @@ export default function SubscriptionPage() {
               )}
             </div>
           </div>
-        ) : (
+        ) : isExpired ? (
           <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-5">
             <div className="flex gap-3">
               <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0" />
@@ -197,7 +274,7 @@ export default function SubscriptionPage() {
               </div>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Current Subscription */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
@@ -254,26 +331,42 @@ export default function SubscriptionPage() {
           </h2>
 
           <div className="grid md:grid-cols-2 gap-6">
-            {plans.map((plan) => (
-              <div
-                key={plan.id}
-                className={`relative rounded-xl border p-6 shadow-sm ${
-                  plan.recommended
-                    ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10'
-                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-                }`}
-              >
-                {plan.recommended && (
-                  <div className="absolute top-4 right-4">
-                    <span className="bg-yellow-500 text-black text-xs px-3 py-1 rounded-full font-semibold">
-                      Recommended
-                    </span>
-                  </div>
-                )}
+            {plans.map((plan) => {
+              const isPlanCurrent = plan.isCurrentPlan
+               if (plan.name.toLowerCase() === 'free' && !isPlanCurrent) {
+               return null
+               }
 
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                  {plan.name}
-                </h3>
+              return (
+                <div
+                  key={plan.id}
+                  className={`relative rounded-xl border p-6 shadow-sm ${
+                    isPlanCurrent
+                      ? 'border-green-500 bg-green-50 dark:bg-green-900/10'
+                      : plan.recommended
+                      ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10'
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                  }`}
+                >
+                  {plan.recommended && !isPlanCurrent && (
+                    <div className="absolute top-4 right-4">
+                      <span className="bg-yellow-500 text-black text-xs px-3 py-1 rounded-full font-semibold">
+                        Recommended
+                      </span>
+                    </div>
+                  )}
+
+                  {isPlanCurrent && (
+                    <div className="absolute top-4 right-4">
+                      <span className="bg-green-500 text-white text-xs px-3 py-1 rounded-full font-semibold">
+                        Active Plan
+                      </span>
+                    </div>
+                  )}
+
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                    {plan.name}
+                  </h3>
 
                 <p className="text-3xl font-bold mt-3 text-gray-900 dark:text-white">
                   {plan.price}
@@ -294,16 +387,70 @@ export default function SubscriptionPage() {
                 </div>
 
                 <button
-                  onClick={() => handleChoosePlan(plan.id)}
-                  className="mt-6 w-full flex items-center justify-center gap-2 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-gray-900 py-3 font-medium transition-colors"
+                  onClick={() => handleChoosePlan(plan)}
+                  disabled={isPlanCurrent || assignLoading}
+                  className={`mt-6 w-full flex items-center justify-center gap-2 rounded-lg py-3 font-medium transition-colors ${
+                    isPlanCurrent
+                      ? 'bg-gray-300 text-gray-700 cursor-not-allowed dark:bg-gray-700 dark:text-gray-300'
+                      : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
+                  }`}
                 >
                   <ArrowUp className="h-4 w-4" />
-                  {isExpired ? 'Renew Subscription' : 'Choose Plan'}
+                  {isPlanCurrent ? 'Current Plan' : isExpired ? 'Renew Subscription' : 'Choose Plan'}
                 </button>
               </div>
-            ))}
+            )
+            })}
           </div>
+          {showConfirmModal && pendingPlan && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+              <div className="w-full max-w-xl rounded-3xl bg-white dark:bg-gray-900 p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <h3 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                      Confirm new subscription
+                    </h3>
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                      You are about to switch to the <strong>{pendingPlan.displayName}</strong> plan.
+                      This change will be deducted from your bank account and will be applied to your organization.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-gray-50 dark:bg-gray-800 p-4">
+                    <p className="text-sm text-gray-700 dark:text-gray-200">
+                      Please confirm that you accept the charge and want to assign this plan.
+                    </p>
+                  </div>
+
+                  {assignError && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-4">
+                      <p className="text-sm text-red-700 dark:text-red-300">{assignError}</p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={cancelChoosePlan}
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmChoosePlan}
+                      disabled={assignLoading}
+                      className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-yellow-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {assignLoading ? 'Applying...' : 'Confirm and Apply'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+
       </div>
     </>
   )

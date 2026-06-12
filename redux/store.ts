@@ -6,6 +6,7 @@ import { employeesApi } from './api/employeesApi'
 import { notificationsApi } from './api/notificationsApi'
 import { onboardingApi } from './api/onboardingApi'
 import { rolesApi } from './api/rolesApi'
+import { subscriptionApi } from './api/subscriptionApi'
 import { userApi } from './api/userApi'
 
 export const store = configureStore({
@@ -17,6 +18,7 @@ export const store = configureStore({
     [notificationsApi.reducerPath]: notificationsApi.reducer,
     [onboardingApi.reducerPath]: onboardingApi.reducer,
     [rolesApi.reducerPath]: rolesApi.reducer,
+    [subscriptionApi.reducerPath]: subscriptionApi.reducer,
     [userApi.reducerPath]: userApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
@@ -32,6 +34,7 @@ export const store = configureStore({
       notificationsApi.middleware,
       onboardingApi.middleware,
       rolesApi.middleware,
+      subscriptionApi.middleware,
       userApi.middleware
     ),
 })
