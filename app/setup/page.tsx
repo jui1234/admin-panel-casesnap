@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Building2,
@@ -20,6 +20,10 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
 import { useSetupOrganizationMutation, useLoginMutation } from '@/redux/api/authApi'
+import {
+  useAssignSubscriptionPlanMutation,
+  useGetSubscriptionPlansQuery,
+} from '@/redux/api/subscriptionApi'
 import { onboardingApi } from '@/redux/api/onboardingApi'
 import { store } from '@/redux/store'
 import toast from 'react-hot-toast'
@@ -48,13 +52,15 @@ interface SuperAdminData {
   confirmPassword: string
 }
 
-interface SubscriptionPlan {
+interface SetupSubscriptionPlan {
   id: string
   name: string
   price: number
-  period: 'monthly' | 'yearly'
+  period?: string
+  currency: string
   features: string[]
   popular?: boolean
+  description?: string
 }
 
 // Yup validation schemas
@@ -135,6 +141,13 @@ export default function SetupPage() {
   // RTK Query mutations
   const [setupOrganization, { isLoading, error: setupError }] = useSetupOrganizationMutation()
   const [loginMutation] = useLoginMutation()
+  const {
+    data: apiSubscriptionPlans = [],
+    isLoading: plansLoading,
+    isError: plansError,
+  } = useGetSubscriptionPlansQuery(undefined)
+  const [assignSubscriptionPlan, { isLoading: assignPlanLoading }] = useAssignSubscriptionPlanMutation()
+  const [selectedPlan, setSelectedPlan] = useState<string>('')
 
   const [organizationData, setOrganizationData] = useState<OrganizationData>({
     companyName: '',
@@ -163,6 +176,7 @@ export default function SetupPage() {
   const { theme } = useTheme()
   const { login } = useAuth()
   const isDark = theme === 'dark'
+  const isSubmitting = isLoading || assignPlanLoading
 
   const handleOrganizationChange = (field: keyof OrganizationData, value: string | string[]) => {
     setOrganizationData(prev => ({ ...prev, [field]: value }))
@@ -427,7 +441,9 @@ export default function SetupPage() {
     const isValid = await validateSuperAdminData()
     if (!isValid) return
     
-    if (!selectedPlan) {
+    const selectedPlanData = subscriptionPlans.find((plan) => plan.id === selectedPlan)
+
+    if (!selectedPlanData) {
       setError('Please select a subscription plan')
       toast.error('Please select a subscription plan')
       return
@@ -436,36 +452,25 @@ export default function SetupPage() {
     const loadingToast = toast.loading('Setting up your organization...')
     
     try {
-      // Map plan ID to API value
-      const planMapping: Record<string, string> = {
-        'free-trial': 'free',
-        'basic': 'base',
-        'professional': 'popular'
-      }
-      const subscriptionPlanValue = planMapping[selectedPlan] || 'free'
       const subscriptionExpiresAtDate = new Date()
-      const durationDays = selectedPlan === 'free-trial' ? 14 : 30
+      const normalizedPeriod = selectedPlanData.period?.toLowerCase() || ''
+      const durationDays = selectedPlanData.price === 0
+        ? 14
+        : normalizedPeriod.includes('year')
+          ? 365
+          : 30
       subscriptionExpiresAtDate.setDate(subscriptionExpiresAtDate.getDate() + durationDays)
       const subscriptionExpiresAt = subscriptionExpiresAtDate.toISOString()
+      const selectedOrganizationData = {
+        ...organizationData,
+        subscriptionPlan: selectedPlanData.id,
+        subscriptionStatus: 'active' as const,
+        subscriptionExpiresAt,
+      }
 
       // Prepare the API payload
       const payload = {
-        organization: {
-          companyName: organizationData.companyName,
-          companyEmail: organizationData.companyEmail,
-          companyPhone: organizationData.companyPhone,
-          streetAddress: organizationData.streetAddress,
-          city: organizationData.city,
-          province: organizationData.province,
-          postalCode: organizationData.postalCode,
-          country: organizationData.country,
-          companyWebsite: organizationData.companyWebsite,
-          industry: organizationData.industry,
-          practiceAreas: organizationData.practiceAreas,
-          subscriptionPlan: subscriptionPlanValue,
-          subscriptionStatus: 'active' as const,
-          subscriptionExpiresAt,
-        },
+        organization: selectedOrganizationData,
         superAdmin: {
           firstName: superAdminData.firstName,
           lastName: superAdminData.lastName,
@@ -482,6 +487,23 @@ export default function SetupPage() {
       const result = await setupOrganization(payload).unwrap()
       console.log('Setup successful:', result)
 
+      if (result.token) {
+        sessionStorage.setItem('authToken', result.token)
+        sessionStorage.setItem('token', result.token)
+      }
+
+      if (result.user?.organizationId) {
+        const assignResponse = await assignSubscriptionPlan({
+          organizationId: result.user.organizationId,
+          planName: selectedPlanData.id,
+          status: 'active',
+        }).unwrap()
+
+        if (assignResponse.message) {
+          console.log('Plan assigned:', assignResponse.message)
+        }
+      }
+
       // Dismiss loading toast and show success
       toast.dismiss(loadingToast)
       toast.success('🎉 Organization and super admin account created successfully!')
@@ -490,7 +512,7 @@ export default function SetupPage() {
 
       // Store organization data locally
       try {
-        sessionStorage.setItem('organizationData', JSON.stringify(organizationData))
+        sessionStorage.setItem('organizationData', JSON.stringify(selectedOrganizationData))
       } catch (error) {
         console.log('sessionStorage not available, continuing without storing')
       }
@@ -522,9 +544,9 @@ export default function SetupPage() {
             firstName: loginResult.user.firstName,
             lastName: loginResult.user.lastName,
             role: loginResult.user.role, // Can be string or Role object
-            subscriptionPlan: (loginResult.user as { subscriptionPlan?: string }).subscriptionPlan,
-            subscriptionStatus: (loginResult.user as { subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'expired' }).subscriptionStatus,
-            subscriptionExpiresAt: (loginResult.user as { subscriptionExpiresAt?: string }).subscriptionExpiresAt,
+            subscriptionPlan: (loginResult.user as { subscriptionPlan?: string }).subscriptionPlan || selectedPlanData.id,
+            subscriptionStatus: (loginResult.user as { subscriptionStatus?: 'active' | 'inactive' | 'cancelled' | 'expired' }).subscriptionStatus || 'active',
+            subscriptionExpiresAt: (loginResult.user as { subscriptionExpiresAt?: string }).subscriptionExpiresAt || subscriptionExpiresAt,
             assigneePermissions: (loginResult.user as { assigneePermissions?: { canAssignClient?: boolean; canAssignCase?: boolean } }).assigneePermissions,
             organizationId: loginResult.user.organizationId || loginResult.user.organization?._id,
             organizationName: loginResult.user.organization?.companyName
@@ -533,7 +555,12 @@ export default function SetupPage() {
 
           // Store organization data from login response if available
           if (loginResult.user?.organization) {
-            sessionStorage.setItem('organizationData', JSON.stringify(loginResult.user.organization))
+            sessionStorage.setItem('organizationData', JSON.stringify({
+              ...loginResult.user.organization,
+              subscriptionPlan: selectedPlanData.id,
+              subscriptionStatus: 'active',
+              subscriptionExpiresAt,
+            }))
           }
 
           store.dispatch(onboardingApi.endpoints.getOnboardingStatus.initiate(undefined, { forceRefetch: true }))
@@ -600,65 +627,33 @@ export default function SetupPage() {
     { number: 3, title: 'Subscription Plan', icon: Shield }
   ]
 
-  // Subscription plans
-  const subscriptionPlans: SubscriptionPlan[] = [
-    {
-      id: 'free-trial',
-      name: '14 Days Free Trial',
-      price: 0,
-      period: 'monthly',
-      features: [
-        '14 days full access',
-        'All features unlocked',
-        'Unlimited employees',
-        'Unlimited clients',
-        'Full case management suite',
-        'Advanced reporting & analytics',
-        'Priority support',
-        'Unlimited storage',
-        'No credit card required'
-      ]
-    },
-    {
-      id: 'basic',
-      name: 'Basic',
-      price: 999,
-      period: 'monthly',
-      features: [
-        'Up to 10 employees',
-        'Up to 100 clients',
-        'Basic case management',
-        'Standard reporting',
-        'Email support',
-        '10GB storage',
-        'Basic document management',
-        'Mobile app access'
-      ]
-    },
-    {
-      id: 'professional',
-      name: 'Professional',
-      price: 2499,
-      period: 'monthly',
-      popular: true,
-      features: [
-        'Unlimited employees',
-        'Unlimited clients',
-        'Advanced case management',
-        'Advanced analytics & reporting',
-        'Priority 24/7 support',
-        'Unlimited storage',
-        'Advanced document management',
-        'Mobile app access',
-        'API access & integrations',
-        'Custom workflows',
-        'Advanced security features',
-        'Dedicated account manager'
-      ]
-    }
-  ]
+  const subscriptionPlans: SetupSubscriptionPlan[] = useMemo(() => {
+    return apiSubscriptionPlans
+      .filter((plan) => plan.isActive !== false)
+      .map((plan) => ({
+        id: plan.planName,
+        name: plan.displayName || plan.planName,
+        price: plan.price,
+        period: plan.billingCycle,
+        currency: plan.currency,
+        features: plan.features || [],
+        description: plan.description,
+        popular:
+          plan.planName === 'professional_monthly' ||
+          /professional|popular/i.test(plan.displayName || plan.planName),
+      }))
+  }, [apiSubscriptionPlans])
 
-  const [selectedPlan, setSelectedPlan] = useState<string>('basic')
+  useEffect(() => {
+    if (selectedPlan || subscriptionPlans.length === 0) return
+
+    const defaultPlan =
+      subscriptionPlans.find((plan) => /basic|base/i.test(plan.id)) ||
+      subscriptionPlans.find((plan) => plan.price > 0) ||
+      subscriptionPlans[0]
+
+    setSelectedPlan(defaultPlan.id)
+  }, [selectedPlan, subscriptionPlans])
 
   const practiceAreas = [
     'Criminal Law',
@@ -1281,19 +1276,43 @@ export default function SetupPage() {
               </div>
 
               {/* Plans Grid */}
+              {plansLoading ? (
+                <div className="max-w-6xl mx-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 text-center">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-yellow-500 mx-auto mb-3"></div>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Loading subscription plans...</p>
+                </div>
+              ) : plansError ? (
+                <div className="max-w-6xl mx-auto rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 text-center">
+                  <p className="text-sm font-medium text-red-700 dark:text-red-300">
+                    Unable to load subscription plans. Please try again.
+                  </p>
+                </div>
+              ) : subscriptionPlans.length === 0 ? (
+                <div className="max-w-6xl mx-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-center">
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    No active subscription plans are available right now.
+                  </p>
+                </div>
+              ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 max-w-6xl mx-auto">
-                {subscriptionPlans.map((plan) => (
+                {subscriptionPlans.map((plan) => {
+                  const isSelected = selectedPlan === plan.id
+                  const isFreePlan = plan.price === 0
+                  const currencyLabel = plan.currency === 'INR' ? 'INR' : plan.currency
+                  const periodLabel = plan.period ? `/${plan.period}` : '/mo'
+
+                  return (
                   <div
                     key={plan.id}
                     onClick={() => setSelectedPlan(plan.id)}
                     className={`relative cursor-pointer rounded-xl border-2 transition-all duration-300 ${
-                      selectedPlan === plan.id
-                        ? plan.id === 'free-trial'
+                      isSelected
+                        ? isFreePlan
                           ? 'border-green-500 bg-green-50 dark:bg-green-900/20 shadow-lg ring-2 ring-green-200 dark:ring-green-800'
                           : 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 shadow-lg ring-2 ring-yellow-200 dark:ring-yellow-800'
                         : plan.popular
                         ? 'border-l-4 border-l-orange-500 border-r-2 border-t-2 border-b-2 border-r-gray-200 border-t-gray-200 border-b-gray-200 dark:border-r-gray-700 dark:border-t-gray-700 dark:border-b-gray-700 bg-white dark:bg-gray-800 hover:shadow-md'
-                        : plan.id === 'free-trial'
+                        : isFreePlan
                         ? 'border-green-400 dark:border-green-600 bg-white dark:bg-gray-800 hover:border-green-500 dark:hover:border-green-500 hover:shadow-md'
                         : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-yellow-400 dark:hover:border-yellow-500 hover:shadow-md'
                     }`}
@@ -1302,13 +1321,13 @@ export default function SetupPage() {
                       {/* Plan Header */}
                       <div className="text-center mb-3">
                         <h4 className={`text-base sm:text-lg font-bold mb-2 ${
-                          selectedPlan === plan.id
+                          isSelected
                             ? 'text-gray-900 dark:text-white'
                             : 'text-gray-800 dark:text-gray-200'
                         }`}>
                           {plan.name}
                         </h4>
-                        {plan.price === 0 ? (
+                        {isFreePlan ? (
                           <div className="mb-1">
                             <div className="text-2xl sm:text-3xl font-bold text-green-600 dark:text-green-400 mb-1">
                               Free
@@ -1319,12 +1338,12 @@ export default function SetupPage() {
                           </div>
                         ) : (
                           <>
-                            <div className="flex items-baseline justify-center mb-1">
+                            <div className="flex items-baseline justify-center mb-1" title={currencyLabel}>
                               <span className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mr-1">₹</span>
                               <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
                                 {plan.price.toLocaleString()}
                               </span>
-                              <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 ml-1">/mo</span>
+                              <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 ml-1">{periodLabel}</span>
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400">
                               After 14-day free trial
@@ -1340,7 +1359,7 @@ export default function SetupPage() {
                             <li key={index} className="flex items-start">
                               <Check className={`w-3.5 h-3.5 mt-0.5 mr-2 flex-shrink-0 ${
                                 selectedPlan === plan.id
-                                  ? plan.id === 'free-trial'
+                                  ? isFreePlan
                                     ? 'text-green-600 dark:text-green-400'
                                     : 'text-yellow-600 dark:text-yellow-400'
                                   : 'text-gray-400 dark:text-gray-500'
@@ -1365,12 +1384,12 @@ export default function SetupPage() {
                         }}
                         className={`w-full py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all ${
                           selectedPlan === plan.id
-                            ? plan.id === 'free-trial'
+                            ? isFreePlan
                               ? 'bg-green-500 text-white shadow-md'
                               : 'bg-yellow-500 text-gray-900 shadow-md'
                             : plan.popular
                             ? 'bg-yellow-500 text-gray-900 hover:bg-yellow-600'
-                            : plan.id === 'free-trial'
+                            : isFreePlan
                             ? 'bg-green-500 text-white hover:bg-green-600'
                             : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                         }`}
@@ -1379,8 +1398,10 @@ export default function SetupPage() {
                       </button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
+              )}
 
               <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-0 pt-4 sm:pt-6">
                 <button
@@ -1393,10 +1414,10 @@ export default function SetupPage() {
 
                 <button
                   onClick={handleSubmit}
-                  disabled={isLoading}
+                  disabled={isSubmitting || plansLoading || !selectedPlan}
                   className="bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-400 text-gray-900 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold transition-all duration-300 flex items-center justify-center space-x-2 hover:scale-105 hover:shadow-lg cursor-pointer disabled:cursor-not-allowed text-sm sm:text-base"
                 >
-                  {isLoading ? (
+                  {isSubmitting ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
                       <span>Setting up...</span>
