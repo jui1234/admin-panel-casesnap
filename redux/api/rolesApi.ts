@@ -86,10 +86,24 @@ export interface SuggestedPriorityResponse {
 }
 
 export interface Module {
+  _id?: string
   name: string
   displayName: string
   description: string
   actions?: string[]
+  subscriptionLimit?: {
+    limitKey?: string
+    max?: number
+    used?: number
+    remaining?: number
+    canCreate?: boolean
+    message?: string
+  }
+  subscriptionFeatures?: {
+    canImport: boolean
+    canExport: boolean
+    canBulkAssign: boolean
+  }
 }
 
 export interface GetModulesResponse {

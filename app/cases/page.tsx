@@ -86,12 +86,20 @@ import {
 } from '@/redux/api/casesApi'
 import { useGetClientsQuery, type Client } from '@/redux/api/clientsApi'
 import { useGetAssignableUsersQuery, type User } from '@/redux/api/userApi'
+import { useGetModulesQuery } from '@/redux/api/rolesApi'
 import { useGetOnboardingStatusQuery, onboardingApi } from '@/redux/api/onboardingApi'
 import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
 import ExcelImportDialog from '@/components/ExcelImportDialog'
 import { downloadExcelFile } from '@/utils/excelApi'
 import { extractLinkedClientIdsFromCase } from '@/utils/caseClientIds'
+import {
+  getModuleCreateLimitMessage,
+  isModuleFeatureEnabled,
+  isModuleCreateLimitReached,
+  SUBSCRIPTION_FEATURE_MESSAGE,
+  SUBSCRIPTION_LIMIT_MESSAGE,
+} from '@/utils/subscriptionLimits'
 
 /** Court premises dropdown lists template values plus any value already stored (import / legacy). */
 function premisesMenuIncludingValue(value?: string | null): string[] {
@@ -188,7 +196,15 @@ export default function CasesPage() {
   const dispatch = useDispatch()
   const { user: currentUser } = useAuth()
   const { data: onboarding } = useGetOnboardingStatusQuery(undefined, { skip: !currentUser })
+  const { data: modulesData } = useGetModulesQuery(undefined, { skip: !currentUser })
   const { canRead, canCreate, canUpdate, canDelete, canAssignee } = useModulePermissions('case')
+  const isCaseCreateLimitReached = isModuleCreateLimitReached(modulesData?.data, 'case')
+  const caseCreateLimitMessage = isCaseCreateLimitReached
+    ? getModuleCreateLimitMessage(modulesData?.data, 'case')
+    : SUBSCRIPTION_LIMIT_MESSAGE
+  const canImportCasesByPlan = isModuleFeatureEnabled(modulesData?.data, 'case', 'canImport')
+  const canExportCasesByPlan = isModuleFeatureEnabled(modulesData?.data, 'case', 'canExport')
+  const canBulkAssignCasesByPlan = isModuleFeatureEnabled(modulesData?.data, 'case', 'canBulkAssign')
   const canShowAssignedTo = canAssignee || currentUser?.assigneePermissions?.canAssignCase === true
 
   const [caseNumberSearch, setCaseNumberSearch] = useState('')
@@ -568,6 +584,10 @@ export default function CasesPage() {
       toast.error("You don't have permission to create cases")
       return
     }
+    if (isCaseCreateLimitReached) {
+      toast.error(caseCreateLimitMessage)
+      return
+    }
     if (!validateCreate()) return
     const payload: CreateCaseRequest = {
       caseNumber: createForm.caseNumber!.trim(),
@@ -851,6 +871,10 @@ export default function CasesPage() {
   const handleBulkAssign = async () => {
     if (!canShowAssignedTo) {
       toast.error("You don't have permission to assign cases")
+      return
+    }
+    if (!canBulkAssignCasesByPlan) {
+      toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
       return
     }
     const caseIds = rowSelectionModel.map(String).filter(Boolean)
@@ -1211,6 +1235,10 @@ export default function CasesPage() {
                 variant="outlined"
                 startIcon={<Download size={18} />}
                 onClick={async () => {
+                  if (!canExportCasesByPlan) {
+                    toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
+                    return
+                  }
                   try {
                     await downloadExcelFile('/api/cases/excel/template', 'cases-template.xlsx')
                   } catch (e) {
@@ -1222,7 +1250,17 @@ export default function CasesPage() {
               </Button>
             )}
             {canCreate && (
-              <Button variant="outlined" startIcon={<Upload size={18} />} onClick={() => setOpenExcelImport(true)}>
+              <Button
+                variant="outlined"
+                startIcon={<Upload size={18} />}
+                onClick={() => {
+                  if (!canImportCasesByPlan) {
+                    toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
+                    return
+                  }
+                  setOpenExcelImport(true)
+                }}
+              >
                 Import
               </Button>
             )}
@@ -1231,6 +1269,10 @@ export default function CasesPage() {
                 variant="outlined"
                 startIcon={<Download size={18} />}
                 onClick={async () => {
+                  if (!canExportCasesByPlan) {
+                    toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
+                    return
+                  }
                   try {
                     await downloadExcelFile('/api/cases/excel/export', 'cases-export.xlsx')
                   } catch (e) {
@@ -1247,6 +1289,10 @@ export default function CasesPage() {
                 startIcon={<UserCog size={18} />}
                 disabled={rowSelectionModel.length === 0}
                 onClick={() => {
+                  if (!canBulkAssignCasesByPlan) {
+                    toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
+                    return
+                  }
                   setBulkAssignAssignee(null)
                   setBulkAssignOpen(true)
                 }}
@@ -1259,6 +1305,10 @@ export default function CasesPage() {
                 variant="contained"
                 startIcon={<Plus />}
                 onClick={() => {
+                  if (isCaseCreateLimitReached) {
+                    toast.error(caseCreateLimitMessage)
+                    return
+                  }
                   setOpenCreate(true)
                   setOpenAddStage(false)
                   setShowCreateStages(false)
@@ -1454,6 +1504,10 @@ export default function CasesPage() {
                           variant="contained"
                           startIcon={<Plus />}
                           onClick={() => {
+                            if (isCaseCreateLimitReached) {
+                              toast.error(caseCreateLimitMessage)
+                              return
+                            }
                             setOpenCreate(true)
                             setShowCreateStages(false)
                             resetCreateForm()
