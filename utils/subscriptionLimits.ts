@@ -12,6 +12,7 @@ export interface ModuleWithSubscriptionLimit {
   displayName?: string
   subscriptionLimit?: ModuleSubscriptionLimit
   subscriptionFeatures?: {
+    canTemplate?: boolean
     canImport?: boolean
     canExport?: boolean
     canBulkAssign?: boolean
@@ -81,7 +82,7 @@ export function getModuleCreateLimitMessage(
 export function isModuleFeatureEnabled(
   modules: ModuleWithSubscriptionLimit[] | undefined,
   moduleName: string,
-  feature: 'canImport' | 'canExport' | 'canBulkAssign'
+  feature: 'canTemplate' | 'canImport' | 'canExport' | 'canBulkAssign'
 ): boolean {
   return getModuleByName(modules, moduleName)?.subscriptionFeatures?.[feature] === true
 }
