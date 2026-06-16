@@ -167,6 +167,7 @@ export default function ClientsPage() {
     ? getModuleCreateLimitMessage(modulesData?.data, 'client')
     : SUBSCRIPTION_LIMIT_MESSAGE
   const canImportClientsByPlan = isModuleFeatureEnabled(modulesData?.data, 'client', 'canImport')
+  const canTemplateClientsByPlan = isModuleFeatureEnabled(modulesData?.data, 'client', 'canTemplate')
   const canExportClientsByPlan = isModuleFeatureEnabled(modulesData?.data, 'client', 'canExport')
   const canBulkAssignClientsByPlan = isModuleFeatureEnabled(modulesData?.data, 'client', 'canBulkAssign')
   const canShowAssignedTo =
@@ -959,7 +960,7 @@ export default function ClientsPage() {
                   variant="outlined"
                   startIcon={<Download size={18} />}
                   onClick={async () => {
-                    if (!canExportClientsByPlan) {
+                    if (!canTemplateClientsByPlan) {
                       toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
                       return
                     }

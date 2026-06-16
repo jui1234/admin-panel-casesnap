@@ -203,6 +203,7 @@ export default function CasesPage() {
     ? getModuleCreateLimitMessage(modulesData?.data, 'case')
     : SUBSCRIPTION_LIMIT_MESSAGE
   const canImportCasesByPlan = isModuleFeatureEnabled(modulesData?.data, 'case', 'canImport')
+  const canTemplateCasesByPlan = isModuleFeatureEnabled(modulesData?.data, 'case', 'canTemplate')
   const canExportCasesByPlan = isModuleFeatureEnabled(modulesData?.data, 'case', 'canExport')
   const canBulkAssignCasesByPlan = isModuleFeatureEnabled(modulesData?.data, 'case', 'canBulkAssign')
   const canShowAssignedTo = canAssignee || currentUser?.assigneePermissions?.canAssignCase === true
@@ -1235,7 +1236,7 @@ export default function CasesPage() {
                 variant="outlined"
                 startIcon={<Download size={18} />}
                 onClick={async () => {
-                  if (!canExportCasesByPlan) {
+                  if (!canTemplateCasesByPlan) {
                     toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
                     return
                   }

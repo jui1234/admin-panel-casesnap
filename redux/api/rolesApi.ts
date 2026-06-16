@@ -100,6 +100,7 @@ export interface Module {
     message?: string
   }
   subscriptionFeatures?: {
+    canTemplate: boolean
     canImport: boolean
     canExport: boolean
     canBulkAssign: boolean
