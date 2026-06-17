@@ -154,7 +154,7 @@ export default function LoginPage() {
         subscriptionExpiresAt: result.user.subscriptionExpiresAt,
         canManageSubscription: canManage,
         assigneePermissions: result.user.assigneePermissions ?? undefined,
-        organizationId: result.user.organizationId || result.user.organization?._id,
+        organizationId: result.user.organizationId || result.user.organization?._id || (typeof result.user.organization === 'string' ? result.user.organization : undefined),
         organizationName: result.user.organization?.companyName,
       }
 
@@ -262,7 +262,7 @@ export default function LoginPage() {
             subscriptionExpiresAt: rawUser.subscriptionExpiresAt,
             canManageSubscription: true,
             assigneePermissions: rawUser.assigneePermissions ?? undefined,
-            organizationId: rawUser.organizationId || rawUser.organization?._id,
+            organizationId: rawUser.organizationId || rawUser.organization?._id || (typeof rawUser.organization === 'string' ? rawUser.organization : undefined),
             organizationName: rawUser.organization?.companyName,
           }
 
