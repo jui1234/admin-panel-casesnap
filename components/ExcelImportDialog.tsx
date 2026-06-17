@@ -412,6 +412,18 @@ function compactCaseMeta(data?: Record<string, unknown>): Array<[string, string]
   return entries.filter(([, v]) => !!v).map(([k, v]) => [tableColumnLabel(k), v])
 }
 
+function getResponseMessage(value: unknown, fallback: string): string {
+  if (!value || typeof value !== 'object') return fallback
+  const obj = value as Record<string, unknown>
+  const dataObj =
+    obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)
+      ? (obj.data as Record<string, unknown>)
+      : null
+  const candidates = [obj.error, obj.message, dataObj?.error, dataObj?.message]
+  const msg = candidates.find((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  return msg || fallback
+}
+
 export interface ExcelImportDialogProps {
   open: boolean
   title: string
@@ -435,6 +447,7 @@ export default function ExcelImportDialog({
   const [preview, setPreview] = useState<unknown>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [importLoading, setImportLoading] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -442,6 +455,7 @@ export default function ExcelImportDialog({
       setPreview(null)
       setPreviewLoading(false)
       setImportLoading(false)
+      setImportError(null)
     }
   }, [open])
 
@@ -534,10 +548,12 @@ export default function ExcelImportDialog({
     }
     setFile(f)
     setPreview(null)
+    setImportError(null)
   }
 
   const handlePreview = async () => {
     if (!file) return
+    setImportError(null)
     setPreviewLoading(true)
     try {
       const res = await previewExcelImport(previewPath, file)
@@ -545,6 +561,7 @@ export default function ExcelImportDialog({
       toast.success('Here’s a quick look at your file—scroll the table below.')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'We couldn’t read that preview—give it another shot or pick a different file.')
+      setImportError(e instanceof Error ? e.message : 'We could not read that preview. Try again or pick a different file.')
       setPreview(null)
     } finally {
       setPreviewLoading(false)
@@ -554,22 +571,23 @@ export default function ExcelImportDialog({
   const handleImport = async () => {
     if (!file) return
     if (errors.length > 0) {
-      toast.error('Fix the highlighted errors first, then import again.')
+      const msg = 'Fix the highlighted errors first, then import again.'
+      setImportError(msg)
+      toast.error(msg)
       return
     }
+    setImportError(null)
     setImportLoading(true)
     try {
       const res = await importExcel(importPath, file)
       // Always surface server response in the dialog so users can see row errors/warnings.
       setPreview(res)
 
-      const msg =
-        res && typeof res === 'object'
-          ? ((res as any).message || (res as any).data?.message || 'Import completed')
-          : 'Import completed'
+      const msg = getResponseMessage(res, 'Import completed')
 
       const errorLines = toErrors(res)
       if (errorLines.length > 0) {
+        setImportError(msg)
         toast(msg, { icon: '⚠️' })
         // Keep dialog open so user can read/fix errors.
         return
@@ -577,6 +595,7 @@ export default function ExcelImportDialog({
 
       const successFlag = res && typeof res === 'object' ? (res as any).success : undefined
       if (successFlag === false) {
+        setImportError(msg)
         toast.error(msg)
         return
       }
@@ -585,6 +604,7 @@ export default function ExcelImportDialog({
       onImported?.()
       onClose()
     } catch (e) {
+      setImportError(e instanceof Error ? e.message : 'Import did not finish. Try again in a moment.')
       toast.error(e instanceof Error ? e.message : 'Import didn’t finish—try again in a moment.')
     } finally {
       setImportLoading(false)
@@ -668,12 +688,22 @@ export default function ExcelImportDialog({
               onClick={() => {
                 setFile(null)
                 setPreview(null)
+                setImportError(null)
               }}
               disabled={previewLoading || importLoading}
             >
               Reset
             </Button>
           </Box>
+
+          {importError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
+                Excel import error
+              </Typography>
+              <Typography variant="body2">{importError}</Typography>
+            </Alert>
+          )}
 
           <Divider sx={{ my: 2 }} />
 

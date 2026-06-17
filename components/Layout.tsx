@@ -382,8 +382,16 @@ export default function Layout({ children }: LayoutProps) {
       }
     }
 
-    const fetchModules = async () => {
-      const hasCachedModules = loadCachedModules()
+    const fetchModules = async (forceRefresh = false) => {
+      if (forceRefresh && typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem(modulesCacheKey)
+        } catch (error) {
+          console.warn('Failed to clear module cache:', error)
+        }
+      }
+
+      const hasCachedModules = forceRefresh ? false : loadCachedModules()
       if (!hasCachedModules) {
         setModulesLoading(true)
       }
@@ -421,10 +429,19 @@ export default function Layout({ children }: LayoutProps) {
         }
       }
     }
-    
+     
     fetchModules()
+    const handleSubscriptionUpdated = () => {
+      void fetchModules(true)
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('casesnap:subscription-updated', handleSubscriptionUpdated)
+    }
     return () => {
       isMounted = false
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('casesnap:subscription-updated', handleSubscriptionUpdated)
+      }
     }
   }, [modulesCacheKey])
   

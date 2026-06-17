@@ -115,7 +115,7 @@ export interface GetModulesResponse {
 export const rolesApi = createApi({
   reducerPath: 'rolesApi',
   baseQuery: baseQueryWithSubscriptionGuard,
-  tagTypes: ['Roles', 'SuggestedPriority'],
+  tagTypes: ['Roles', 'SuggestedPriority', 'Modules'],
   endpoints: (builder) => ({
     // Get suggested priority
     getSuggestedPriority: builder.query<SuggestedPriorityResponse, void>({
@@ -132,6 +132,7 @@ export const rolesApi = createApi({
         url: 'api/modules',
         method: 'GET',
       }),
+      providesTags: ['Modules'],
     }),
 
     // Get all roles

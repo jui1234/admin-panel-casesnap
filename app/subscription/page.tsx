@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/navigation'
+import { useDispatch } from 'react-redux'
 import {
   AlertTriangle,
   Check,
@@ -13,10 +14,12 @@ import {
 import toast from 'react-hot-toast'
 import { useAuth } from '@/contexts/AuthContext'
 import {
+  type OrganizationSubscription,
   useGetOrganizationSubscriptionQuery,
   useGetSubscriptionPlansQuery,
   useAssignSubscriptionPlanMutation,
 } from '@/redux/api/subscriptionApi'
+import { rolesApi } from '@/redux/api/rolesApi'
 
 export default function SubscriptionPage() {
   const { user, isAuthenticated, isLoading } = useAuth()
@@ -28,6 +31,7 @@ export default function SubscriptionPage() {
   }, [user])
 
   const router = useRouter()
+  const dispatch = useDispatch()
 
   const [assignError, setAssignError] = useState('')
   const [canManageTemp, setCanManageTemp] = useState(false)
@@ -38,21 +42,29 @@ export default function SubscriptionPage() {
     billingCycle?: string
     displayName: string
   } | null>(null)
+  const [localSubscription, setLocalSubscription] = useState<{
+    planName?: string
+    status?: string
+    expiresAt?: string
+  } | null>(null)
 
   const orgId =
     user?.organizationId ||
     (user as any)?.organization?._id ||
+    (typeof (user as any)?.organization === 'string' ? (user as any).organization : undefined) ||
     undefined
 
   const {
     data: apiPlansData,
     isLoading: plansLoading,
     isError: plansError,
+    refetch: refetchPlans,
   } = useGetSubscriptionPlansQuery(undefined)
 
   const {
     data: orgSubscriptionData,
     isLoading: orgSubscriptionLoading,
+    refetch: refetchOrgSubscription,
   } = useGetOrganizationSubscriptionQuery(orgId ?? '', {
     skip: !orgId,
   })
@@ -90,20 +102,40 @@ export default function SubscriptionPage() {
     }
   }, [isAuthenticated, allowedToView, router])
 
+  const apiCurrentPlan = useMemo(
+    () => apiPlansData?.find((plan) => plan.isCurrentPlan === true)?.planName,
+    [apiPlansData],
+  )
+
   const subscription = useMemo(() => {
     const status =
-      orgSubscriptionData?.status || user?.subscriptionStatus || 'expired'
+      localSubscription?.status || orgSubscriptionData?.status || (apiCurrentPlan ? 'active' : undefined) || user?.subscriptionStatus || 'expired'
     const plan =
-      orgSubscriptionData?.planName || user?.subscriptionPlan || 'free'
+      localSubscription?.planName || orgSubscriptionData?.planName || apiCurrentPlan || user?.subscriptionPlan || 'free'
     const expiresAt =
-      orgSubscriptionData?.expiresAt || user?.subscriptionExpiresAt
+      localSubscription?.expiresAt || orgSubscriptionData?.expiresAt || user?.subscriptionExpiresAt
 
     return {
       status,
       plan,
       expiresAt,
     }
-  }, [orgSubscriptionData, user])
+  }, [apiCurrentPlan, localSubscription, orgSubscriptionData, user])
+
+  const getPlanKey = (plan?: string) => {
+    switch (plan) {
+      case 'base':
+      case 'basic_monthly':
+        return 'basic'
+      case 'popular':
+      case 'professional_monthly':
+        return 'professional'
+      case 'free':
+        return 'free'
+      default:
+        return plan || 'free'
+    }
+  }
 
   const plans = apiPlansData?.length
     ? apiPlansData.map((plan) => ({
@@ -116,7 +148,7 @@ export default function SubscriptionPage() {
             : `${plan.currency === 'INR' ? '₹' : plan.currency} ${plan.price}/${plan.billingCycle}`,
         features: plan.features || [],
         recommended: plan.planName === 'professional_monthly',
-        isCurrentPlan: plan.isCurrentPlan ?? false,
+        isCurrentPlan: getPlanKey(plan.planName) === getPlanKey(subscription.plan),
       }))
     : []
 
@@ -178,6 +210,44 @@ export default function SubscriptionPage() {
         planName: pendingPlan.planName,
         status: 'active',
       }).unwrap()
+
+      const updatedSubscription: OrganizationSubscription = response.data || {
+        organizationId: orgId,
+        planName: pendingPlan.planName,
+        status: 'active',
+      }
+      setLocalSubscription({
+        planName: updatedSubscription.planName,
+        status: updatedSubscription.status || 'active',
+        expiresAt: updatedSubscription.expiresAt,
+      })
+
+      if (typeof window !== 'undefined') {
+        try {
+          const rawUser = sessionStorage.getItem('userData')
+          if (rawUser) {
+            const storedUser = JSON.parse(rawUser)
+            sessionStorage.setItem('userData', JSON.stringify({
+              ...storedUser,
+              subscriptionPlan: updatedSubscription.planName,
+              subscriptionStatus: updatedSubscription.status || 'active',
+              subscriptionExpiresAt: updatedSubscription.expiresAt ?? storedUser.subscriptionExpiresAt,
+            }))
+          }
+          const cacheScope = user?.organizationId || user?.id || 'default'
+          sessionStorage.removeItem(`sidebarModulesCache:v2:${cacheScope}`)
+          window.dispatchEvent(new Event('casesnap:subscription-updated'))
+        } catch (storageError) {
+          console.warn('Unable to refresh local subscription cache:', storageError)
+        }
+      }
+
+      await Promise.allSettled([
+        refetchOrgSubscription(),
+        refetchPlans(),
+        dispatch(rolesApi.endpoints.getModules.initiate(undefined, { forceRefetch: true }) as any),
+      ])
+      dispatch(rolesApi.util.invalidateTags(['Modules']) as any)
 
       toast.success(response.message || 'Subscription plan assigned successfully')
       setPendingPlan(null)
