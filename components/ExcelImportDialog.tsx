@@ -42,6 +42,17 @@ type PreviewCase = {
   clients?: PreviewClient[]
 }
 
+type PreviewStandaloneClient = {
+  row?: number
+  title: string
+  action?: string
+  willCreate?: boolean
+  issues: string[]
+  data: Record<string, unknown>
+  primary: Array<[string, string]>
+  details: Array<[string, string]>
+}
+
 function fieldToHeader(field: string): string {
   const base = field.replace(/^data\./, '')
   const spaced = base.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim()
@@ -56,6 +67,27 @@ function tableColumnLabel(field: string): string {
     willCreate: 'Creates new?',
     issues: 'Flags',
     clientCount: 'People count',
+    row: 'Row',
+    firstName: 'First name',
+    lastName: 'Last name',
+    clientFirstName: 'First name',
+    clientLastName: 'Last name',
+    fullName: 'Name',
+    clientName: 'Name',
+    phone: 'Mobile',
+    mobile: 'Mobile',
+    clientPhone: 'Mobile',
+    email: 'Email',
+    clientEmail: 'Email',
+    fees: 'Fees',
+    clientFees: 'Fees',
+    aadharCardNumber: 'Aadhar number',
+    addressLine1: 'Address line 1',
+    addressLine2: 'Address line 2',
+    city: 'City',
+    state: 'State',
+    pincode: 'Pincode',
+    assignedTo: 'Assigned to',
   }
   if (friendly[field]) return friendly[field]
   if (field.startsWith('client.')) return `${fieldToHeader(field.replace(/^client\./, ''))}`
@@ -72,6 +104,14 @@ function isPlainRecord(v: unknown): v is Record<string, unknown> {
 function formatScalarForPreview(v: unknown): string {
   if (v == null) return ''
   if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v)
+  return ''
+}
+
+function pickPreviewValue(data: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = formatScalarForPreview(data[key])
+    if (value.trim()) return value.trim()
+  }
   return ''
 }
 
@@ -392,6 +432,108 @@ function extractCasesPreview(preview: unknown): PreviewCase[] | null {
   return out.length > 0 ? out : null
 }
 
+function normalizeIssueList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/;|\n/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+function numericRowValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return undefined
+}
+
+function extractClientPreviewRows(preview: unknown, fallbackRows: PreviewRows | null): PreviewRows | null {
+  if (!preview || typeof preview !== 'object') return fallbackRows
+  const obj = preview as Record<string, unknown>
+  const candidates = [obj.clients, (obj.data as any)?.clients, (obj.data as any)?.preview?.clients]
+  const clients = candidates.find((v) => Array.isArray(v)) as unknown[] | undefined
+  if (!clients) return fallbackRows
+
+  const normalized = clients
+    .filter((item): item is Record<string, unknown> => isPlainRecord(item))
+    .map((item) => flattenPreviewRecord(item))
+
+  return normalized.length > 0 ? normalized : fallbackRows
+}
+
+function buildClientPreviewCard(row: Record<string, unknown>, idx: number): PreviewStandaloneClient {
+  const firstName = pickPreviewValue(row, ['firstName', 'clientFirstName', 'First Name'])
+  const lastName = pickPreviewValue(row, ['lastName', 'clientLastName', 'Last Name'])
+  const nameFromParts = [firstName, lastName].filter(Boolean).join(' ')
+  const name =
+    nameFromParts ||
+    pickPreviewValue(row, ['fullName', 'clientName', 'name', 'displayName']) ||
+    `Client #${idx + 1}`
+  const phone = pickPreviewValue(row, ['phone', 'mobile', 'clientPhone', 'Mobile'])
+  const email = pickPreviewValue(row, ['email', 'clientEmail', 'Email'])
+  const fees = pickPreviewValue(row, ['fees', 'clientFees'])
+  const assignedTo = pickPreviewValue(row, ['assignedTo', 'assignedUserName', 'employeeName'])
+  const aadhar = pickPreviewValue(row, ['aadharCardNumber', 'aadharNumber'])
+  const action = pickPreviewValue(row, ['action', 'status', 'importAction']) || undefined
+  const willCreateRaw = row.willCreate
+  const willCreate = typeof willCreateRaw === 'boolean' ? willCreateRaw : undefined
+  const issues = normalizeIssueList(row.issues)
+  const rowNumber = numericRowValue(row.row ?? row.excelRow ?? row.rowNumber)
+
+  const primary = [
+    ['Mobile', phone],
+    ['Email', email],
+    ['Fees', fees],
+    ['Assigned to', assignedTo],
+  ].filter(([, value]) => !!value) as Array<[string, string]>
+
+  const detailKeys = [
+    'aadharCardNumber',
+    'addressLine1',
+    'addressLine2',
+    'city',
+    'state',
+    'pincode',
+    'caseNumber',
+    'notes',
+  ]
+  const details = detailKeys
+    .map((key) => [tableColumnLabel(key), pickPreviewValue(row, [key])] as [string, string])
+    .filter(([, value]) => !!value)
+
+  if (aadhar && !details.some(([label]) => label === 'Aadhar number')) {
+    details.unshift(['Aadhar number', aadhar])
+  }
+
+  return {
+    row: rowNumber,
+    title: name,
+    action,
+    willCreate,
+    issues,
+    data: row,
+    primary,
+    details,
+  }
+}
+
+function extractClientsPreview(preview: unknown, fallbackRows: PreviewRows | null): PreviewStandaloneClient[] | null {
+  const sourceRows = extractClientPreviewRows(preview, fallbackRows)
+  if (!sourceRows || sourceRows.length === 0) return null
+  const clients = sourceRows.map((row, idx) => buildClientPreviewCard(row, idx))
+  return clients.length > 0 ? clients : null
+}
+
 function compactCaseMeta(data?: Record<string, unknown>): Array<[string, string]> {
   if (!data) return []
   const pick = (k: string) => {
@@ -410,6 +552,18 @@ function compactCaseMeta(data?: Record<string, unknown>): Array<[string, string]
     ['assignedTo', pick('assignedTo')],
   ] as Array<[string, string]>
   return entries.filter(([, v]) => !!v).map(([k, v]) => [tableColumnLabel(k), v])
+}
+
+function getResponseMessage(value: unknown, fallback: string): string {
+  if (!value || typeof value !== 'object') return fallback
+  const obj = value as Record<string, unknown>
+  const dataObj =
+    obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)
+      ? (obj.data as Record<string, unknown>)
+      : null
+  const candidates = [obj.error, obj.message, dataObj?.error, dataObj?.message]
+  const msg = candidates.find((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  return msg || fallback
 }
 
 export interface ExcelImportDialogProps {
@@ -435,6 +589,7 @@ export default function ExcelImportDialog({
   const [preview, setPreview] = useState<unknown>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [importLoading, setImportLoading] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -442,6 +597,7 @@ export default function ExcelImportDialog({
       setPreview(null)
       setPreviewLoading(false)
       setImportLoading(false)
+      setImportError(null)
     }
   }, [open])
 
@@ -450,6 +606,11 @@ export default function ExcelImportDialog({
   const rowErrors = useMemo(() => toRowErrors(preview), [preview])
   const duplicateCaseNumbers = useMemo(() => groupDuplicateCaseNumbers(rowErrors), [rowErrors])
   const casesPreview = useMemo(() => extractCasesPreview(preview), [preview])
+  const isClientImport = previewPath.includes('/clients/')
+  const clientsPreview = useMemo(
+    () => (isClientImport ? extractClientsPreview(preview, rows) : null),
+    [isClientImport, preview, rows],
+  )
   const casesSummary = useMemo(() => {
     if (!casesPreview) return null
     const totalCases = casesPreview.length
@@ -463,6 +624,15 @@ export default function ExcelImportDialog({
     )
     return { totalCases, willCreate, willNotCreate, totalClients, casesWithIssues, clientsWithIssues }
   }, [casesPreview])
+  const clientsSummary = useMemo(() => {
+    if (!clientsPreview) return null
+    const totalClients = clientsPreview.length
+    const withIssues = clientsPreview.filter((c) => c.issues.length > 0).length
+    const rowsWithoutIssues = clientsPreview.filter((c) => c.issues.length === 0)
+    const willCreate = rowsWithoutIssues.filter((c) => c.willCreate === true || c.action?.toLowerCase().includes('create')).length
+    const alreadyExists = rowsWithoutIssues.filter((c) => c.willCreate === false || c.action?.toLowerCase().includes('exist')).length
+    return { totalClients, willCreate, alreadyExists, withIssues }
+  }, [clientsPreview])
 
   const previewSummary = useMemo(() => {
     if (!preview || typeof preview !== 'object') return { msg: '', success: null as boolean | null }
@@ -534,10 +704,12 @@ export default function ExcelImportDialog({
     }
     setFile(f)
     setPreview(null)
+    setImportError(null)
   }
 
   const handlePreview = async () => {
     if (!file) return
+    setImportError(null)
     setPreviewLoading(true)
     try {
       const res = await previewExcelImport(previewPath, file)
@@ -545,6 +717,7 @@ export default function ExcelImportDialog({
       toast.success('Here’s a quick look at your file—scroll the table below.')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'We couldn’t read that preview—give it another shot or pick a different file.')
+      setImportError(e instanceof Error ? e.message : 'We could not read that preview. Try again or pick a different file.')
       setPreview(null)
     } finally {
       setPreviewLoading(false)
@@ -554,22 +727,23 @@ export default function ExcelImportDialog({
   const handleImport = async () => {
     if (!file) return
     if (errors.length > 0) {
-      toast.error('Fix the highlighted errors first, then import again.')
+      const msg = 'Fix the highlighted errors first, then import again.'
+      setImportError(msg)
+      toast.error(msg)
       return
     }
+    setImportError(null)
     setImportLoading(true)
     try {
       const res = await importExcel(importPath, file)
       // Always surface server response in the dialog so users can see row errors/warnings.
       setPreview(res)
 
-      const msg =
-        res && typeof res === 'object'
-          ? ((res as any).message || (res as any).data?.message || 'Import completed')
-          : 'Import completed'
+      const msg = getResponseMessage(res, 'Import completed')
 
       const errorLines = toErrors(res)
       if (errorLines.length > 0) {
+        setImportError(msg)
         toast(msg, { icon: '⚠️' })
         // Keep dialog open so user can read/fix errors.
         return
@@ -577,6 +751,7 @@ export default function ExcelImportDialog({
 
       const successFlag = res && typeof res === 'object' ? (res as any).success : undefined
       if (successFlag === false) {
+        setImportError(msg)
         toast.error(msg)
         return
       }
@@ -585,6 +760,7 @@ export default function ExcelImportDialog({
       onImported?.()
       onClose()
     } catch (e) {
+      setImportError(e instanceof Error ? e.message : 'Import did not finish. Try again in a moment.')
       toast.error(e instanceof Error ? e.message : 'Import didn’t finish—try again in a moment.')
     } finally {
       setImportLoading(false)
@@ -668,12 +844,22 @@ export default function ExcelImportDialog({
               onClick={() => {
                 setFile(null)
                 setPreview(null)
+                setImportError(null)
               }}
               disabled={previewLoading || importLoading}
             >
               Reset
             </Button>
           </Box>
+
+          {importError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
+                Excel import error
+              </Typography>
+              <Typography variant="body2">{importError}</Typography>
+            </Alert>
+          )}
 
           <Divider sx={{ my: 2 }} />
 
@@ -722,6 +908,154 @@ export default function ExcelImportDialog({
 
           {preview == null ? (
             <Alert severity="info">Choose a file above, then Preview—we’ll show you what we understood.</Alert>
+          ) : clientsPreview && clientsPreview.length > 0 ? (
+            <Box>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
+                  Preview summary
+                </Typography>
+                {clientsSummary ? (
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                    <Chip label={`${clientsSummary.totalClients} client${clientsSummary.totalClients === 1 ? '' : 's'} found`} />
+                    {clientsSummary.willCreate > 0 && (
+                      <Chip color="success" variant="outlined" label={`${clientsSummary.willCreate} new client${clientsSummary.willCreate === 1 ? '' : 's'}`} />
+                    )}
+                    {clientsSummary.alreadyExists > 0 && (
+                      <Chip color="warning" variant="outlined" label={`${clientsSummary.alreadyExists} already in system - remove rows`} />
+                    )}
+                    {clientsSummary.withIssues > 0 && (
+                      <Chip color="warning" label={`${clientsSummary.withIssues} row${clientsSummary.withIssues === 1 ? '' : 's'} need fixes`} />
+                    )}
+                  </Stack>
+                ) : null}
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                  Check each client card below. If a client already exists, remove that row from the spreadsheet, then Preview again.
+                </Typography>
+              </Alert>
+
+              <Stack spacing={1.25}>
+                {clientsPreview.map((client, idx) => {
+                  const hasIssues = client.issues.length > 0
+                  const actionLabel = client.action?.replace(/_/g, ' ')
+                  const isExistingClient =
+                    !hasIssues && (client.willCreate === false || !!client.action?.toLowerCase().includes('exist'))
+                  const extraDetails = Object.entries(client.data)
+                    .filter(([key, value]) => {
+                      if (
+                        [
+                          'row',
+                          'excelRow',
+                          'rowNumber',
+                          'issues',
+                          'action',
+                          'status',
+                          'importAction',
+                          'willCreate',
+                          'firstName',
+                          'lastName',
+                          'clientFirstName',
+                          'clientLastName',
+                          'fullName',
+                          'clientName',
+                          'name',
+                          'displayName',
+                          'phone',
+                          'mobile',
+                          'clientPhone',
+                          'email',
+                          'clientEmail',
+                          'fees',
+                          'clientFees',
+                          'assignedTo',
+                          'assignedUserName',
+                          'employeeName',
+                          'aadharCardNumber',
+                          'aadharNumber',
+                          'addressLine1',
+                          'addressLine2',
+                          'city',
+                          'state',
+                          'pincode',
+                          'caseNumber',
+                          'notes',
+                        ].includes(key)
+                      ) {
+                        return false
+                      }
+                      return !!formatScalarForPreview(value).trim()
+                    })
+                    .slice(0, 8)
+                    .map(([key, value]) => [tableColumnLabel(key), formatScalarForPreview(value)] as [string, string])
+                  return (
+                    <Paper
+                      key={`${client.title}-${client.row ?? idx}`}
+                      variant="outlined"
+                      sx={{ p: 1.5, bgcolor: hasIssues ? 'warning.50' : 'background.paper' }}
+                    >
+                      <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                          {client.title}
+                        </Typography>
+                        {typeof client.row === 'number' && <Chip size="small" variant="outlined" label={`Row ${client.row}`} />}
+                        {isExistingClient ? (
+                          <Chip size="small" color="warning" label="Already in system - remove row" />
+                        ) : client.willCreate === true ? (
+                          <Chip size="small" color="success" label="Will create" />
+                        ) : actionLabel ? (
+                          <Chip size="small" variant="outlined" label={actionLabel} />
+                        ) : null}
+                        {hasIssues && <Chip size="small" color="warning" label={`${client.issues.length} issue(s)`} />}
+                      </Stack>
+
+                      {client.primary.length > 0 && (
+                        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+                          {client.primary.map(([label, value]) => (
+                            <Chip key={`${client.title}-${label}`} size="small" variant="outlined" label={`${label}: ${value}`} />
+                          ))}
+                        </Stack>
+                      )}
+
+                      {(client.details.length > 0 || extraDetails.length > 0) && (
+                        <Box
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                            gap: 1,
+                            mt: 1.25,
+                          }}
+                        >
+                          {[...client.details, ...extraDetails].slice(0, 12).map(([label, value]) => (
+                            <Box key={`${client.title}-${label}-${value}`} sx={{ minWidth: 0 }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                {label}
+                              </Typography>
+                              <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                                {value}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      )}
+
+                      {hasIssues && (
+                        <Alert severity="warning" sx={{ mt: 1.25 }}>
+                          <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
+                            Fix in spreadsheet
+                          </Typography>
+                          <Box component="ul" sx={{ pl: 2, my: 0 }}>
+                            {client.issues.map((msg, i) => (
+                              <li key={`${client.title}-issue-${i}`}>
+                                <Typography variant="body2">{msg}</Typography>
+                              </li>
+                            ))}
+                          </Box>
+                        </Alert>
+                      )}
+                    </Paper>
+                  )
+                })}
+              </Stack>
+            </Box>
           ) : casesPreview && casesPreview.length > 0 ? (
             <Box>
               <Alert severity="info" sx={{ mb: 2 }}>

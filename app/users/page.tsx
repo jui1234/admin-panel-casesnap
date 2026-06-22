@@ -62,9 +62,14 @@ import {
   type User as UserType,
   type UpdateUserRequest
 } from '@/redux/api/userApi'
-import { useGetRolesQuery } from '@/redux/api/rolesApi'
+import { useGetModulesQuery, useGetRolesQuery } from '@/redux/api/rolesApi'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
 import toast from 'react-hot-toast'
+import {
+  getModuleCreateLimitMessage,
+  isModuleCreateLimitReached,
+  SUBSCRIPTION_LIMIT_MESSAGE,
+} from '@/utils/subscriptionLimits'
 
 const DataGrid = dynamic(() => import('@mui/x-data-grid').then((m) => m.DataGrid), { ssr: false })
 const GridToolbar = dynamic(() => import('@mui/x-data-grid').then((m) => m.GridToolbar), { ssr: false })
@@ -82,6 +87,11 @@ interface InviteUserData {
 export default function UsersPage() {
   const { user } = useAuth()
   const { canRead, canCreate, canUpdate, canDelete } = useModulePermissions('user')
+  const { data: modulesData } = useGetModulesQuery(undefined, { skip: !user })
+  const isUserCreateLimitReached = isModuleCreateLimitReached(modulesData?.data, 'user')
+  const userCreateLimitMessage = isUserCreateLimitReached
+    ? getModuleCreateLimitMessage(modulesData?.data, 'user')
+    : SUBSCRIPTION_LIMIT_MESSAGE
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
@@ -435,6 +445,14 @@ export default function UsersPage() {
   }
 
   const handleInviteUser = async () => {
+    if (!canCreate) {
+      toast.error("You don't have permission to invite users")
+      return
+    }
+    if (isUserCreateLimitReached) {
+      toast.error(userCreateLimitMessage)
+      return
+    }
     if (!validateInviteData()) {
       return
     }
@@ -710,7 +728,13 @@ export default function UsersPage() {
             <Button
               variant="contained"
               startIcon={<UserPlus />}
-              onClick={() => setIsInviteModalOpen(true)}
+              onClick={() => {
+                if (isUserCreateLimitReached) {
+                  toast.error(userCreateLimitMessage)
+                  return
+                }
+                setIsInviteModalOpen(true)
+              }}
               sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
             >
               Invite User

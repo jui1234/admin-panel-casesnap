@@ -22,6 +22,10 @@ export interface OrganizationSubscription {
   startedAt?: string
 }
 
+type OrganizationSubscriptionResponse =
+  | OrganizationSubscription
+  | { success?: boolean; data?: OrganizationSubscription }
+
 export interface AssignSubscriptionRequest {
   organizationId: string
   planName: string
@@ -48,6 +52,8 @@ export const subscriptionApi = createApi({
 
     getOrganizationSubscription: builder.query<OrganizationSubscription, string>({
       query: (organizationId) => `api/subscriptions/org/${encodeURIComponent(organizationId)}`,
+      transformResponse: (response: OrganizationSubscriptionResponse) =>
+        'data' in response && response.data ? response.data : response as OrganizationSubscription,
       providesTags: (result, error, organizationId) =>
         result ? [{ type: 'OrgSubscription' as const, id: organizationId }] : [],
     }),

@@ -86,10 +86,25 @@ export interface SuggestedPriorityResponse {
 }
 
 export interface Module {
+  _id?: string
   name: string
   displayName: string
   description: string
   actions?: string[]
+  subscriptionLimit?: {
+    limitKey?: string
+    max?: number
+    used?: number
+    remaining?: number
+    canCreate?: boolean
+    message?: string
+  }
+  subscriptionFeatures?: {
+    canTemplate: boolean
+    canImport: boolean
+    canExport: boolean
+    canBulkAssign: boolean
+  }
 }
 
 export interface GetModulesResponse {
@@ -100,7 +115,7 @@ export interface GetModulesResponse {
 export const rolesApi = createApi({
   reducerPath: 'rolesApi',
   baseQuery: baseQueryWithSubscriptionGuard,
-  tagTypes: ['Roles', 'SuggestedPriority'],
+  tagTypes: ['Roles', 'SuggestedPriority', 'Modules'],
   endpoints: (builder) => ({
     // Get suggested priority
     getSuggestedPriority: builder.query<SuggestedPriorityResponse, void>({
@@ -117,6 +132,7 @@ export const rolesApi = createApi({
         url: 'api/modules',
         method: 'GET',
       }),
+      providesTags: ['Modules'],
     }),
 
     // Get all roles

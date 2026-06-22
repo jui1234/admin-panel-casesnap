@@ -55,6 +55,11 @@ import { onboardingApi } from '@/redux/api/onboardingApi'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
 import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
+import {
+  getModuleCreateLimitMessage,
+  isModuleCreateLimitReached,
+  SUBSCRIPTION_LIMIT_MESSAGE,
+} from '@/utils/subscriptionLimits'
 
 const DEFAULT_ACTIONS = ['create', 'read', 'update', 'delete'] as const
 
@@ -105,6 +110,10 @@ export default function RolesPage() {
   const suggestedPriority = suggestedPriorityData?.data?.suggestedPriority || 2
   // Show all modules including "role" and "user"
   const modules = modulesData?.data || []
+  const isRoleCreateLimitReached = isModuleCreateLimitReached(modules, 'role')
+  const roleCreateLimitMessage = isRoleCreateLimitReached
+    ? getModuleCreateLimitMessage(modules, 'role')
+    : SUBSCRIPTION_LIMIT_MESSAGE
 
   // Get current user's role priority
   const getCurrentUserPriority = (): number | null => {
@@ -228,6 +237,10 @@ export default function RolesPage() {
       toast.error("You don't have permission to create roles")
       return
     }
+    if (isRoleCreateLimitReached) {
+      toast.error(roleCreateLimitMessage)
+      return
+    }
     setCreateRoleError(null)
     resetForm()
     setOpenCreateDialog(true)
@@ -316,6 +329,10 @@ export default function RolesPage() {
   const handleCreateRole = async () => {
     if (!canCreate) {
       toast.error("You don't have permission to create roles")
+      return
+    }
+    if (isRoleCreateLimitReached) {
+      toast.error(roleCreateLimitMessage)
       return
     }
     if (!formData.name.trim()) {

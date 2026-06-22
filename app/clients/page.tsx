@@ -80,11 +80,19 @@ import {
   type UpdateClientRequest,
 } from '@/redux/api/clientsApi'
 import { useGetAssignableUsersQuery, type User } from '@/redux/api/userApi'
+import { useGetModulesQuery } from '@/redux/api/rolesApi'
 import { useGetOnboardingStatusQuery, onboardingApi } from '@/redux/api/onboardingApi'
 import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
 import ExcelImportDialog from '@/components/ExcelImportDialog'
 import { downloadExcelFile } from '@/utils/excelApi'
+import {
+  getModuleCreateLimitMessage,
+  isModuleFeatureEnabled,
+  isModuleCreateLimitReached,
+  SUBSCRIPTION_FEATURE_MESSAGE,
+  SUBSCRIPTION_LIMIT_MESSAGE,
+} from '@/utils/subscriptionLimits'
 
 const CLIENT_STATUSES: ClientStatus[] = ['active', 'inactive', 'prospect', 'archived']
 const AADHAR_IMAGE_MAX_BYTES = 1048576 // 1 MB
@@ -152,7 +160,16 @@ export default function ClientsPage() {
   const dispatch = useDispatch()
   const { user: currentUser } = useAuth()
   const { data: onboarding } = useGetOnboardingStatusQuery(undefined, { skip: !currentUser })
+  const { data: modulesData } = useGetModulesQuery(undefined, { skip: !currentUser })
   const { canRead, canCreate, canUpdate, canDelete, canAssignee } = useModulePermissions('client')
+  const isClientCreateLimitReached = isModuleCreateLimitReached(modulesData?.data, 'client')
+  const clientCreateLimitMessage = isClientCreateLimitReached
+    ? getModuleCreateLimitMessage(modulesData?.data, 'client')
+    : SUBSCRIPTION_LIMIT_MESSAGE
+  const canImportClientsByPlan = isModuleFeatureEnabled(modulesData?.data, 'client', 'canImport')
+  const canTemplateClientsByPlan = isModuleFeatureEnabled(modulesData?.data, 'client', 'canTemplate')
+  const canExportClientsByPlan = isModuleFeatureEnabled(modulesData?.data, 'client', 'canExport')
+  const canBulkAssignClientsByPlan = isModuleFeatureEnabled(modulesData?.data, 'client', 'canBulkAssign')
   const canShowAssignedTo =
     canAssignee || currentUser?.assigneePermissions?.canAssignClient === true
   const [searchTerm, setSearchTerm] = useState('')
@@ -466,6 +483,10 @@ export default function ClientsPage() {
       toast.error("You don't have permission to create clients")
       return
     }
+    if (isClientCreateLimitReached) {
+      toast.error(clientCreateLimitMessage)
+      return
+    }
     if (!validateCreate()) return
     const payload: CreateClientRequest = {
       ...createForm,
@@ -636,6 +657,10 @@ export default function ClientsPage() {
   const handleBulkAssign = async () => {
     if (!canShowAssignedTo) {
       toast.error("You don't have permission to assign clients")
+      return
+    }
+    if (!canBulkAssignClientsByPlan) {
+      toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
       return
     }
     const clientIds = rowSelectionModel.map(String).filter(Boolean)
@@ -935,6 +960,10 @@ export default function ClientsPage() {
                   variant="outlined"
                   startIcon={<Download size={18} />}
                   onClick={async () => {
+                    if (!canTemplateClientsByPlan) {
+                      toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
+                      return
+                    }
                     try {
                       await downloadExcelFile('/api/clients/excel/template', 'clients-template.xlsx')
                     } catch (e) {
@@ -949,7 +978,13 @@ export default function ClientsPage() {
                 <Button
                   variant="outlined"
                   startIcon={<Upload size={18} />}
-                  onClick={() => setOpenExcelImport(true)}
+                  onClick={() => {
+                    if (!canImportClientsByPlan) {
+                      toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
+                      return
+                    }
+                    setOpenExcelImport(true)
+                  }}
                 >
                   Import
                 </Button>
@@ -959,6 +994,10 @@ export default function ClientsPage() {
                   variant="outlined"
                   startIcon={<Download size={18} />}
                   onClick={async () => {
+                    if (!canExportClientsByPlan) {
+                      toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
+                      return
+                    }
                     try {
                       const exportPath =
                         assignmentFilter !== 'all'
@@ -979,6 +1018,10 @@ export default function ClientsPage() {
                   startIcon={<UserCog size={18} />}
                   disabled={rowSelectionModel.length === 0}
                   onClick={() => {
+                    if (!canBulkAssignClientsByPlan) {
+                      toast.error(SUBSCRIPTION_FEATURE_MESSAGE)
+                      return
+                    }
                     setBulkAssignAssignee(null)
                     setBulkAssignOpen(true)
                   }}
@@ -991,6 +1034,10 @@ export default function ClientsPage() {
                   variant="contained"
                   startIcon={<Plus />}
                   onClick={() => {
+                    if (isClientCreateLimitReached) {
+                      toast.error(clientCreateLimitMessage)
+                      return
+                    }
                     setOpenCreate(true)
                     resetCreateForm()
                   }}
@@ -1142,14 +1189,18 @@ export default function ClientsPage() {
                           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                             You&apos;re ready to add your first client.
                           </Typography>
-                          {canCreate && (
-                            <Button
-                              variant="contained"
-                              startIcon={<Plus />}
-                              onClick={() => {
-                                setOpenCreate(true)
-                                resetCreateForm()
-                              }}
+                      {canCreate && (
+                        <Button
+                          variant="contained"
+                          startIcon={<Plus />}
+                          onClick={() => {
+                            if (isClientCreateLimitReached) {
+                              toast.error(clientCreateLimitMessage)
+                              return
+                            }
+                            setOpenCreate(true)
+                            resetCreateForm()
+                          }}
                             >
                               Add your first client
                             </Button>
