@@ -160,7 +160,7 @@ export const rolesApi = createApi({
         method: 'POST',
         body: roleData,
       }),
-      invalidatesTags: ['Roles','SuggestedPriority'],
+      invalidatesTags: ['Roles', 'SuggestedPriority', 'Modules'],
     }),
 
     // Update a role
@@ -170,7 +170,7 @@ export const rolesApi = createApi({
         method: 'PUT',
         body: data,
       }),
-      invalidatesTags: ['Roles'],
+      invalidatesTags: ['Roles', 'Modules'],
     }),
 
     // Delete a role
@@ -179,7 +179,7 @@ export const rolesApi = createApi({
         url: `api/roles/${roleId}`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['Roles', 'SuggestedPriority'], // Also invalidate suggested priority to refetch
+      invalidatesTags: ['Roles', 'SuggestedPriority', 'Modules'], // Also refetch modules for subscription limits
     }),
   }),
 })
