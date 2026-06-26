@@ -62,6 +62,13 @@ import {
 } from '@/utils/subscriptionLimits'
 
 const DEFAULT_ACTIONS = ['create', 'read', 'update', 'delete'] as const
+const HIDDEN_ROLE_PERMISSION_MODULES = new Set(['subscription', 'subscriptions'])
+
+const isVisibleRolePermission = (permission: PermissionState) =>
+  !HIDDEN_ROLE_PERMISSION_MODULES.has(permission.module.toLowerCase())
+
+const isVisibleRolePermissionModule = (moduleName: string) =>
+  !HIDDEN_ROLE_PERMISSION_MODULES.has(moduleName.toLowerCase())
 
 interface PermissionState {
   module: string
@@ -723,13 +730,13 @@ export default function RolesPage() {
                   <Typography variant="subtitle2" fontWeight="bold" mb={1}>
                     Permissions:
                   </Typography>
-                  {role.permissions.length === 0 ? (
+                  {role.permissions.filter((permission) => isVisibleRolePermissionModule(permission.module)).length === 0 ? (
                     <Typography variant="body2" color="text.secondary" fontStyle="italic">
                       No permissions assigned
                     </Typography>
                   ) : (
                     <Box>
-                      {role.permissions.map((permission, idx) => (
+                      {role.permissions.filter((permission) => isVisibleRolePermissionModule(permission.module)).map((permission, idx) => (
                         <Box key={idx} mb={1}>
                           <Typography variant="body2" fontWeight="medium">
                             {permission.module.charAt(0).toUpperCase() + permission.module.slice(1)}:
@@ -844,7 +851,7 @@ export default function RolesPage() {
               >
                 <FormLabel component="legend">Permissions</FormLabel>
                 <FormGroup>
-                  {formData.permissions.map((permission) => (
+                  {formData.permissions.filter(isVisibleRolePermission).map((permission) => (
                     <Box key={permission.module} mb={2} p={2} border="1px solid" borderColor="divider" borderRadius={1}>
                       <FormControlLabel
                         control={
@@ -981,7 +988,7 @@ export default function RolesPage() {
                       No modules available
                     </Typography>
                   ) : (
-                    formData.permissions.map((permission) => {
+                    formData.permissions.filter(isVisibleRolePermission).map((permission) => {
                       const moduleInfo = modules.find(m => m.name === permission.module)
                       return (
                         <Box key={permission.module} mb={2} p={2} border="1px solid" borderColor="divider" borderRadius={1}>
