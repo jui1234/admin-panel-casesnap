@@ -12,6 +12,12 @@ export interface SubscriptionPlan {
   features?: string[]
   isActive?: boolean
   isCurrentPlan?: boolean
+  maxUsers?: number | null
+  maxClients?: number | null
+  maxCases?: number | null
+  maxRoles?: number | null
+  maxAssignees?: number | null
+  maxExcelImportRows?: number | null
 }
 
 export interface OrganizationSubscription {
@@ -50,6 +56,14 @@ export const subscriptionApi = createApi({
       providesTags: ['SubscriptionPlan'],
     }),
 
+    // Fully public, unauthenticated plan list for the marketing/landing page.
+    getPublicSubscriptionPlans: builder.query<SubscriptionPlan[], void>({
+      query: () => 'api/subscriptions/plans/public',
+      transformResponse: (response: { success: boolean; count: number; data?: SubscriptionPlan[] } | SubscriptionPlan[]) =>
+        Array.isArray(response) ? response : response.data || [],
+      providesTags: ['SubscriptionPlan'],
+    }),
+
     getOrganizationSubscription: builder.query<OrganizationSubscription, string>({
       query: (organizationId) => `api/subscriptions/org/${encodeURIComponent(organizationId)}`,
       transformResponse: (response: OrganizationSubscriptionResponse) =>
@@ -75,6 +89,7 @@ export const subscriptionApi = createApi({
 
 export const {
   useGetSubscriptionPlansQuery,
+  useGetPublicSubscriptionPlansQuery,
   useGetOrganizationSubscriptionQuery,
   useAssignSubscriptionPlanMutation,
 } = subscriptionApi

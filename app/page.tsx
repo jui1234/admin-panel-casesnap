@@ -19,12 +19,50 @@ import {
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
+import { useGetPublicSubscriptionPlansQuery, type SubscriptionPlan } from '@/redux/api/subscriptionApi'
+
+const FEATURE_LABELS: Record<string, string> = {
+  case_assignment: 'Case assignment to team members',
+  excel_import_export: 'Excel import & export',
+  case_approval: 'Case approval workflow',
+  audit_logs: 'Audit logs',
+  analytics: 'Advanced analytics dashboard'
+}
+
+const formatLimit = (label: string, value?: number | null) =>
+  value === null || value === undefined ? `Unlimited ${label}` : `Up to ${value} ${label}`
+
+const getPlanDisplayFeatures = (plan: SubscriptionPlan): string[] => {
+  const limits = [
+    formatLimit('users', plan.maxUsers),
+    formatLimit('clients', plan.maxClients),
+    formatLimit('cases', plan.maxCases)
+  ]
+  const mappedFeatures = (plan.features || []).map((feature) => FEATURE_LABELS[feature] || feature)
+  return [...limits, ...mappedFeatures]
+}
+
+const getPlanCta = (plan: SubscriptionPlan) => (plan.price === 0 ? 'Start Free Trial' : `Choose ${plan.displayName}`)
+
+const getPlanPeriod = (plan: SubscriptionPlan) => {
+  if (plan.price === 0) return '14 days'
+  if (plan.billingCycle === 'monthly') return 'per month'
+  if (plan.billingCycle === 'yearly') return 'per year'
+  return plan.billingCycle
+}
+
+const formatPlanPrice = (plan: SubscriptionPlan) => {
+  if (plan.price === 0) return 'Free'
+  const symbol = plan.currency === 'INR' ? '₹' : `${plan.currency} `
+  return `${symbol}${plan.price}`
+}
 
 export default function DemoPage() {
   const router = useRouter()
   const { theme } = useTheme()
   const { isAuthenticated, isLoading } = useAuth()
   const isDark = theme === 'dark'
+  const { data: apiPlans, isLoading: plansLoading, isError: plansError } = useGetPublicSubscriptionPlansQuery()
 
   useEffect(() => {
     // If user is already authenticated, redirect to main working page
@@ -124,58 +162,26 @@ export default function DemoPage() {
     { label: "System Uptime", value: "99.9%" }
   ]
 
-  const pricingPlans = [
-    {
-      name: "Free Trial",
-      price: "Free",
-      period: "14 days",
-      description: "Perfect for trying out our platform",
-      features: [
-        "Full access to all features",
-        "Up to 10 users",
-        "Basic support",
-        "Standard templates",
-        "Mobile app access"
-      ],
-      popular: false,
-      cta: "Start Free Trial",
-      color: "bg-gray-100 dark:bg-gray-700"
-    },
-    {
-      name: "Monthly Plan",
-      price: "$29",
-      period: "per month",
-      description: "Ideal for growing organizations",
-      features: [
-        "Unlimited users",
-        "Advanced analytics",
-        "Priority support",
-        "Custom templates",
-        "API access",
-        "Advanced security"
-      ],
-      popular: true,
-      cta: "Choose Monthly",
-      color: "bg-yellow-50 dark:bg-yellow-900/20"
-    },
-    {
-      name: "Yearly Plan",
-      price: "$290",
-      period: "per year",
-      description: "Best value for established teams",
-      features: [
-        "Everything in Monthly",
-        "2 months free",
-        "Dedicated account manager",
-        "Custom integrations",
-        "White-label options",
-        "24/7 phone support"
-      ],
-      popular: false,
-      cta: "Choose Yearly",
-      color: "bg-gray-100 dark:bg-gray-700"
+  const pricingPlans = (apiPlans || []).map((plan) => ({
+    planName: plan.planName,
+    name: plan.displayName || plan.planName,
+    price: formatPlanPrice(plan),
+    period: getPlanPeriod(plan),
+    description: plan.description || '',
+    features: getPlanDisplayFeatures(plan),
+    popular: plan.planName === 'professional_monthly',
+    cta: getPlanCta(plan),
+    color: plan.planName === 'professional_monthly' ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-gray-100 dark:bg-gray-700'
+  }))
+
+  const handleSelectPlan = (planName: string) => {
+    try {
+      sessionStorage.setItem('selectedSubscriptionPlan', planName)
+    } catch {
+      // sessionStorage not available; setup page will fall back to its own default
     }
-  ]
+    router.push('/get-started')
+  }
 
   // Structured data for AI crawling
   const structuredData = {
@@ -188,9 +194,9 @@ export default function DemoPage() {
     "operatingSystem": "Web Browser",
     "offers": {
       "@type": "Offer",
-      "price": "29",
-      "priceCurrency": "USD",
-      "priceValidUntil": "2025-12-31"
+      "price": String(apiPlans?.find((plan) => plan.planName === 'basic_monthly')?.price ?? 999),
+      "priceCurrency": apiPlans?.find((plan) => plan.planName === 'basic_monthly')?.currency ?? 'INR',
+      "priceValidUntil": "2026-12-31"
     },
     "aggregateRating": {
       "@type": "AggregateRating",
@@ -338,6 +344,12 @@ export default function DemoPage() {
               Start with a free trial of our legal case tracking software, then choose the plan that fits your law firm's needs.
             </p>
           </div>
+          {plansLoading && (
+            <p className="text-center text-gray-500 dark:text-gray-400">Loading plans...</p>
+          )}
+          {plansError && (
+            <p className="text-center text-gray-500 dark:text-gray-400">Unable to load plans right now. Please try again later.</p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto">
             {pricingPlans.map((plan, index) => (
               <div key={index} className={`relative ${plan.color} p-6 sm:p-8 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 border-2 ${plan.popular ? 'border-yellow-500 dark:border-yellow-400 scale-105' : 'border-gray-200/50 dark:border-gray-700/50'} hover:scale-105 group animate-fade-in-up`} style={{ animationDelay: `${index * 200}ms` }}>
@@ -369,7 +381,7 @@ export default function DemoPage() {
                   ))}
                 </ul>
                 <button
-                  onClick={() => router.push('/get-started')}
+                  onClick={() => handleSelectPlan(plan.planName)}
                   className={`w-full py-3 px-6 rounded-lg font-semibold transition-all duration-300 cursor-pointer ${
                     plan.popular
                       ? 'bg-yellow-500 hover:bg-yellow-600 text-gray-900 hover:scale-105 hover:shadow-lg'
