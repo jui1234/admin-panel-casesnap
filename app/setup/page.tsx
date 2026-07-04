@@ -513,6 +513,7 @@ export default function SetupPage() {
       // Store organization data locally
       try {
         sessionStorage.setItem('organizationData', JSON.stringify(selectedOrganizationData))
+        sessionStorage.removeItem('selectedSubscriptionPlan')
       } catch (error) {
         console.log('sessionStorage not available, continuing without storing')
       }
@@ -647,7 +648,19 @@ export default function SetupPage() {
   useEffect(() => {
     if (selectedPlan || subscriptionPlans.length === 0) return
 
+    let preselectedPlanName: string | null = null
+    try {
+      preselectedPlanName = sessionStorage.getItem('selectedSubscriptionPlan')
+    } catch {
+      preselectedPlanName = null
+    }
+
+    const preselectedPlan = preselectedPlanName
+      ? subscriptionPlans.find((plan) => plan.id === preselectedPlanName)
+      : undefined
+
     const defaultPlan =
+      preselectedPlan ||
       subscriptionPlans.find((plan) => /basic|base/i.test(plan.id)) ||
       subscriptionPlans.find((plan) => plan.price > 0) ||
       subscriptionPlans[0]
