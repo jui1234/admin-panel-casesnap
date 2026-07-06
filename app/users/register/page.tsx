@@ -34,6 +34,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import ThemeToggle from '@/components/ThemeToggle'
+import { FormSkeleton } from '@/components/Skeletons'
 import { useAuth } from '@/contexts/AuthContext'
 import { clearAuthStorage } from '@/lib/clearAuthStorage'
 import { useCompleteUserRegistrationMutation, useGetUserByTokenQuery } from '@/redux/api/userApi'
@@ -644,16 +645,7 @@ export default function UserRegisterPage() {
 
   // Full-screen loader only when we depend on the API to supply invite context (minimal links with token only).
   if (showFullPageInviteLoader) {
-    return (
-      <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'} flex items-center justify-center p-4`}>
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-            Loading invitation details...
-          </p>
-        </div>
-      </div>
-    )
+    return <FormSkeleton />
   }
 
   return (

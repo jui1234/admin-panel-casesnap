@@ -80,7 +80,7 @@ export default function DashboardPage() {
   ]
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute variant="stats">
       <div className="space-y-4 sm:space-y-6">
         {/* Page Header */}
         <div>

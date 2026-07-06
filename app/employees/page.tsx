@@ -24,6 +24,7 @@ import ActionMenu from '@/components/ActionMenu'
 import { useAuth } from '@/contexts/AuthContext'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
 import { ROLES, getRoleById } from '@/utils/roles'
+import { TableSkeleton, StatTilesSkeleton } from '@/components/Skeletons'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useInviteEmployeeMutation, useGetEmployeesQuery, useUpdateEmployeeStatusMutation, useLazyGetEmployeeByAdminQuery, useUpdateEmployeeByAdminMutation, useSoftDeleteEmployeeByAdminMutation } from '@/redux/api/employeesApi'
 import toast from 'react-hot-toast'
@@ -1000,35 +1001,41 @@ export default function EmployeesPage() {
         </Box>
 
         {/* Employee Stats */}
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          {metrics.map((metric) => {
-            const Icon = metric.icon
-            return (
-              <Grid item xs={12} sm={6} md={3} key={metric.name}>
-                <Card>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Box sx={{ p: 1, bgcolor: 'primary.100', borderRadius: 1, mr: 2 }}>
-                        <Icon size={24} />
+        {isEmployeesLoading ? (
+          <Box sx={{ mb: 3 }}>
+            <StatTilesSkeleton />
+          </Box>
+        ) : (
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            {metrics.map((metric) => {
+              const Icon = metric.icon
+              return (
+                <Grid item xs={12} sm={6} md={3} key={metric.name}>
+                  <Card>
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Box sx={{ p: 1, bgcolor: 'primary.100', borderRadius: 1, mr: 2 }}>
+                          <Icon size={24} />
+                        </Box>
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">
+                            {metric.name}
+                          </Typography>
+                          <Typography variant="h6" fontWeight={600}>
+                            {metric.value}
+                          </Typography>
+                          <Typography variant="caption" color="success.main">
+                            {metric.change}
+                          </Typography>
+                        </Box>
                       </Box>
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">
-                          {metric.name}
-                        </Typography>
-                        <Typography variant="h6" fontWeight={600}>
-                          {metric.value}
-                        </Typography>
-                        <Typography variant="caption" color="success.main">
-                          {metric.change}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            )
-          })}
-        </Grid>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )
+            })}
+          </Grid>
+        )}
 
         {/* Employees DataGrid */}
         <Card>
@@ -1069,9 +1076,7 @@ export default function EmployeesPage() {
           <Box sx={{ height: 600, width: '100%' }}>
             {/* Status context menu removed: open modal directly on click */}
             {isEmployeesLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                <CircularProgress />
-              </Box>
+              <TableSkeleton />
             ) : employeesError ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', flexDirection: 'column', gap: 2 }}>
                 <Typography color="error">Failed to load employees</Typography>
