@@ -25,6 +25,7 @@ import {
   UserCog,
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import { TableSkeleton } from '@/components/Skeletons'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
 import type { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import {
@@ -943,7 +944,7 @@ export default function ClientsPage() {
   ]
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute variant="table">
       <Box sx={{ p: 3 }}>
           <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: 2 }}>
             <Box>
@@ -1147,9 +1148,7 @@ export default function ClientsPage() {
           <Card>
             <Box sx={{ height: 600, width: '100%' }}>
               {(clientsLoading || clientsFetching) ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                  <CircularProgress />
-                </Box>
+                <TableSkeleton />
               ) : clientsError ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', flexDirection: 'column', gap: 2 }}>
                   <Alert severity="error">{(clientsError as { data?: { error?: string; message?: string } })?.data?.error ?? (clientsError as { message?: string })?.message ?? 'Failed to load clients'}</Alert>

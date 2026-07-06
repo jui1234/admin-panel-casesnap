@@ -19,6 +19,7 @@ import {
   MoreVertical
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import { TableSkeleton, StatTilesSkeleton } from '@/components/Skeletons'
 import { ROLES, getRoleById } from '@/utils/roles'
 import { useAuth } from '@/contexts/AuthContext'
 import type { GridColDef } from '@mui/x-data-grid'
@@ -712,7 +713,7 @@ export default function UsersPage() {
   ]
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute variant="table">
       <Box sx={{ p: 3 }}>
         {/* Page Header */}
         <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: 2 }}>
@@ -838,92 +839,96 @@ export default function UsersPage() {
         </Box>
 
         {/* Users Stats */}
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Box sx={{ p: 1, bgcolor: 'primary.100', borderRadius: 1, mr: 2 }}>
-                    <Users color="primary" />
+        {isUsersLoading ? (
+          <Box sx={{ mb: 3 }}>
+            <StatTilesSkeleton />
+          </Box>
+        ) : (
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ p: 1, bgcolor: 'primary.100', borderRadius: 1, mr: 2 }}>
+                      <Users color="primary" />
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">
+                        Total Users
+                      </Typography>
+                      <Typography variant="h6" fontWeight={600}>
+                        {totalUsers}
+                      </Typography>
+                    </Box>
                   </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Total Users
-                    </Typography>
-                    <Typography variant="h6" fontWeight={600}>
-                      {totalUsers}
-                    </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ p: 1, bgcolor: 'success.100', borderRadius: 1, mr: 2 }}>
+                      <Box sx={{ width: 24, height: 24, bgcolor: 'success.main', borderRadius: '50%' }} />
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">
+                        Approved
+                      </Typography>
+                      <Typography variant="h6" fontWeight={600}>
+                        {users.filter(u => u.status?.toLowerCase() === 'approved').length}
+                      </Typography>
+                    </Box>
                   </Box>
-                </Box>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ p: 1, bgcolor: 'error.100', borderRadius: 1, mr: 2 }}>
+                      <Box sx={{ width: 24, height: 24, bgcolor: 'error.main', borderRadius: '50%' }} />
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">
+                        Inactive
+                      </Typography>
+                      <Typography variant="h6" fontWeight={600}>
+                        {users.filter(u => u.status?.toLowerCase() === 'inactive').length}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ p: 1, bgcolor: 'warning.100', borderRadius: 1, mr: 2 }}>
+                      <Box sx={{ width: 24, height: 24, bgcolor: 'warning.main', borderRadius: '50%' }} />
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary">
+                        Pending
+                      </Typography>
+                      <Typography variant="h6" fontWeight={600}>
+                        {users.filter(u => u.status?.toLowerCase() === 'pending').length}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Box sx={{ p: 1, bgcolor: 'success.100', borderRadius: 1, mr: 2 }}>
-                    <Box sx={{ width: 24, height: 24, bgcolor: 'success.main', borderRadius: '50%' }} />
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Approved
-                    </Typography>
-                    <Typography variant="h6" fontWeight={600}>
-                      {users.filter(u => u.status?.toLowerCase() === 'approved').length}
-                    </Typography>
-                  </Box>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Box sx={{ p: 1, bgcolor: 'error.100', borderRadius: 1, mr: 2 }}>
-                    <Box sx={{ width: 24, height: 24, bgcolor: 'error.main', borderRadius: '50%' }} />
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Inactive
-                    </Typography>
-                    <Typography variant="h6" fontWeight={600}>
-                      {users.filter(u => u.status?.toLowerCase() === 'inactive').length}
-                    </Typography>
-                  </Box>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Box sx={{ p: 1, bgcolor: 'warning.100', borderRadius: 1, mr: 2 }}>
-                    <Box sx={{ width: 24, height: 24, bgcolor: 'warning.main', borderRadius: '50%' }} />
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Pending
-                    </Typography>
-                    <Typography variant="h6" fontWeight={600}>
-                      {users.filter(u => u.status?.toLowerCase() === 'pending').length}
-                    </Typography>
-                  </Box>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
+        )}
 
         {/* Users DataGrid */}
         <Card>
           <Box sx={{ height: 600, width: '100%' }}>
             {isUsersLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                <CircularProgress />
-              </Box>
+              <TableSkeleton />
             ) : usersError ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                 <Alert severity="error">Failed to load users. Please try again.</Alert>

@@ -2,13 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import CaseSnapLoader from '@/components/CaseSnapLoader'
+import { ContentBlockSkeleton, StatTilesSkeleton, TableSkeleton, CardGridSkeleton } from '@/components/Skeletons'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
+  variant?: 'stats' | 'table' | 'cards'
 }
 
-export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+function LoadingSkeleton({ variant }: { variant?: ProtectedRouteProps['variant'] }) {
+  if (variant === 'stats') return <StatTilesSkeleton />
+  if (variant === 'table') return <TableSkeleton />
+  if (variant === 'cards') return <CardGridSkeleton />
+  return <ContentBlockSkeleton />
+}
+
+export default function ProtectedRoute({ children, variant }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading } = useAuth()
   const [hasChecked, setHasChecked] = useState(false)
 
@@ -23,7 +31,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   // Show loading state while checking authentication
   if (isLoading || !hasChecked) {
-    return <CaseSnapLoader fullscreen={false} message="Loading CaseSnap..." />
+    return <LoadingSkeleton variant={variant} />
   }
 
   // Don't render children if not authenticated (SetupGuard will redirect)

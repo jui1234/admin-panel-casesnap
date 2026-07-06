@@ -20,6 +20,7 @@ import {
   useAssignSubscriptionPlanMutation,
 } from '@/redux/api/subscriptionApi'
 import { rolesApi } from '@/redux/api/rolesApi'
+import { Skeleton, PlanCardsSkeleton } from '@/components/Skeletons'
 
 export default function SubscriptionPage() {
   const { user, isAuthenticated, isLoading } = useAuth()
@@ -262,6 +263,31 @@ export default function SubscriptionPage() {
   const cancelChoosePlan = () => {
     setPendingPlan(null)
     setShowConfirmModal(false)
+  }
+
+  const isInitialLoading = (plansLoading || (!!orgId && orgSubscriptionLoading)) && !localSubscription
+
+  if (isInitialLoading) {
+    return (
+      <>
+        <Head>
+          <title>Subscription Management | CaseSnap</title>
+        </Head>
+
+        <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Subscription Management
+            </h1>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              Manage your plan, billing, and subscription details.
+            </p>
+          </div>
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <PlanCardsSkeleton />
+        </div>
+      </>
+    )
   }
 
   return (
