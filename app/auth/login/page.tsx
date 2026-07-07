@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
+import { FormSkeleton } from '@/components/Skeletons'
 import { useLoginMutation } from '@/redux/api/authApi'
 import { onboardingApi } from '@/redux/api/onboardingApi'
 import { store } from '@/redux/store'
@@ -300,14 +301,7 @@ export default function LoginPage() {
 
   // Don't render login form if already authenticated (will redirect)
   if (authLoading) {
-    return (
-      <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gradient-to-br from-slate-50 via-white to-yellow-50'} flex items-center justify-center`}>
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-300">Loading...</p>
-        </div>
-      </div>
-    )
+    return <FormSkeleton />
   }
 
   if (isAuthenticated) {

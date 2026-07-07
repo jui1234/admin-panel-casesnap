@@ -36,7 +36,7 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from './ThemeToggle'
 import LogoutModal from './LogoutModal'
-import CaseSnapLoader from './CaseSnapLoader'
+import { Skeleton, ContentBlockSkeleton } from './Skeletons'
 import {
   useLazyGetNotificationsQuery,
   useGetUnreadCountQuery,
@@ -692,9 +692,6 @@ export default function Layout({ children }: LayoutProps) {
         }
       `}</style>
       <div className={`h-screen flex overflow-hidden transition-colors duration-300 ${isDark ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
-      {isRouteLoading && (
-        <CaseSnapLoader message="Opening page..." />
-      )}
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div 
@@ -725,11 +722,10 @@ export default function Layout({ children }: LayoutProps) {
           {/* Top Navigation: Dashboard and Dynamic Modules */}
           <div className="space-y-1 flex-shrink-0">
             {modulesLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-yellow-500"></div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Loading modules...</p>
-                </div>
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-9 w-full" />
+                ))}
               </div>
             ) : topNavigation.length > 0 ? (
               topNavigation.map((item) => {
@@ -999,6 +995,10 @@ export default function Layout({ children }: LayoutProps) {
         {/* Page content */}
         <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
           <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
+            {isRouteLoading ? (
+              <ContentBlockSkeleton />
+            ) : (
+              <>
             {showRoleSetupBanner && (
               <div
                 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-100"
@@ -1052,6 +1052,8 @@ export default function Layout({ children }: LayoutProps) {
               </div>
             )}
             {children}
+              </>
+            )}
           </div>
         </main>
       </div>

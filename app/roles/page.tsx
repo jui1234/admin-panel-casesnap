@@ -15,6 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import { CardGridSkeleton } from '@/components/Skeletons'
 import { useAuth } from '@/contexts/AuthContext'
 import { 
   Box, 
@@ -485,16 +486,14 @@ export default function RolesPage() {
 
   if (isAuthLoading) {
     return (
-      <ProtectedRoute>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-          <CircularProgress />
-        </Box>
-      </ProtectedRoute>
+      <Box sx={{ p: 3 }}>
+        <CardGridSkeleton />
+      </Box>
     )
   }
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute variant="cards">
       <Box sx={{ p: 3 }}>
         {/* Header */}
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -563,12 +562,7 @@ export default function RolesPage() {
 
         {/* Roles List */}
         {isLoadingRoles ? (
-          <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" p={4}>
-            <CircularProgress />
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-              Loading roles...
-            </Typography>
-          </Box>
+          <CardGridSkeleton />
         ) : rolesError ? (
           <Card>
             <CardContent>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import CaseSnapLoader from '@/components/CaseSnapLoader'
+import { AppShellSkeleton } from '@/components/Skeletons'
 
 interface SetupGuardProps {
   children: React.ReactNode
@@ -59,16 +59,10 @@ export default function SetupGuard({ children }: SetupGuardProps) {
   }
 
   const noSession = !hasAuthToken() || !isAuthenticated
-  const mustRedirect = !isLoading && hasChecked && noSession
   const showBlock = isLoading || !hasChecked || noSession
 
   if (showBlock) {
-    return (
-      <CaseSnapLoader
-        fullscreen={false}
-        message={mustRedirect ? 'Redirecting to login...' : 'Loading CaseSnap...'}
-      />
-    )
+    return <AppShellSkeleton />
   }
 
   return <>{children}</>

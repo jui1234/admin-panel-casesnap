@@ -19,6 +19,7 @@ import {
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
+import { PlanCardsSkeleton } from '@/components/Skeletons'
 import { useSetupOrganizationMutation, useLoginMutation } from '@/redux/api/authApi'
 import {
   useAssignSubscriptionPlanMutation,
@@ -1290,9 +1291,8 @@ export default function SetupPage() {
 
               {/* Plans Grid */}
               {plansLoading ? (
-                <div className="max-w-6xl mx-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 text-center">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-yellow-500 mx-auto mb-3"></div>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Loading subscription plans...</p>
+                <div className="max-w-6xl mx-auto">
+                  <PlanCardsSkeleton />
                 </div>
               ) : plansError ? (
                 <div className="max-w-6xl mx-auto rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 text-center">
