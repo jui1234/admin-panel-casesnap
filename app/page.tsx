@@ -352,7 +352,7 @@ export default function DemoPage() {
           )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto">
             {pricingPlans.map((plan, index) => (
-              <div key={index} className={`relative ${plan.color} p-6 sm:p-8 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 border-2 ${plan.popular ? 'border-yellow-500 dark:border-yellow-400 scale-105' : 'border-gray-200/50 dark:border-gray-700/50'} hover:scale-105 group animate-fade-in-up`} style={{ animationDelay: `${index * 200}ms` }}>
+              <div key={index} className={`relative flex flex-col h-full ${plan.color} p-6 sm:p-8 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 border-2 ${plan.popular ? 'border-yellow-500 dark:border-yellow-400 scale-105' : 'border-gray-200/50 dark:border-gray-700/50'} hover:scale-105 group animate-fade-in-up`} style={{ animationDelay: `${index * 200}ms` }}>
                 {plan.popular && (
                   <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
                     <span className="bg-yellow-500 text-gray-900 px-4 py-1 rounded-full text-sm font-semibold">
@@ -368,7 +368,7 @@ export default function DemoPage() {
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-300">{plan.description}</p>
                 </div>
-                <ul className="space-y-3 mb-8">
+                <ul className="space-y-3 mb-8 flex-1">
                   {plan.features.map((feature, featureIndex) => (
                     <li key={featureIndex} className="flex items-center text-sm sm:text-base text-gray-700 dark:text-gray-300">
                       <div className="w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
@@ -382,7 +382,7 @@ export default function DemoPage() {
                 </ul>
                 <button
                   onClick={() => handleSelectPlan(plan.planName)}
-                  className={`w-full py-3 px-6 rounded-lg font-semibold transition-all duration-300 cursor-pointer ${
+                  className={`w-full py-3 px-6 rounded-lg font-semibold transition-all duration-300 cursor-pointer mt-auto ${
                     plan.popular
                       ? 'bg-yellow-500 hover:bg-yellow-600 text-gray-900 hover:scale-105 hover:shadow-lg'
                       : 'bg-gray-900 dark:bg-gray-700 hover:bg-gray-800 dark:hover:bg-gray-600 text-white hover:scale-105 hover:shadow-lg'
@@ -391,6 +391,7 @@ export default function DemoPage() {
                   {plan.cta}
                 </button>
               </div>
+              
             ))}
           </div>
         </div>
