@@ -2,6 +2,7 @@ import { configureStore } from '@reduxjs/toolkit'
 import { authApi } from './api/authApi'
 import { casesApi } from './api/casesApi'
 import { clientsApi } from './api/clientsApi'
+import { dashboardApi } from './api/dashboardApi'
 import { employeesApi } from './api/employeesApi'
 import { notificationsApi } from './api/notificationsApi'
 import { onboardingApi } from './api/onboardingApi'
@@ -14,6 +15,7 @@ export const store = configureStore({
     [authApi.reducerPath]: authApi.reducer,
     [casesApi.reducerPath]: casesApi.reducer,
     [clientsApi.reducerPath]: clientsApi.reducer,
+    [dashboardApi.reducerPath]: dashboardApi.reducer,
     [employeesApi.reducerPath]: employeesApi.reducer,
     [notificationsApi.reducerPath]: notificationsApi.reducer,
     [onboardingApi.reducerPath]: onboardingApi.reducer,
@@ -30,6 +32,7 @@ export const store = configureStore({
       authApi.middleware,
       casesApi.middleware,
       clientsApi.middleware,
+      dashboardApi.middleware,
       employeesApi.middleware,
       notificationsApi.middleware,
       onboardingApi.middleware,
